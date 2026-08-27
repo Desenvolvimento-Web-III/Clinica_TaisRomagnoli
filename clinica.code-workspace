@@ -1,0 +1,11 @@
+{
+  "folders": [
+    {
+      "name": "Clínica Tais Romagnoli",
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "typescript.tsdk": "node_modules/typescript/lib",
+  },
+}

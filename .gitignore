@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Builds and coverage
+dist/
+functions/lib/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Environment files (examples remain versioned)
+.env
+.env.*
+!.env.example
+
+# Firebase local state and logs
+.firebase/
+.firebase-debug.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log
+emulator-data/
+
+# Logs and process files
+*.log
+*.pid
+npm-debug.log*
+
+# Editors and operating systems
+.idea/
+.DS_Store
+Thumbs.db
+.vscode/*.local.json
+
+# Temporary files
+*.tmp
+*.swp
