@@ -1,8 +1,30 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { setDoc } from 'firebase/firestore';
+
+// Mocks do Firebase
+vi.mock('../lib/firebase', () => ({
+  auth: {},
+  db: {},
+}));
+
+vi.mock('firebase/auth', () => ({
+  createUserWithEmailAndPassword: vi.fn(),
+}));
+
+vi.mock('firebase/firestore', () => ({
+  doc: vi.fn(),
+  setDoc: vi.fn(),
+}));
 
 describe('RegisterPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const renderWithRouter = (ui: React.ReactElement) => {
     return render(ui, { wrapper: MemoryRouter });
   };
@@ -92,7 +114,11 @@ describe('RegisterPage', () => {
     expect(await screen.findByText('As senhas não coincidem')).toBeInTheDocument();
   });
 
-  it('permite cadastro bem-sucedido com dados válidos', async () => {
+  it('exibe erro quando o Firebase retorna erro de e-mail duplicado', async () => {
+    vi.mocked(createUserWithEmailAndPassword).mockRejectedValueOnce({
+      code: 'auth/email-already-in-use',
+    });
+
     renderWithRouter(<RegisterPage />);
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
@@ -110,7 +136,33 @@ describe('RegisterPage', () => {
 
     fireEvent.click(button);
 
-    expect(await screen.findByText('Cadastro realizado com sucesso! (Simulação)')).toBeInTheDocument();
+    expect(await screen.findByText('Este e-mail já está em uso')).toBeInTheDocument();
+  });
+
+  it('permite cadastro bem-sucedido com dados válidos', async () => {
+    vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
+      user: { uid: 'mock-uid-maria' },
+    } as any);
+    vi.mocked(setDoc).mockResolvedValueOnce({} as any);
+
+    renderWithRouter(<RegisterPage />);
+
+    const nomeInput = screen.getByLabelText(/nome completo/i);
+    const telefoneInput = screen.getByLabelText(/telefone/i);
+    const emailInput = screen.getByLabelText(/email/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const button = screen.getByRole('button', { name: /criar conta/i });
+
+    fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
+    fireEvent.change(telefoneInput, { target: { value: '11988887777' } });
+    fireEvent.change(emailInput, { target: { value: 'maria.silva@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.change(confirmarSenhaInput, { target: { value: 'senha123' } });
+
+    fireEvent.click(button);
+
+    expect(await screen.findByText('Cadastro realizado com sucesso!')).toBeInTheDocument();
     
     // Os campos devem ter sido limpos
     expect(nomeInput).toHaveValue('');

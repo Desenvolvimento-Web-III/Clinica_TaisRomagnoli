@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 
 // Schema de validação usando Zod, com refinamento para senhas iguais
 const registerSchema = z
@@ -44,10 +47,12 @@ export function RegisterPage() {
 
   const [errors, setErrors] = useState<Partial<Record<keyof RegisterFormData, string>>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
   const [showConfirmarSenha, setShowConfirmarSenha] = useState(false);
 
-  // Aplica máscara de telefone (XX) XXXXX-XXXX dinâmica (aceita 9 dígitos)
+  // Aplica máscara de telefone (XX) XXXXX-XXXX dinâmica
   const formatTelefone = (value: string) => {
     const cleaned = value.replace(/\D/g, '');
     let formatted = cleaned;
@@ -80,9 +85,10 @@ export function RegisterPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMessage(null);
+    setGeneralError(null);
     
     const result = registerSchema.safeParse(formData);
 
@@ -95,9 +101,31 @@ export function RegisterPage() {
         }
       });
       setErrors(fieldErrors);
-    } else {
-      setErrors({});
-      setSuccessMessage('Cadastro realizado com sucesso! (Simulação)');
+      return;
+    }
+
+    setErrors({});
+
+    if (!auth || !db) {
+      setGeneralError('Firebase não configurado neste ambiente.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // 1. Cria autenticação no Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.senha);
+      
+      // 2. Grava dados adicionais do cliente no Firestore
+      await setDoc(doc(db, 'clientes', userCredential.user.uid), {
+        nome: formData.nome,
+        telefone: formData.telefone,
+        email: formData.email,
+        createdAt: new Date().toISOString(),
+      });
+
+      setSuccessMessage('Cadastro realizado com sucesso!');
       setFormData({
         nome: '',
         telefone: '',
@@ -105,6 +133,19 @@ export function RegisterPage() {
         senha: '',
         confirmarSenha: '',
       });
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/email-already-in-use') {
+        setErrors((prev) => ({ ...prev, email: 'Este e-mail já está em uso' }));
+      } else if (err.code === 'auth/invalid-email') {
+        setErrors((prev) => ({ ...prev, email: 'Insira um e-mail válido' }));
+      } else if (err.code === 'auth/weak-password') {
+        setErrors((prev) => ({ ...prev, senha: 'A senha é muito fraca' }));
+      } else {
+        setGeneralError('Ocorreu um erro ao realizar o cadastro. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -119,6 +160,12 @@ export function RegisterPage() {
           {successMessage && (
             <div className="rounded-lg bg-emerald-50 p-4 text-sm font-medium text-emerald-800 border border-emerald-200">
               {successMessage}
+            </div>
+          )}
+
+          {generalError && (
+            <div className="rounded-lg bg-red-50 p-4 text-sm font-medium text-red-800 border border-red-200">
+              {generalError}
             </div>
           )}
 
@@ -137,6 +184,7 @@ export function RegisterPage() {
                 type="text"
                 id="nome"
                 name="nome"
+                disabled={loading}
                 value={formData.nome}
                 onChange={handleChange}
                 placeholder="Digite aqui"
@@ -167,6 +215,7 @@ export function RegisterPage() {
                 type="email"
                 id="email"
                 name="email"
+                disabled={loading}
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="Digite aqui"
@@ -197,6 +246,7 @@ export function RegisterPage() {
                 type="tel"
                 id="telefone"
                 name="telefone"
+                disabled={loading}
                 value={formData.telefone}
                 onChange={handleChange}
                 placeholder="(00)00000-0000"
@@ -227,6 +277,7 @@ export function RegisterPage() {
                 type={showSenha ? 'text' : 'password'}
                 id="senha"
                 name="senha"
+                disabled={loading}
                 value={formData.senha}
                 onChange={handleChange}
                 placeholder="Digite aqui"
@@ -236,6 +287,7 @@ export function RegisterPage() {
               />
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => setShowSenha(!showSenha)}
                 className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 focus:outline-hidden"
               >
@@ -273,6 +325,7 @@ export function RegisterPage() {
                 type={showConfirmarSenha ? 'text' : 'password'}
                 id="confirmarSenha"
                 name="confirmarSenha"
+                disabled={loading}
                 value={formData.confirmarSenha}
                 onChange={handleChange}
                 placeholder="Digite aqui"
@@ -282,6 +335,7 @@ export function RegisterPage() {
               />
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => setShowConfirmarSenha(!showConfirmarSenha)}
                 className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 focus:outline-hidden"
               >
@@ -292,7 +346,7 @@ export function RegisterPage() {
                 ) : (
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542 7z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                 )}
               </button>
@@ -307,9 +361,16 @@ export function RegisterPage() {
           {/* Botão Cadastrar */}
           <button
             type="submit"
-            className="w-full rounded-xl bg-[#8F75D0] hover:bg-[#7a60b8] active:bg-[#6c53a6] text-white font-semibold py-3 text-sm transition-all shadow-xs cursor-pointer mt-4"
+            disabled={loading}
+            className="w-full rounded-xl bg-[#8F75D0] hover:bg-[#7a60b8] active:bg-[#6c53a6] text-white font-semibold py-3 text-sm transition-all shadow-xs cursor-pointer mt-4 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
           >
-            Criar conta
+            {loading ? (
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : null}
+            {loading ? 'Cadastrando...' : 'Criar conta'}
           </button>
 
           {/* Link do rodapé */}
