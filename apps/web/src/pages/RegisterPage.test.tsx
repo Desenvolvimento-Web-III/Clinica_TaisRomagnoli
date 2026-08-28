@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { setDoc } from 'firebase/firestore';
+import { setDoc, doc } from 'firebase/firestore';
 
 // Mocks do Firebase
 vi.mock('../lib/firebase', () => ({
@@ -16,7 +16,7 @@ vi.mock('firebase/auth', () => ({
 }));
 
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn(),
+  doc: vi.fn().mockReturnValue({ id: 'mock-doc-ref' }),
   setDoc: vi.fn(),
 }));
 
@@ -164,6 +164,21 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByText('Cadastro realizado com sucesso!')).toBeInTheDocument();
     
+    // Valida que o doc foi criado na coleção e UID certos, e o setDoc usou a referência e modelagem corretas
+    expect(doc).toHaveBeenCalledWith({}, 'clientes', 'mock-uid-maria');
+    expect(setDoc).toHaveBeenCalledWith(
+      { id: 'mock-doc-ref' },
+      expect.objectContaining({
+        uid: 'mock-uid-maria',
+        nome: 'Maria Silva',
+        telefone: '(11)98888-7777',
+        email: 'maria.silva@exemplo.com',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: expect.any(String),
+      })
+    );
+
     // Os campos devem ter sido limpos
     expect(nomeInput).toHaveValue('');
     expect(telefoneInput).toHaveValue('');

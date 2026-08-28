@@ -3,9 +3,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Regras de segurança para a coleção clientes
-    // Permite leitura e escrita somente se o usuário estiver autenticado e for o dono do registro
     match /clientes/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      // Regra para leitura: o usuário deve estar autenticado e ser o dono do documento
+      allow read: if request.auth != null && request.auth.uid == uid;
+      
+      // Regra para criação: exige que o usuário esteja autenticado, seja o dono do documento e crie com cargo 'cliente' e status 'ativo'
+      allow create: if request.auth != null 
+                    && request.auth.uid == uid 
+                    && request.resource.data.role == 'cliente'
+                    && request.resource.data.status == 'ativo';
+                    
+      // Regra para atualização: impede alteração do cargo (role) para 'admin' por usuários comuns
+      allow update: if request.auth != null 
+                    && request.auth.uid == uid 
+                    && request.resource.data.role == 'cliente';
+                    
+      // Bloqueia deleção por padrão (clientes não podem deletar o próprio cadastro)
+      allow delete: if false;
     }
 
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado

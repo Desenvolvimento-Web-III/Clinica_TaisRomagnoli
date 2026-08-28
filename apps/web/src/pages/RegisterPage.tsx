@@ -118,10 +118,21 @@ export function RegisterPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.senha);
       
       // 2. Grava dados adicionais do cliente no Firestore
-      await setDoc(doc(db, 'clientes', userCredential.user.uid), {
+      console.log('Enviando dados para o Firestore:', {
+        uid: userCredential.user.uid,
         nome: formData.nome,
         telefone: formData.telefone,
         email: formData.email,
+        role: 'cliente',
+        status: 'ativo',
+      });
+      await setDoc(doc(db, 'clientes', userCredential.user.uid), {
+        uid: userCredential.user.uid,
+        nome: formData.nome,
+        telefone: formData.telefone,
+        email: formData.email,
+        role: 'cliente',
+        status: 'ativo',
         createdAt: new Date().toISOString(),
       });
 
