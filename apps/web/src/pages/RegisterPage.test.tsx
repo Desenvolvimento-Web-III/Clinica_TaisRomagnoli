@@ -1,9 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { RegisterPage } from './RegisterPage';
 
 describe('RegisterPage', () => {
+  const renderWithRouter = (ui: React.ReactElement) => {
+    return render(ui, { wrapper: MemoryRouter });
+  };
+
   it('exibe erros de validação ao submeter o formulário vazio', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const button = screen.getByRole('button', { name: /criar conta/i });
     fireEvent.click(button);
@@ -16,7 +21,7 @@ describe('RegisterPage', () => {
   });
 
   it('valida o tamanho mínimo e caracteres do nome', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
@@ -33,7 +38,7 @@ describe('RegisterPage', () => {
   });
 
   it('valida formato de e-mail', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const emailInput = screen.getByLabelText(/email/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
@@ -45,7 +50,7 @@ describe('RegisterPage', () => {
   });
 
   it('aplica máscara de telefone e valida formato de celular brasileiro', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const telefoneInput = screen.getByLabelText(/telefone/i) as HTMLInputElement;
     const button = screen.getByRole('button', { name: /criar conta/i });
@@ -62,7 +67,7 @@ describe('RegisterPage', () => {
   });
 
   it('valida tamanho mínimo da senha', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const senhaInput = screen.getByLabelText(/^senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
@@ -74,7 +79,7 @@ describe('RegisterPage', () => {
   });
 
   it('valida que as senhas coincidem', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const senhaInput = screen.getByLabelText(/^senha$/i);
     const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
@@ -88,7 +93,7 @@ describe('RegisterPage', () => {
   });
 
   it('permite cadastro bem-sucedido com dados válidos', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const telefoneInput = screen.getByLabelText(/telefone/i);
