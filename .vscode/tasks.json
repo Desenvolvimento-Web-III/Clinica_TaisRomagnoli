@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Frontend: iniciar",
+      "type": "npm",
+      "script": "dev:web",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Local:",
+          "endsPattern": "Local:.*http"
+        }
+      }
+    },
+    {
+      "label": "Firebase: emuladores",
+      "type": "npm",
+      "script": "emulators",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Projeto: validação completa",
+      "type": "npm",
+      "script": "verify",
+      "problemMatcher": ["$eslint-stylish", "$tsc"]
+    }
+  ]
+}
