@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { z } from 'zod';
 
 // Schema de validação usando Zod, com refinamento para senhas iguais
@@ -314,9 +315,9 @@ export function RegisterPage() {
           {/* Link do rodapé */}
           <div className="text-center text-sm text-slate-700 mt-4">
             Já possui conta?{' '}
-            <a href="#" className="text-[#8F75D0] font-bold hover:underline">
+            <Link to="/login" className="text-[#8F75D0] font-bold hover:underline">
               Entre!
-            </a>
+            </Link>
           </div>
         </form>
       </section>
