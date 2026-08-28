@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 // Schema de validação de Login usando Zod
 const loginSchema = z.object({
@@ -24,6 +26,8 @@ export function LoginPage() {
 
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,9 +40,10 @@ export function LoginPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMessage(null);
+    setGeneralError(null);
 
     const result = loginSchema.safeParse(formData);
 
@@ -51,14 +56,40 @@ export function LoginPage() {
         }
       });
       setErrors(fieldErrors);
-    } else {
-      setErrors({});
-      setSuccessMessage('Login efetuado com sucesso! (Simulação)');
-      // Aqui seria feita a integração real de autenticação com o Firebase Auth
+      return;
+    }
+
+    setErrors({});
+
+    if (!auth) {
+      setGeneralError('Firebase não configurado neste ambiente.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Efetua autenticação no Firebase Auth
+      await signInWithEmailAndPassword(auth, formData.email, formData.senha);
+      
+      setSuccessMessage('Login efetuado com sucesso!');
       setFormData({
         email: '',
         senha: '',
       });
+    } catch (err: any) {
+      console.error(err);
+      if (
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/user-not-found'
+      ) {
+        setGeneralError('E-mail ou senha incorretos.');
+      } else {
+        setGeneralError('Ocorreu um erro ao tentar entrar. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,6 +117,12 @@ export function LoginPage() {
               </div>
             )}
 
+            {generalError && (
+              <div className="rounded-lg bg-red-50 p-4 text-sm font-medium text-red-800 border border-red-200">
+                {generalError}
+              </div>
+            )}
+
             {/* Campo Email */}
             <div className="space-y-1">
               <label htmlFor="email" className="block text-sm font-medium text-slate-700">
@@ -101,6 +138,7 @@ export function LoginPage() {
                   type="email"
                   id="email"
                   name="email"
+                  disabled={loading}
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Digite aqui"
@@ -131,6 +169,7 @@ export function LoginPage() {
                   type={showSenha ? 'text' : 'password'}
                   id="senha"
                   name="senha"
+                  disabled={loading}
                   value={formData.senha}
                   onChange={handleChange}
                   placeholder="Digite aqui"
@@ -140,6 +179,7 @@ export function LoginPage() {
                 />
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => setShowSenha(!showSenha)}
                   className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 focus:outline-hidden"
                 >
@@ -170,9 +210,16 @@ export function LoginPage() {
             {/* Botão Entrar */}
             <button
               type="submit"
-              className="w-full rounded-xl bg-[#8F75D0] hover:bg-[#7a60b8] active:bg-[#6c53a6] text-white font-semibold py-3 text-sm transition-all shadow-xs cursor-pointer mt-4"
+              disabled={loading}
+              className="w-full rounded-xl bg-[#8F75D0] hover:bg-[#7a60b8] active:bg-[#6c53a6] text-white font-semibold py-3 text-sm transition-all shadow-xs cursor-pointer mt-4 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
             >
-              Entrar
+              {loading ? (
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : null}
+              {loading ? 'Entrando...' : 'Entrar'}
             </button>
 
             {/* Link do rodapé */}
