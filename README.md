@@ -51,5 +51,8 @@ Rules.
 
 ## Situação atual
 
-Somente a fundação técnica está preparada. Não existem login, painel, agenda, clientes, pagamentos,
-anamnese, relatórios ou integração com WhatsApp.
+Além da fundação técnica, a branch `feature/catalogo-servicos` contém um catálogo frontend de
+serviços ativos. Os dados comerciais usados nessa tela são demonstrativos e ainda não existe uma
+integração real para administrá-los.
+
+Não existem painel, agenda, pagamentos, anamnese, relatórios ou integração com WhatsApp.

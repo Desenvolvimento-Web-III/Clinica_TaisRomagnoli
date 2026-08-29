@@ -6,6 +6,16 @@ As regras consolidadas estão em [`PRODUCT_RULES.md`](PRODUCT_RULES.md): experi�
 papéis iniciais, sinal, cancelamento, recorrência, agenda configurável, privacidade da ficha e os oito
 indicadores previstos.
 
+## Implementação em andamento
+
+A branch `feature/catalogo-servicos` apresenta um catálogo frontend, mobile-first e somente para
+leitura. A tela filtra serviços ativos e mostra nome, descrição, duração, preço e imagem.
+
+Os nomes, as durações e os valores atuais são demonstrativos, porque o catálogo comercial oficial e
+o modelo de dados ainda não foram fornecidos. Eles devem ser validados antes de qualquer publicação
+para clientes reais. Seleção de serviço, agendamento e administração do catálogo não fazem parte
+desta entrega.
+
 ## Funcionalidades futuras
 
 Autenticação e autorização, painel administrativo, agenda, cadastro de clientes, pagamentos, ficha de
@@ -14,7 +24,5 @@ cartões aprovados no Trello.
 
 ## Fora desta entrega
 
-Toda funcionalidade do produto, integrações reais, modelo definitivo de dados, identidade visual,
-regras permissivas, credenciais, migrações, deploy e automações externas estão fora da fundação.
-
-Nenhuma funcionalidade do MVP foi implementada ainda.
+Integrações reais, modelo definitivo de dados, regras permissivas, credenciais, migrações, deploy e
+automações externas permanecem fora desta entrega.
