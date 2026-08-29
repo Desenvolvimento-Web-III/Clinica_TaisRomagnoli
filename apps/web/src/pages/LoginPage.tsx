@@ -197,7 +197,7 @@ export function LoginPage() {
               </div>
               <div className="flex justify-end pt-1">
                 <a href="#" className="text-xs text-slate-500 hover:text-[#8F75D0] transition-colors">
-                  Esqueci minha senha
+                  Esqueci minhas credenciais
                 </a>
               </div>
               {errors.senha && (
