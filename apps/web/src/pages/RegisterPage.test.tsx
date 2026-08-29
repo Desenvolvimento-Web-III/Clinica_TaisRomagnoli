@@ -85,7 +85,9 @@ describe('RegisterPage', () => {
     // Testa telefone incompleto/inválido
     fireEvent.change(telefoneInput, { target: { value: '119888' } });
     fireEvent.click(button);
-    expect(await screen.findByText('Formato de telefone inválido. Use (XX)XXXXX-XXXX')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Formato de telefone inválido. Use (XX)XXXXX-XXXX'),
+    ).toBeInTheDocument();
   });
 
   it('valida tamanho mínimo da senha', async () => {
@@ -163,7 +165,7 @@ describe('RegisterPage', () => {
     fireEvent.click(button);
 
     expect(await screen.findByText('Cadastro realizado com sucesso!')).toBeInTheDocument();
-    
+
     // Valida que o doc foi criado na coleção e UID certos, e o setDoc usou a referência e modelagem corretas
     expect(doc).toHaveBeenCalledWith({}, 'clientes', 'mock-uid-maria');
     expect(setDoc).toHaveBeenCalledWith(
@@ -176,7 +178,7 @@ describe('RegisterPage', () => {
         role: 'cliente',
         status: 'ativo',
         createdAt: expect.any(String),
-      })
+      }),
     );
 
     // Os campos devem ter sido limpos

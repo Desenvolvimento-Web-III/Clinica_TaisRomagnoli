@@ -17,17 +17,12 @@ const registerSchema = z
       .string()
       .min(1, 'O telefone é obrigatório')
       .regex(/^\(\d{2}\)\d{5}-\d{4}$/, 'Formato de telefone inválido. Use (XX)XXXXX-XXXX'),
-    email: z
-      .string()
-      .min(1, 'O e-mail é obrigatório')
-      .email('Insira um e-mail válido'),
+    email: z.string().min(1, 'O e-mail é obrigatório').email('Insira um e-mail válido'),
     senha: z
       .string()
       .min(1, 'A senha é obrigatória')
       .min(6, 'A senha deve ter pelo menos 6 caracteres'),
-    confirmarSenha: z
-      .string()
-      .min(1, 'A confirmação da senha é obrigatória'),
+    confirmarSenha: z.string().min(1, 'A confirmação da senha é obrigatória'),
   })
   .refine((data) => data.senha === data.confirmarSenha, {
     message: 'As senhas não coincidem',
@@ -72,7 +67,7 @@ export function RegisterPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
+
     if (name === 'telefone') {
       setFormData((prev) => ({ ...prev, [name]: formatTelefone(value) }));
     } else {
@@ -89,7 +84,7 @@ export function RegisterPage() {
     e.preventDefault();
     setSuccessMessage(null);
     setGeneralError(null);
-    
+
     const result = registerSchema.safeParse(formData);
 
     if (!result.success) {
@@ -115,8 +110,12 @@ export function RegisterPage() {
 
     try {
       // 1. Cria autenticação no Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.senha);
-      
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.senha,
+      );
+
       // 2. Grava dados adicionais do cliente no Firestore
       console.log('Enviando dados para o Firestore:', {
         uid: userCredential.user.uid,
@@ -188,7 +187,12 @@ export function RegisterPage() {
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
                 </svg>
               </span>
               <input
@@ -200,7 +204,9 @@ export function RegisterPage() {
                 onChange={handleChange}
                 placeholder="Digite aqui"
                 className={`w-full rounded-xl border bg-white py-2.5 pl-10 pr-3 text-sm focus:ring-2 focus:ring-[#8F75D0]/20 focus:border-[#8F75D0] focus:outline-hidden transition-all ${
-                  errors.nome ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500' : 'border-slate-200'
+                  errors.nome
+                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-slate-200'
                 }`}
               />
             </div>
@@ -219,7 +225,12 @@ export function RegisterPage() {
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
                 </svg>
               </span>
               <input
@@ -231,7 +242,9 @@ export function RegisterPage() {
                 onChange={handleChange}
                 placeholder="Digite aqui"
                 className={`w-full rounded-xl border bg-white py-2.5 pl-10 pr-3 text-sm focus:ring-2 focus:ring-[#8F75D0]/20 focus:border-[#8F75D0] focus:outline-hidden transition-all ${
-                  errors.email ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500' : 'border-slate-200'
+                  errors.email
+                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-slate-200'
                 }`}
               />
             </div>
@@ -250,7 +263,12 @@ export function RegisterPage() {
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                  />
                 </svg>
               </span>
               <input
@@ -262,7 +280,9 @@ export function RegisterPage() {
                 onChange={handleChange}
                 placeholder="(00)00000-0000"
                 className={`w-full rounded-xl border bg-white py-2.5 pl-10 pr-3 text-sm focus:ring-2 focus:ring-[#8F75D0]/20 focus:border-[#8F75D0] focus:outline-hidden transition-all ${
-                  errors.telefone ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500' : 'border-slate-200'
+                  errors.telefone
+                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-slate-200'
                 }`}
               />
             </div>
@@ -281,7 +301,12 @@ export function RegisterPage() {
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
                 </svg>
               </span>
               <input
@@ -293,7 +318,9 @@ export function RegisterPage() {
                 onChange={handleChange}
                 placeholder="Digite aqui"
                 className={`w-full rounded-xl border bg-white py-2.5 pl-10 pr-10 text-sm focus:ring-2 focus:ring-[#8F75D0]/20 focus:border-[#8F75D0] focus:outline-hidden transition-all ${
-                  errors.senha ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500' : 'border-slate-200'
+                  errors.senha
+                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-slate-200'
                 }`}
               />
               <button
@@ -304,12 +331,27 @@ export function RegisterPage() {
               >
                 {showSenha ? (
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"
+                    />
                   </svg>
                 ) : (
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
                   </svg>
                 )}
               </button>
@@ -329,7 +371,12 @@ export function RegisterPage() {
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
                 </svg>
               </span>
               <input
@@ -341,7 +388,9 @@ export function RegisterPage() {
                 onChange={handleChange}
                 placeholder="Digite aqui"
                 className={`w-full rounded-xl border bg-white py-2.5 pl-10 pr-10 text-sm focus:ring-2 focus:ring-[#8F75D0]/20 focus:border-[#8F75D0] focus:outline-hidden transition-all ${
-                  errors.confirmarSenha ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500' : 'border-slate-200'
+                  errors.confirmarSenha
+                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-slate-200'
                 }`}
               />
               <button
@@ -352,12 +401,27 @@ export function RegisterPage() {
               >
                 {showConfirmarSenha ? (
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"
+                    />
                   </svg>
                 ) : (
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
                   </svg>
                 )}
               </button>
@@ -376,9 +440,24 @@ export function RegisterPage() {
             className="w-full rounded-xl bg-[#8F75D0] hover:bg-[#7a60b8] active:bg-[#6c53a6] text-white font-semibold py-3 text-sm transition-all shadow-xs cursor-pointer mt-4 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
           >
             {loading ? (
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              <svg
+                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
               </svg>
             ) : null}
             {loading ? 'Cadastrando...' : 'Criar conta'}
