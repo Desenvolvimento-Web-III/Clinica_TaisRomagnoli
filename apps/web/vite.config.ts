@@ -15,11 +15,11 @@ export default defineConfig({
         enabled: false,
       },
       manifest: {
-        name: 'Clínica — ambiente técnico temporário',
-        short_name: 'Clínica (dev)',
-        description: 'Manifesto provisório da fundação técnica.',
-        theme_color: '#f8fafc',
-        background_color: '#f8fafc',
+        name: 'Tais Romagnoli — Massoterapia',
+        short_name: 'Tais Romagnoli',
+        description: 'Serviços e agendamentos de massoterapia.',
+        theme_color: '#7a60b8',
+        background_color: '#ede9fe',
         display: 'standalone',
         start_url: '/',
         icons: [
