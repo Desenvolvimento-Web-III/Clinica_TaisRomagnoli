@@ -19,5 +19,8 @@ Security Rules. Ocultar elementos no navegador não constitui autorização. Os 
 somente pelo backend.
 
 O início prevê uma profissional, mas entidades dependentes de profissional deverão estar preparadas
-para `professionalId`, sem prender o domínio a uma única pessoa. O modelo de dados ainda não foi
-validado e, por isso, as regras permanecem `deny all`.
+para `professionalId`, sem prender o domínio a uma única pessoa. O modelo de dados definitivo ainda
+não foi validado. Somente os caminhos necessários às entregas aprovadas são abertos nas regras: o
+cadastro básico pode ser consultado pelo proprietário e pela administradora; histórico e pagamentos
+do perfil administrativo são restritos à administradora; e a anamnese pode ser lida apenas pelo
+cliente proprietário e pela administradora. As demais operações continuam bloqueadas por padrão.

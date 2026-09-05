@@ -1,3 +1,4 @@
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { getActiveServices, serviceCatalog } from '@/features/services/catalog';
 import { ServiceCard } from '@/features/services/components/ServiceCard';
 import type { Service } from '@/features/services/types';
@@ -10,9 +11,10 @@ export function ServiceCatalogPage({ services = serviceCatalog }: ServiceCatalog
   const activeServices = getActiveServices(services);
 
   return (
-    <div className="min-h-dvh bg-[var(--color-brand-soft)] text-[var(--color-text-primary)]">
+    <div className="relative min-h-dvh bg-[var(--color-brand-soft)] text-[var(--color-text-primary)]">
+      <BrandLogo />
       <header className="bg-[var(--color-brand-strong)] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mx-auto max-w-6xl px-4 pb-8 pt-32 sm:px-6 sm:pb-10 lg:px-8">
           <p className="text-sm/5 font-semibold">Tais Romagnoli — Massoterapia</p>
           <h1 className="mt-3 text-2xl/8 font-bold">Serviços</h1>
           <p className="mt-2 max-w-2xl text-sm/5 text-white sm:text-base/6">

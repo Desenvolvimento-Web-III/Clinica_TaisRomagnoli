@@ -7,7 +7,13 @@
 - Firestore e Storage terão autorização independente nas Security Rules.
 - A ficha de avaliação terá acesso restrito ao cliente proprietário e à administradora.
 - Service accounts, chaves privadas, tokens administrativos e segredos de pagamento são proibidos no frontend.
-- As regras iniciais de Firestore e Storage são `deny all` enquanto o modelo não estiver validado.
+- O cadastro básico é legível pelo cliente proprietário e pela administradora; listagens são
+  administrativas.
+- Histórico e pagamentos do perfil administrativo são legíveis somente pela administradora.
+- A anamnese é legível somente pelo cliente proprietário e pela administradora.
+- Escritas em histórico, pagamentos e anamnese permanecem bloqueadas até a validação dos fluxos
+  responsáveis por esses dados.
+- Todo caminho não autorizado explicitamente permanece `deny all`.
 - Configurações públicas do Firebase identificam o projeto, mas não substituem Security Rules.
 
 LGPD, consentimento, retenção, minimização de dados, trilhas de auditoria e resposta a incidentes são

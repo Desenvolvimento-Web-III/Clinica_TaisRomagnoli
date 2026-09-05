@@ -3,6 +3,8 @@ import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
+import { AdminRoute } from './AdminRoute';
 
 export const router = createBrowserRouter([
   {
@@ -24,6 +26,14 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/admin/clientes/:clientId',
+    element: (
+      <AdminRoute>
+        <AdminClientProfilePage />
+      </AdminRoute>
+    ),
   },
   {
     path: '*',
