@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { auth } from '../lib/firebase';
-import { getFirebaseErrorCode } from '../lib/firebase-error';
+import { getAuthErrorMessage } from '@/features/auth/auth-errors';
 
 // Schema de validação de Login usando Zod
 const loginSchema = z.object({
@@ -73,17 +73,7 @@ export function LoginPage() {
       navigate('/agendamentos', { replace: true });
     } catch (error: unknown) {
       console.error(error);
-      const errorCode = getFirebaseErrorCode(error);
-
-      if (
-        errorCode === 'auth/invalid-credential' ||
-        errorCode === 'auth/wrong-password' ||
-        errorCode === 'auth/user-not-found'
-      ) {
-        setGeneralError('E-mail ou senha incorretos.');
-      } else {
-        setGeneralError('Ocorreu um erro ao tentar entrar. Tente novamente.');
-      }
+      setGeneralError(getAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }

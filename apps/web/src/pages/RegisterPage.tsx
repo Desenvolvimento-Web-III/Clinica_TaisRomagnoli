@@ -141,7 +141,11 @@ export function RegisterPage() {
       console.error(error);
       const errorCode = getFirebaseErrorCode(error);
 
-      if (errorCode === 'auth/email-already-in-use') {
+      if (errorCode === 'auth/operation-not-allowed') {
+        setGeneralError(
+          'O método de cadastro por e-mail e senha não está habilitado no Firebase Authentication. Contate a administração.'
+        );
+      } else if (errorCode === 'auth/email-already-in-use') {
         setErrors((prev) => ({ ...prev, email: 'Este e-mail já está em uso' }));
       } else if (errorCode === 'auth/invalid-email') {
         setErrors((prev) => ({ ...prev, email: 'Insira um e-mail válido' }));

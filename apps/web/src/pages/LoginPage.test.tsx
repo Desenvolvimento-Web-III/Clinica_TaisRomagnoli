@@ -97,4 +97,26 @@ describe('LoginPage', () => {
     expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
     expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
   });
+
+  it('exibe mensagem orientando o usuário quando o método de login não está habilitado no Firebase', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({
+      code: 'auth/operation-not-allowed',
+    });
+
+    renderWithRouter(<LoginPage />);
+
+    const emailInput = screen.getByLabelText(/email/i);
+    const senhaInput = screen.getByLabelText(/senha/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'cliente@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText(
+        'O método de login por e-mail e senha não está habilitado no Firebase Authentication. Contate a administração.'
+      )
+    ).toBeInTheDocument();
+  });
 });
