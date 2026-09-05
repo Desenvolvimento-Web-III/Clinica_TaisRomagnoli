@@ -1,0 +1,78 @@
+import React from 'react';
+
+interface BottomNavProps {
+  activeTab?: 'inicio' | 'agendamentos' | 'perfil';
+}
+
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab = 'agendamentos' }) => {
+  return (
+    <nav
+      aria-label="Navegação principal"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-purple-100 bg-white/90 px-6 py-2 backdrop-blur-md shadow-lg"
+    >
+      <div className="mx-auto flex max-w-md items-center justify-around">
+        {/* Início / Serviços */}
+        <button
+          type="button"
+          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
+            activeTab === 'inicio' ? 'text-purple-700' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={activeTab === 'inicio' ? 2.5 : 1.8}
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+            />
+          </svg>
+          <span>Serviços</span>
+        </button>
+
+        {/* Agendamentos */}
+        <button
+          type="button"
+          aria-current={activeTab === 'agendamentos' ? 'page' : undefined}
+          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
+            activeTab === 'agendamentos'
+              ? 'text-purple-700 font-semibold'
+              : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <div className="relative">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={activeTab === 'agendamentos' ? 2.5 : 1.8}
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            {activeTab === 'agendamentos' && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-purple-600 ring-2 ring-white" />
+            )}
+          </div>
+          <span>Agendamentos</span>
+        </button>
+
+        {/* Perfil */}
+        <button
+          type="button"
+          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
+            activeTab === 'perfil' ? 'text-purple-700' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={activeTab === 'perfil' ? 2.5 : 1.8}
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+            />
+          </svg>
+          <span>Perfil</span>
+        </button>
+      </div>
+    </nav>
+  );
+};

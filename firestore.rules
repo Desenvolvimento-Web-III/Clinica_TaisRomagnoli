@@ -2,7 +2,18 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Regras de segurança para a coleção clientes
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
     match /clientes/{uid} {
       // Leitura permitida apenas para o próprio cliente dono do registro
       allow read: if request.auth != null && request.auth.uid == uid;
@@ -20,6 +31,21 @@ service cloud.firestore {
                     
       // Bloqueia deleção por clientes
       allow delete: if false;
+
+      match /historico/{recordId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+
+      match /pagamentos/{paymentId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+
+      match /anamneses/{anamnesisId} {
+        allow read: if isAdmin() || isOwner(uid);
+        allow write: if false;
+      }
     }
 
     // Configurações da clínica (intervalo, folgas, percentual do sinal)
