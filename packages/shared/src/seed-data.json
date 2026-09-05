@@ -1,0 +1,34 @@
+{
+  "configuracoes": {
+    "geral": {
+      "percentualSinal": 30,
+      "intervaloMinutos": 30,
+      "diasFolga": [0, 2],
+      "antecedenciaMinimaCancelamentoHoras": 3,
+      "criterioClienteRecorrenteAtendimentosMes": 2,
+      "updatedAt": "2026-09-05T00:00:00.000Z"
+    }
+  },
+  "profissionais": {
+    "prof-tais-romagnoli": {
+      "id": "prof-tais-romagnoli",
+      "nome": "Tais Romagnoli",
+      "especialidade": "Massoterapeuta",
+      "ativo": true,
+      "diasFolga": [0, 2],
+      "intervaloMinutos": 30,
+      "createdAt": "2026-09-05T00:00:00.000Z"
+    }
+  },
+  "usuarios": {
+    "admin-tais-romagnoli": {
+      "uid": "admin-tais-romagnoli",
+      "nome": "Tais Romagnoli",
+      "email": "admin@clinicataisromagnoli.com.br",
+      "telefone": "(11)99999-9999",
+      "role": "admin",
+      "status": "ativo",
+      "createdAt": "2026-09-05T00:00:00.000Z"
+    }
+  }
+}

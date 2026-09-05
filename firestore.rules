@@ -4,22 +4,45 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Regras de segurança para a coleção clientes
     match /clientes/{uid} {
-      // Regra para leitura: o usuário deve estar autenticado e ser o dono do documento
+      // Leitura permitida apenas para o próprio cliente dono do registro
       allow read: if request.auth != null && request.auth.uid == uid;
       
-      // Regra para criação: exige que o usuário esteja autenticado, seja o dono do documento e crie com cargo 'cliente' e status 'ativo'
+      // Criação exige autenticação, correspondência de UID e cargo estritamente 'cliente'
       allow create: if request.auth != null 
                     && request.auth.uid == uid 
                     && request.resource.data.role == 'cliente'
                     && request.resource.data.status == 'ativo';
                     
-      // Regra para atualização: impede alteração do cargo (role) para 'admin' por usuários comuns
+      // Atualização impede alteração de cargo para privilégios elevados
       allow update: if request.auth != null 
                     && request.auth.uid == uid 
                     && request.resource.data.role == 'cliente';
                     
-      // Bloqueia deleção por padrão (clientes não podem deletar o próprio cadastro)
+      // Bloqueia deleção por clientes
       allow delete: if false;
+    }
+
+    // Configurações da clínica (intervalo, folgas, percentual do sinal)
+    // Leitura liberada para que a interface de agendamento consulte as regras vigentes
+    // Escrita bloqueada no client-side para evitar alteração não autorizada de parâmetros de negócio
+    match /configuracoes/{configId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Profissionais da clínica (dados de exibição, especialidade, folgas e intervalos)
+    // Leitura liberada para que clientes selecionem profissionais na agenda
+    // Escrita bloqueada no client-side para proteção cadastral
+    match /profissionais/{professionalId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Usuários do sistema (incluindo contas administrativas)
+    // Leitura permitida apenas para o titular autenticado; criação administrativa protegida
+    match /usuarios/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado
