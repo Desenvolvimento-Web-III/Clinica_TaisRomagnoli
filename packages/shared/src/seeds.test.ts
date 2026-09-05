@@ -78,17 +78,17 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
     expect(mockWriter.set).toHaveBeenCalledWith(
       'configuracoes',
       'geral',
-      expect.objectContaining({ percentualSinal: 30 })
+      expect.objectContaining({ percentualSinal: 30 }),
     );
     expect(mockWriter.set).toHaveBeenCalledWith(
       'profissionais',
       'prof-tais-romagnoli',
-      expect.objectContaining({ nome: 'Tais Romagnoli' })
+      expect.objectContaining({ nome: 'Tais Romagnoli' }),
     );
     expect(mockWriter.set).toHaveBeenCalledWith(
       'usuarios',
       'admin-tais-romagnoli',
-      expect.objectContaining({ role: 'admin' })
+      expect.objectContaining({ role: 'admin' }),
     );
   });
 });

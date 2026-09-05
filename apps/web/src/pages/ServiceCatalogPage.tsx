@@ -1,4 +1,5 @@
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { BottomNav } from '@/features/agendamentos/components/BottomNav';
 import { getActiveServices, serviceCatalog } from '@/features/services/catalog';
 import { ServiceCard } from '@/features/services/components/ServiceCard';
 import type { Service } from '@/features/services/types';
@@ -11,7 +12,7 @@ export function ServiceCatalogPage({ services = serviceCatalog }: ServiceCatalog
   const activeServices = getActiveServices(services);
 
   return (
-    <div className="relative min-h-dvh bg-[var(--color-brand-soft)] text-[var(--color-text-primary)]">
+    <div className="relative min-h-dvh bg-[var(--color-brand-soft)] pb-20 text-[var(--color-text-primary)]">
       <BrandLogo />
       <header className="bg-[var(--color-brand-strong)] text-white">
         <div className="mx-auto max-w-6xl px-4 pb-8 pt-32 sm:px-6 sm:pb-10 lg:px-8">
@@ -60,6 +61,7 @@ export function ServiceCatalogPage({ services = serviceCatalog }: ServiceCatalog
           )}
         </section>
       </main>
+      <BottomNav activeTab="inicio" />
     </div>
   );
 }

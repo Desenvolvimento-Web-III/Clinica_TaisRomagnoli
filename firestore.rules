@@ -15,21 +15,21 @@ service cloud.firestore {
     }
 
     match /clientes/{uid} {
-      // Leitura permitida apenas para o próprio cliente dono do registro
-      allow read: if request.auth != null && request.auth.uid == uid;
-      
-      // Criação exige autenticação, correspondência de UID e cargo estritamente 'cliente'
-      allow create: if request.auth != null 
-                    && request.auth.uid == uid 
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isOwner(uid)
+                    && request.resource.data.uid == uid
                     && request.resource.data.role == 'cliente'
-                    && request.resource.data.status == 'ativo';
-                    
-      // Atualização impede alteração de cargo para privilégios elevados
-      allow update: if request.auth != null 
-                    && request.auth.uid == uid 
-                    && request.resource.data.role == 'cliente';
-                    
-      // Bloqueia deleção por clientes
+                    && request.resource.data.status == 'ativo'
+                    && request.resource.data.keys().hasOnly([
+                      'uid', 'nome', 'telefone', 'email', 'role', 'status', 'createdAt'
+                    ]);
+
+      allow update: if isOwner(uid)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['nome', 'telefone', 'updatedAt']);
+
       allow delete: if false;
 
       match /historico/{recordId} {

@@ -1,10 +1,10 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 
 interface BottomNavProps {
   activeTab?: 'inicio' | 'agendamentos' | 'perfil';
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab = 'agendamentos' }) => {
+export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
   return (
     <nav
       aria-label="Navegação principal"
@@ -12,8 +12,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab = 'agendamentos'
     >
       <div className="mx-auto flex max-w-md items-center justify-around">
         {/* Início / Serviços */}
-        <button
-          type="button"
+        <Link
+          to="/servicos"
+          aria-current={activeTab === 'inicio' ? 'page' : undefined}
           className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
             activeTab === 'inicio' ? 'text-purple-700' : 'text-slate-400 hover:text-slate-600'
           }`}
@@ -27,11 +28,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab = 'agendamentos'
             />
           </svg>
           <span>Serviços</span>
-        </button>
+        </Link>
 
         {/* Agendamentos */}
-        <button
-          type="button"
+        <Link
+          to="/agendamentos"
           aria-current={activeTab === 'agendamentos' ? 'page' : undefined}
           className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
             activeTab === 'agendamentos'
@@ -53,11 +54,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab = 'agendamentos'
             )}
           </div>
           <span>Agendamentos</span>
-        </button>
+        </Link>
 
         {/* Perfil */}
-        <button
-          type="button"
+        <Link
+          to="/login"
+          aria-current={activeTab === 'perfil' ? 'page' : undefined}
           className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
             activeTab === 'perfil' ? 'text-purple-700' : 'text-slate-400 hover:text-slate-600'
           }`}
@@ -71,8 +73,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab = 'agendamentos'
             />
           </svg>
           <span>Perfil</span>
-        </button>
+        </Link>
       </div>
     </nav>
   );
-};
+}

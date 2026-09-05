@@ -22,6 +22,11 @@ recorrência, pagamentos e anamnese. A recorrência segue a regra de dois atendi
 mesmo mês. Os dados exibidos são fictícios; integração com dados reais e operações de escrita continuam
 fora do escopo até a validação do modelo definitivo.
 
+A tela “Meus agendamentos” apresenta dados demonstrativos e interações somente locais. Sua barra
+inferior conecta o catálogo, os agendamentos e o login disponível como entrada para o futuro perfil do
+cliente. Cadastro e login bem-sucedidos direcionam para essa tela. Persistência, seleção definitiva de
+serviço, disponibilidade de horários e processamento de cancelamento continuam fora desta entrega.
+
 ## Funcionalidades futuras
 
 Complementos de autenticação e autorização, painel administrativo geral, agenda, processamento de

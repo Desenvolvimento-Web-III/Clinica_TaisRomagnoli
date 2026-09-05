@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
 import { createUserWithEmailAndPassword, type UserCredential } from 'firebase/auth';
@@ -141,13 +141,20 @@ describe('RegisterPage', () => {
     expect(await screen.findByText('Este e-mail já está em uso')).toBeInTheDocument();
   });
 
-  it('permite cadastro bem-sucedido com dados válidos', async () => {
+  it('leva aos agendamentos após cadastro bem-sucedido', async () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: { uid: 'mock-uid-maria' },
     } as UserCredential);
     vi.mocked(setDoc).mockResolvedValueOnce(undefined);
 
-    renderWithRouter(<RegisterPage />);
+    render(
+      <MemoryRouter initialEntries={['/cadastro']}>
+        <Routes>
+          <Route path="/cadastro" element={<RegisterPage />} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const telefoneInput = screen.getByLabelText(/telefone/i);
@@ -164,7 +171,7 @@ describe('RegisterPage', () => {
 
     fireEvent.click(button);
 
-    expect(await screen.findByText('Cadastro realizado com sucesso!')).toBeInTheDocument();
+    expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
 
     // Valida que o doc foi criado na coleção e UID certos, e o setDoc usou a referência e modelagem corretas
     expect(doc).toHaveBeenCalledWith({}, 'clientes', 'mock-uid-maria');
@@ -180,12 +187,5 @@ describe('RegisterPage', () => {
         createdAt: expect.any(String),
       }),
     );
-
-    // Os campos devem ter sido limpos
-    expect(nomeInput).toHaveValue('');
-    expect(telefoneInput).toHaveValue('');
-    expect(emailInput).toHaveValue('');
-    expect(senhaInput).toHaveValue('');
-    expect(confirmarSenhaInput).toHaveValue('');
   });
 });

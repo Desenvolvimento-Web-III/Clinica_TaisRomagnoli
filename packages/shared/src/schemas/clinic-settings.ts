@@ -18,8 +18,7 @@ export function validateClinicSettings(data: unknown): data is ClinicSettings {
   const validIntervalo =
     typeof settings.intervaloMinutos === 'number' && settings.intervaloMinutos >= 0;
 
-  const validDiasFolga =
-    Array.isArray(settings.diasFolga) && settings.diasFolga.every(isDayOfWeek);
+  const validDiasFolga = Array.isArray(settings.diasFolga) && settings.diasFolga.every(isDayOfWeek);
 
   const validCancelamento =
     typeof settings.antecedenciaMinimaCancelamentoHoras === 'number' &&

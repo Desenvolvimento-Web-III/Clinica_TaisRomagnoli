@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { BrandLogo } from '@/components/ui/BrandLogo';
@@ -18,13 +18,13 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<LoginFormData>({
     email: '',
     senha: '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
@@ -41,7 +41,6 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSuccessMessage(null);
     setGeneralError(null);
 
     const result = loginSchema.safeParse(formData);
@@ -71,11 +70,7 @@ export function LoginPage() {
       // Efetua autenticação no Firebase Auth
       await signInWithEmailAndPassword(auth, formData.email, formData.senha);
 
-      setSuccessMessage('Login efetuado com sucesso!');
-      setFormData({
-        email: '',
-        senha: '',
-      });
+      navigate('/agendamentos', { replace: true });
     } catch (error: unknown) {
       console.error(error);
       const errorCode = getFirebaseErrorCode(error);
@@ -104,12 +99,6 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
-            {successMessage && (
-              <div className="rounded-lg bg-emerald-50 p-4 text-sm font-medium text-emerald-800 border border-emerald-200">
-                {successMessage}
-              </div>
-            )}
-
             {generalError && (
               <div className="rounded-lg bg-red-50 p-4 text-sm font-medium text-red-800 border border-red-200">
                 {generalError}

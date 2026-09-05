@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import { LoginPage } from './LoginPage';
 import { signInWithEmailAndPassword, type UserCredential } from 'firebase/auth';
@@ -74,10 +74,17 @@ describe('LoginPage', () => {
     expect(await screen.findByText('E-mail ou senha incorretos.')).toBeInTheDocument();
   });
 
-  it('permite login bem-sucedido com dados válidos', async () => {
+  it('leva aos agendamentos após login bem-sucedido', async () => {
     vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
 
-    renderWithRouter(<LoginPage />);
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     const emailInput = screen.getByLabelText(/email/i);
     const senhaInput = screen.getByLabelText(/senha/i);
@@ -87,10 +94,7 @@ describe('LoginPage', () => {
     fireEvent.change(senhaInput, { target: { value: 'senha123' } });
     fireEvent.click(button);
 
-    expect(await screen.findByText('Login efetuado com sucesso!')).toBeInTheDocument();
-
-    // Os campos devem ter sido limpos após o sucesso
-    expect(emailInput).toHaveValue('');
-    expect(senhaInput).toHaveValue('');
+    expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
+    expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
   });
 });
