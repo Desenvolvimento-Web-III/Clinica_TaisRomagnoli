@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { LoginPage } from './LoginPage';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, type UserCredential } from 'firebase/auth';
 
 // Mocks do Firebase
 vi.mock('../lib/firebase', () => ({
@@ -75,7 +75,7 @@ describe('LoginPage', () => {
   });
 
   it('permite login bem-sucedido com dados válidos', async () => {
-    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as any);
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
 
     renderWithRouter(<LoginPage />);
 

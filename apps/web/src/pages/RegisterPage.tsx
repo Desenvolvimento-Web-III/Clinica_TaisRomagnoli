@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { auth, db } from '../lib/firebase';
+import { getFirebaseErrorCode } from '../lib/firebase-error';
 
 // Schema de validação usando Zod, com refinamento para senhas iguais
 const registerSchema = z
@@ -143,13 +145,15 @@ export function RegisterPage() {
         senha: '',
         confirmarSenha: '',
       });
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/email-already-in-use') {
+    } catch (error: unknown) {
+      console.error(error);
+      const errorCode = getFirebaseErrorCode(error);
+
+      if (errorCode === 'auth/email-already-in-use') {
         setErrors((prev) => ({ ...prev, email: 'Este e-mail já está em uso' }));
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (errorCode === 'auth/invalid-email') {
         setErrors((prev) => ({ ...prev, email: 'Insira um e-mail válido' }));
-      } else if (err.code === 'auth/weak-password') {
+      } else if (errorCode === 'auth/weak-password') {
         setErrors((prev) => ({ ...prev, senha: 'A senha é muito fraca' }));
       } else {
         setGeneralError('Ocorreu um erro ao realizar o cadastro. Tente novamente.');
@@ -160,7 +164,8 @@ export function RegisterPage() {
   };
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#EDE9FE] px-4 py-8 text-[#000000]">
+    <main className="relative grid min-h-dvh place-items-center bg-[#EDE9FE] px-4 pb-8 pt-32 text-[#000000]">
+      <BrandLogo />
       <section className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight text-[#000000]">Cadastro</h1>

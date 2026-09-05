@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, type UserCredential } from 'firebase/auth';
 import { setDoc, doc } from 'firebase/firestore';
 
 // Mocks do Firebase
@@ -144,8 +144,8 @@ describe('RegisterPage', () => {
   it('permite cadastro bem-sucedido com dados válidos', async () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: { uid: 'mock-uid-maria' },
-    } as any);
-    vi.mocked(setDoc).mockResolvedValueOnce({} as any);
+    } as UserCredential);
+    vi.mocked(setDoc).mockResolvedValueOnce(undefined);
 
     renderWithRouter(<RegisterPage />);
 

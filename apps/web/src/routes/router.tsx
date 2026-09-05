@@ -1,17 +1,27 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AgendamentosPage } from '@/pages/AgendamentosPage';
-import { LoginPage } from '@/pages/LoginPage';
-import { RegisterPage } from '@/pages/RegisterPage';
+import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
+import { RegisterPage } from '@/pages/RegisterPage';
+import { LoginPage } from '@/pages/LoginPage';
+import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
+import { AdminRoute } from './AdminRoute';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <AgendamentosPage />,
   },
   {
     path: '/agendamentos',
     element: <AgendamentosPage />,
+  },
+  {
+    path: '/servicos',
+    element: <ServiceCatalogPage />,
+  },
+  {
+    path: '/status',
+    element: <TechnicalStatusPage />,
   },
   {
     path: '/cadastro',
@@ -22,8 +32,16 @@ export const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
-    path: '/status',
-    element: <TechnicalStatusPage />,
+    path: '/admin/clientes/:clientId',
+    element: (
+      <AdminRoute>
+        <AdminClientProfilePage />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: '*',
+    element: <ServiceCatalogPage />,
   },
   {
     path: '*',

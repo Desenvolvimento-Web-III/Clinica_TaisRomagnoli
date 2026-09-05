@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { auth } from '../lib/firebase';
+import { getFirebaseErrorCode } from '../lib/firebase-error';
 
 // Schema de validação de Login usando Zod
 const loginSchema = z.object({
@@ -74,12 +76,14 @@ export function LoginPage() {
         email: '',
         senha: '',
       });
-    } catch (err: any) {
-      console.error(err);
+    } catch (error: unknown) {
+      console.error(error);
+      const errorCode = getFirebaseErrorCode(error);
+
       if (
-        err.code === 'auth/invalid-credential' ||
-        err.code === 'auth/wrong-password' ||
-        err.code === 'auth/user-not-found'
+        errorCode === 'auth/invalid-credential' ||
+        errorCode === 'auth/wrong-password' ||
+        errorCode === 'auth/user-not-found'
       ) {
         setGeneralError('E-mail ou senha incorretos.');
       } else {
@@ -91,17 +95,9 @@ export function LoginPage() {
   };
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#EDE9FE] px-4 py-8 text-[#000000]">
-      <div className="w-full max-w-md flex flex-col space-y-6">
-        {/* Imagem da Mandala / Meditação */}
-        <div className="flex justify-center">
-          <img
-            src="/logo-login.png"
-            alt="Silhueta de meditação com mandala"
-            className="h-44 w-auto object-contain"
-          />
-        </div>
-
+    <main className="relative grid min-h-dvh place-items-center bg-[#EDE9FE] px-4 pb-8 pt-32 text-[#000000]">
+      <BrandLogo />
+      <div className="flex w-full max-w-md flex-col space-y-6">
         <section className="w-full rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-[#000000]">Login</h1>
