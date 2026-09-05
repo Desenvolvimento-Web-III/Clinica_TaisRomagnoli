@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MOCK_AGENDAMENTOS } from '../features/agendamentos/data/mockAgendamentos';
 import type { Agendamento, StatusAgendamento } from '../features/agendamentos/types/agendamento';
 import { AgendamentoCard } from '../features/agendamentos/components/AgendamentoCard';
@@ -8,6 +9,7 @@ import { BottomNav } from '../features/agendamentos/components/BottomNav';
 type FiltroTab = 'todos' | StatusAgendamento;
 
 export function AgendamentosPage() {
+  const navigate = useNavigate();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(MOCK_AGENDAMENTOS);
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroTab>('todos');
   const [agendamentoParaCancelar, setAgendamentoParaCancelar] = useState<Agendamento | null>(null);
@@ -182,7 +184,7 @@ export function AgendamentosPage() {
           <button
             type="button"
             data-testid="novo-agendamento-fab"
-            onClick={() => mostrarToast('Navegando para seleção de serviços...')}
+            onClick={() => navigate('/servicos')}
             className="group flex items-center gap-2 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-3 text-xs font-bold text-white shadow-lg transition-transform duration-200 hover:scale-105 hover:shadow-xl focus:ring-4 focus:ring-purple-300 focus:outline-hidden"
           >
             <svg

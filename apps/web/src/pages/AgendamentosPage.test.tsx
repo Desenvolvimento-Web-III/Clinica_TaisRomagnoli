@@ -1,9 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AgendamentosPage } from './AgendamentosPage';
 
 describe('AgendamentosPage', () => {
+  const renderPage = () => render(<AgendamentosPage />, { wrapper: MemoryRouter });
+
   it('renderiza o título da página e a lista de agendamentos', () => {
-    render(<AgendamentosPage />);
+    renderPage();
 
     expect(screen.getByRole('heading', { name: 'Meus Agendamentos' })).toBeInTheDocument();
     expect(screen.getByTestId('agendamentos-list')).toBeInTheDocument();
@@ -12,7 +15,7 @@ describe('AgendamentosPage', () => {
   });
 
   it('filtra agendamentos ao selecionar a aba de status', () => {
-    render(<AgendamentosPage />);
+    renderPage();
 
     // Clica na aba 'Confirmados'
     const tabConfirmados = screen.getByTestId('tab-confirmado');
@@ -30,7 +33,7 @@ describe('AgendamentosPage', () => {
   });
 
   it('abre o modal de cancelamento e altera o status após confirmação', () => {
-    render(<AgendamentosPage />);
+    renderPage();
 
     // Clica no primeiro botão de Cancelar (Massagem Relaxante com Óleos)
     const botoesCancelar = screen.getAllByRole('button', { name: 'Cancelar' });
@@ -55,14 +58,19 @@ describe('AgendamentosPage', () => {
     );
   });
 
-  it('exibe o toast ao clicar no FAB de novo agendamento', () => {
-    render(<AgendamentosPage />);
+  it('leva ao catálogo ao clicar no botão de novo agendamento', async () => {
+    render(
+      <MemoryRouter initialEntries={['/agendamentos']}>
+        <Routes>
+          <Route path="/agendamentos" element={<AgendamentosPage />} />
+          <Route path="/servicos" element={<p>Catálogo de serviços</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     const fab = screen.getByTestId('novo-agendamento-fab');
     fireEvent.click(fab);
 
-    expect(screen.getByTestId('toast-feedback')).toHaveTextContent(
-      'Navegando para seleção de serviços...',
-    );
+    expect(await screen.findByText('Catálogo de serviços')).toBeInTheDocument();
   });
 });

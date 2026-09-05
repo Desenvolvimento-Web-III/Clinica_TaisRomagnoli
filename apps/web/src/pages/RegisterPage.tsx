@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -34,6 +34,7 @@ const registerSchema = z
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export function RegisterPage() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<RegisterFormData>({
     nome: '',
     telefone: '',
@@ -43,7 +44,6 @@ export function RegisterPage() {
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof RegisterFormData, string>>>({});
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
@@ -84,7 +84,6 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSuccessMessage(null);
     setGeneralError(null);
 
     const result = registerSchema.safeParse(formData);
@@ -137,14 +136,7 @@ export function RegisterPage() {
         createdAt: new Date().toISOString(),
       });
 
-      setSuccessMessage('Cadastro realizado com sucesso!');
-      setFormData({
-        nome: '',
-        telefone: '',
-        email: '',
-        senha: '',
-        confirmarSenha: '',
-      });
+      navigate('/agendamentos', { replace: true });
     } catch (error: unknown) {
       console.error(error);
       const errorCode = getFirebaseErrorCode(error);
@@ -172,12 +164,6 @@ export function RegisterPage() {
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
-          {successMessage && (
-            <div className="rounded-lg bg-emerald-50 p-4 text-sm font-medium text-emerald-800 border border-emerald-200">
-              {successMessage}
-            </div>
-          )}
-
           {generalError && (
             <div className="rounded-lg bg-red-50 p-4 text-sm font-medium text-red-800 border border-red-200">
               {generalError}

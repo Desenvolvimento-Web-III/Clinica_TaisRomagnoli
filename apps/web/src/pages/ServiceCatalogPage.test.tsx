@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import type { Service } from '@/features/services/types';
 import { ServiceCatalogPage } from './ServiceCatalogPage';
 
@@ -21,8 +22,11 @@ const inactiveService: Service = {
 };
 
 describe('ServiceCatalogPage', () => {
+  const renderPage = (services: readonly Service[]) =>
+    render(<ServiceCatalogPage services={services} />, { wrapper: MemoryRouter });
+
   it('lista somente serviços ativos com nome, duração, preço e imagem', () => {
-    render(<ServiceCatalogPage services={[activeService, inactiveService]} />);
+    renderPage([activeService, inactiveService]);
 
     const card = screen.getByRole('article');
 
@@ -36,7 +40,7 @@ describe('ServiceCatalogPage', () => {
   });
 
   it('orienta o cliente quando não há serviços ativos', () => {
-    render(<ServiceCatalogPage services={[inactiveService]} />);
+    renderPage([inactiveService]);
 
     expect(screen.getByRole('status')).toHaveTextContent(
       'Nenhum serviço está disponível no momento.',

@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AgendamentosPage } from '@/pages/AgendamentosPage';
 import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
@@ -10,6 +10,7 @@ import { AdminRoute } from './AdminRoute';
 export const router = createBrowserRouter([
   {
     path: '/',
+    element: <Navigate to="/servicos" replace />,
   },
   {
     path: '/agendamentos',
@@ -41,10 +42,6 @@ export const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <ServiceCatalogPage />,
-  },
-  {
-    path: '*',
-    element: <AgendamentosPage />,
+    element: <Navigate to="/servicos" replace />,
   },
 ]);
