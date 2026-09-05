@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { auth, db } from '../lib/firebase';
 import { getFirebaseErrorCode } from '../lib/firebase-error';
 
@@ -163,7 +164,8 @@ export function RegisterPage() {
   };
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#EDE9FE] px-4 py-8 text-[#000000]">
+    <main className="relative grid min-h-dvh place-items-center bg-[#EDE9FE] px-4 pb-8 pt-32 text-[#000000]">
+      <BrandLogo />
       <section className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight text-[#000000]">Cadastro</h1>
