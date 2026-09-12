@@ -24,6 +24,12 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
+            src: '/logo-login.png',
+            sizes: 'any',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
             src: '/pwa-placeholder.svg',
             sizes: 'any',
             type: 'image/svg+xml',

@@ -61,7 +61,7 @@ export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
 
         {/* Perfil */}
         <Link
-          to="/login"
+          to="/perfil"
           aria-current={activeTab === 'perfil' ? 'page' : undefined}
           className={`min-h-12 min-w-20 rounded-xl px-2 py-1 flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
             activeTab === 'perfil'

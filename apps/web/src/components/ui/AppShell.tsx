@@ -63,26 +63,35 @@ export function AppShell({
 
           {currentUser ? (
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <div
-                aria-hidden="true"
-                className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-sm font-bold text-[var(--color-brand-deep)] sm:flex"
+              <Link
+                to="/perfil"
+                aria-label="Acessar meu perfil"
+                className="group flex min-w-0 items-center gap-2 rounded-xl p-1 transition-colors hover:bg-[var(--color-canvas-neutral)] sm:gap-3"
               >
-                {getUserInitials(userName)}
-              </div>
-              <div className="hidden min-w-0 lg:block">
-                <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-                  Sessão ativa
-                </p>
-                <p className="max-w-44 truncate text-sm font-semibold" title={userName}>
+                <div
+                  aria-hidden="true"
+                  className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-sm font-bold text-[var(--color-brand-deep)] transition-transform group-hover:scale-105 sm:flex"
+                >
+                  {getUserInitials(userName)}
+                </div>
+                <div className="hidden min-w-0 text-left lg:block">
+                  <p className="text-xs font-medium text-[var(--color-text-secondary)]">
+                    Sessão ativa
+                  </p>
+                  <p
+                    className="max-w-44 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-brand-deep)]"
+                    title={userName}
+                  >
+                    {userName}
+                  </p>
+                </div>
+                <span
+                  className="max-w-28 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-brand-deep)] sm:max-w-40 lg:hidden"
+                  title={userName}
+                >
                   {userName}
-                </p>
-              </div>
-              <span
-                className="max-w-28 truncate text-sm font-semibold sm:max-w-40 lg:hidden"
-                title={userName}
-              >
-                {userName}
-              </span>
+                </span>
+              </Link>
               <LogoutButton />
             </div>
           ) : (

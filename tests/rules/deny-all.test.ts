@@ -107,6 +107,18 @@ describe('regras iniciais do Firestore', () => {
     await assertFails(reference.set({ role: 'admin' }, { merge: true }));
     await assertFails(reference.set({ status: 'inativo' }, { merge: true }));
     await assertSucceeds(reference.set({ telefone: '(11) 98888-8888' }, { merge: true }));
+    await assertSucceeds(
+      reference.set(
+        {
+          preferenciasContato: {
+            whatsapp: true,
+            email: false,
+            lembretesAgendamento: true,
+          },
+        },
+        { merge: true },
+      ),
+    );
   });
 
   it('restringe a anamnese ao cliente proprietário e à administradora', async () => {

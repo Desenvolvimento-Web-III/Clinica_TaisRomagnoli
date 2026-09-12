@@ -4,6 +4,7 @@ import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { ClientProfilePage } from '@/pages/ClientProfilePage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminRoute } from './AdminRoute';
 
@@ -31,6 +32,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/perfil',
+    element: <ClientProfilePage />,
   },
   {
     path: '/admin/clientes/:clientId',
