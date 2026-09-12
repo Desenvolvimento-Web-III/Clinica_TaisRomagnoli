@@ -97,4 +97,85 @@ describe('LoginPage', () => {
     expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
     expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
   });
+
+  it('remove espaços em branco acidentais no início e fim do e-mail ao submeter', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
+
+    renderWithRouter(<LoginPage />);
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: '  cliente@exemplo.com  ' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(await screen.findByRole('button', { name: /entrar/i })).toBeInTheDocument();
+    expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
+  });
+
+  it('exibe mensagem orientativa ao exceder tentativas (too-many-requests)', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({
+      code: 'auth/too-many-requests',
+    });
+
+    renderWithRouter(<LoginPage />);
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'bloqueado@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText(
+        'Muitas tentativas sem sucesso. Aguarde alguns instantes e tente novamente.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('exibe mensagem apropriada quando a conta está desativada', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({
+      code: 'auth/user-disabled',
+    });
+
+    renderWithRouter(<LoginPage />);
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'desativado@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText('Esta conta foi desativada. Entre em contato com a clínica.'),
+    ).toBeInTheDocument();
+  });
+
+  it('exibe mensagem de falha de conexão quando ocorre network-request-failed', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({
+      code: 'auth/network-request-failed',
+    });
+
+    renderWithRouter(<LoginPage />);
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'offline@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText(
+        'Falha de conexão com o servidor. Verifique sua conexão com a internet e tente novamente.',
+      ),
+    ).toBeInTheDocument();
+  });
 });
