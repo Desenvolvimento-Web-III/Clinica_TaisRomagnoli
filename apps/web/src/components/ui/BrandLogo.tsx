@@ -1,9 +1,15 @@
-export function BrandLogo() {
+type BrandLogoProps = Readonly<{
+  className?: string;
+}>;
+
+export function BrandLogo({ className = '' }: BrandLogoProps) {
   return (
     <img
       src="/logo-login.png"
       alt="Tais Romagnoli — Massoterapia"
-      className="absolute left-4 top-4 z-10 h-auto w-[120px] object-contain sm:left-6 lg:left-8"
+      width="240"
+      height="104"
+      className={`h-auto w-[132px] object-contain sm:w-[148px] ${className}`}
     />
   );
 }

@@ -27,6 +27,16 @@ inferior conecta o catálogo, os agendamentos e o login disponível como entrada
 cliente. Cadastro e login bem-sucedidos direcionam para essa tela. Persistência, seleção definitiva de
 serviço, disponibilidade de horários e processamento de cancelamento continuam fora desta entrega.
 
+Uma sessão autenticada pode ser encerrada pela ação “Sair”. O frontend usa o Firebase Auth para
+encerrar a sessão, limpa o usuário mantido no estado da aplicação e redireciona para o catálogo público
+de serviços.
+
+As telas compartilham a identidade visual definida no brandbook, com navegação adaptada para mobile e
+desktop, componentes acessíveis, áreas de toque adequadas e conteúdo limitado para manter boa leitura
+em telas amplas. Quando há uma sessão ativa, o cabeçalho identifica o usuário pelo nome do perfil de
+autenticação e oferece a ação de logout; contas antigas sem nome usam uma apresentação derivada do
+e-mail até que o perfil seja atualizado.
+
 ## Funcionalidades futuras
 
 Complementos de autenticação e autorização, painel administrativo geral, agenda, processamento de

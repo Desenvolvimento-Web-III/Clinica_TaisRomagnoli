@@ -11,6 +11,8 @@
   --color-text-secondary: #334155;
   --color-border-default: #e2e8f0;
   --color-icon-muted: #94a3b8;
+  --color-nav-muted: #64748b;
+  --color-overlay: rgb(15 23 42 / 0.6);
   --color-success-bg: #ecfdf5;
   --color-success-text: #065f46;
   --color-success-border: #a7f3d0;
@@ -24,6 +26,8 @@
   --color-info-text: #1e40af;
   --color-info-border: #bfdbfe;
   --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-auth: 32px;
   --shadow-card: 0 1px 3px rgb(15 23 42 / 0.08);
   --shadow-elevated: 0 8px 24px rgb(76 61 116 / 0.12);
 
@@ -44,10 +48,38 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--color-canvas-neutral);
+  color: var(--color-text-primary);
+}
+
+button,
+a,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+::selection {
   background: var(--color-brand-soft);
+  color: var(--color-brand-deep);
 }
 
 :focus-visible {
   outline: 3px solid var(--color-brand-primary);
   outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -35,7 +35,7 @@ describe('LoginPage', () => {
   it('valida formato de e-mail incorreto', async () => {
     renderWithRouter(<LoginPage />);
 
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const button = screen.getByRole('button', { name: /entrar/i });
 
     fireEvent.change(emailInput, { target: { value: 'email-invalido' } });
@@ -47,7 +47,7 @@ describe('LoginPage', () => {
   it('valida tamanho mínimo da senha', async () => {
     renderWithRouter(<LoginPage />);
 
-    const senhaInput = screen.getByLabelText(/senha/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
     const button = screen.getByRole('button', { name: /entrar/i });
 
     fireEvent.change(senhaInput, { target: { value: '12345' } });
@@ -63,8 +63,8 @@ describe('LoginPage', () => {
 
     renderWithRouter(<LoginPage />);
 
-    const emailInput = screen.getByLabelText(/email/i);
-    const senhaInput = screen.getByLabelText(/senha/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
     const button = screen.getByRole('button', { name: /entrar/i });
 
     fireEvent.change(emailInput, { target: { value: 'errado@exemplo.com' } });
@@ -86,8 +86,8 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    const emailInput = screen.getByLabelText(/email/i);
-    const senhaInput = screen.getByLabelText(/senha/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
     const button = screen.getByRole('button', { name: /entrar/i });
 
     fireEvent.change(emailInput, { target: { value: 'cliente@exemplo.com' } });
