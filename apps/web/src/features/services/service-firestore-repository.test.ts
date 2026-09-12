@@ -42,14 +42,29 @@ describe('service-firestore-repository', () => {
       const imgDrenagem = resolveLocalServiceImage('qualquer-id', 'Drenagem Linfática Corporal');
       expect(imgDrenagem).toBe(localServiceImages['drenagem-linfatica']);
 
-      const imgTerapeutica = resolveLocalServiceImage('serv-1', 'Massagem Terapêutica Desportiva');
+      const imgTerapeutica = resolveLocalServiceImage('serv-1', 'Massagem Terapêutica');
       expect(imgTerapeutica).toBe(localServiceImages['massagem-terapeutica']);
+
+      const imgDesportiva = resolveLocalServiceImage('serv-desp', 'Massagem Desportiva');
+      expect(imgDesportiva).toBe(localServiceImages['massagem-desportiva']);
 
       const imgMiofascial = resolveLocalServiceImage('serv-2', 'Liberação Miofascial');
       expect(imgMiofascial).toBe(localServiceImages['liberacao-miofascial']);
 
-      const imgAroma = resolveLocalServiceImage('aromaterapia', 'Massagem com Aromaterapia');
+      const imgAroma = resolveLocalServiceImage('aromaterapia', 'Massagem Aromática');
       expect(imgAroma).toBe(localServiceImages['aromaterapia']);
+
+      const imgPedras = resolveLocalServiceImage(
+        'massagem-pedras-quentes',
+        'Massagem com Pedras Quentes',
+      );
+      expect(imgPedras).toBe(localServiceImages['massagem-pedras-quentes']);
+
+      const imgReflexo = resolveLocalServiceImage('reflexologia-podal', 'Reflexologia Podal');
+      expect(imgReflexo).toBe(localServiceImages['reflexologia-podal']);
+
+      const imgSpa = resolveLocalServiceImage('4RnOLIy2iV9mlG0x9qAU', 'Spa dos pés e mãos');
+      expect(imgSpa).toBe(localServiceImages['4rnoliy2iv9mlg0x9qau']);
     });
 
     it('retorna a imagem padrão relaxante caso não encontre correspondência exata', () => {
@@ -77,10 +92,26 @@ describe('service-firestore-repository', () => {
       expect(service.active).toBe(true);
     });
 
+    it('mapeia nome_servico e preco em formato string vindos do console do Firestore', () => {
+      const service = mapFirestoreDocToService('4RnOLIy2iV9mlG0x9qAU', {
+        nome_servico: 'Spa dos pés e mãos',
+        descricao: 'Ritual de cuidados para pés e mãos.',
+        duracao: 40,
+        preco: '200',
+      });
+
+      expect(service.id).toBe('4RnOLIy2iV9mlG0x9qAU');
+      expect(service.name).toBe('Spa dos pés e mãos');
+      expect(service.durationMinutes).toBe(40);
+      expect(service.priceInCents).toBe(20000);
+      expect(service.imageSrc).toBe(localServiceImages['4rnoliy2iv9mlg0x9qau']);
+      expect(service.active).toBe(true);
+    });
+
     it('mapeia campos em inglês (name, description, durationMinutes) e atribui imagem do projeto', () => {
       const service = mapFirestoreDocToService('liberacao-456', {
         name: 'Liberação Miofascial',
-        description: 'Técnica manual com pressão profunda.',
+        descricao: 'Técnica manual com pressão profunda.',
         durationMinutes: 45,
         priceInCents: 11000,
         active: true,
