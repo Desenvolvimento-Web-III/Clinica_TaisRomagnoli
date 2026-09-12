@@ -27,8 +27,8 @@ function ClockIcon() {
 
 export function ServiceCard({ service }: ServiceCardProps) {
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition-shadow duration-200 hover:shadow-[var(--shadow-elevated)]">
-      <div className="aspect-[4/3] overflow-hidden bg-[var(--color-canvas-neutral)]">
+    <article className="group flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:shadow-[var(--shadow-elevated)]">
+      <div className="aspect-[4/3] overflow-hidden bg-[var(--color-canvas-neutral)] lg:aspect-square">
         <img
           src={service.imageSrc}
           alt={service.imageAlt}
@@ -39,13 +39,13 @@ export function ServiceCard({ service }: ServiceCardProps) {
         />
       </div>
 
-      <div className="flex flex-1 flex-col p-6">
+      <div className="flex flex-1 flex-col p-5 sm:p-6 lg:p-5">
         <h3 className="text-lg/7 font-semibold text-[var(--color-text-primary)]">{service.name}</h3>
         <p className="mt-2 flex-1 text-sm/5 text-[var(--color-text-secondary)]">
           {service.description}
         </p>
 
-        <dl className="mt-6 flex items-end justify-between gap-4 border-t border-[var(--color-border-default)] pt-4">
+        <dl className="mt-5 flex items-end justify-between gap-4 border-t border-[var(--color-border-default)] pt-4">
           <div>
             <dt className="sr-only">Duração</dt>
             <dd className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)]">

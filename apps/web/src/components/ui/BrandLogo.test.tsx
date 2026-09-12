@@ -8,6 +8,7 @@ describe('BrandLogo', () => {
     const logo = screen.getByRole('img', { name: 'Tais Romagnoli — Massoterapia' });
 
     expect(logo).toHaveAttribute('src', '/logo-login.png');
-    expect(logo).toHaveClass('absolute', 'left-4', 'top-4', 'w-[120px]');
+    expect(logo).toHaveAttribute('width', '240');
+    expect(logo).toHaveClass('w-[132px]', 'object-contain');
   });
 });

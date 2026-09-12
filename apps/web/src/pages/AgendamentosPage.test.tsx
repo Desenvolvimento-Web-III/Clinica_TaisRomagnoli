@@ -2,6 +2,19 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AgendamentosPage } from './AgendamentosPage';
 
+vi.mock('@/features/auth/auth-context', () => ({
+  useAuth: () => ({
+    currentUser: { uid: 'user-1', displayName: 'Maria Silva' },
+    isAuthReady: true,
+    logout: vi.fn(),
+  }),
+  useOptionalAuth: () => ({
+    currentUser: { uid: 'user-1', displayName: 'Maria Silva' },
+    isAuthReady: true,
+    logout: vi.fn(),
+  }),
+}));
+
 describe('AgendamentosPage', () => {
   const renderPage = () => render(<AgendamentosPage />, { wrapper: MemoryRouter });
 
@@ -12,6 +25,8 @@ describe('AgendamentosPage', () => {
     expect(screen.getByTestId('agendamentos-list')).toBeInTheDocument();
     expect(screen.getByText('Massagem Relaxante com Óleos')).toBeInTheDocument();
     expect(screen.getByText('Drenagem Linfática Corporal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument();
+    expect(screen.getAllByText('Maria Silva')).not.toHaveLength(0);
   });
 
   it('filtra agendamentos ao selecionar a aba de status', () => {

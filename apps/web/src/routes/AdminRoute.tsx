@@ -42,8 +42,8 @@ export function AdminRoute({
 
   if (access === 'denied') {
     return (
-      <main className="grid min-h-dvh place-items-center bg-[var(--color-brand-soft)] px-4">
-        <section className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-[var(--shadow-card)]">
+      <main className="grid min-h-dvh place-items-center bg-[var(--color-brand-soft)] p-4 sm:p-8">
+        <section className="w-full max-w-md rounded-[var(--radius-auth)] border border-[var(--color-border-default)] bg-white p-6 text-center shadow-[var(--shadow-elevated)] sm:p-8">
           <p className="text-sm font-semibold text-[var(--color-brand-deep)]">
             Área administrativa
           </p>
