@@ -1,8 +1,7 @@
 # Clínica Tais Romagnoli — fundação técnica
 
-Monorepo que prepara o ambiente web da clínica. A entrega atual contém apenas infraestrutura local,
-configurações, documentação e sinais técnicos de funcionamento; nenhuma funcionalidade do produto foi
-implementada.
+Monorepo do ambiente web da clínica. A entrega atual contém a fundação técnica e as primeiras telas
+demonstrativas do produto, executadas somente em ambiente local.
 
 ## Stack
 
@@ -51,5 +50,11 @@ Rules.
 
 ## Situação atual
 
-Somente a fundação técnica está preparada. Não existem login, painel, agenda, clientes, pagamentos,
-anamnese, relatórios ou integração com WhatsApp.
+Além da fundação técnica, o frontend contém cadastro, login, catálogo de serviços ativos e uma tela
+demonstrativa de agendamentos. A navegação inferior conecta serviços, agendamentos e o acesso ao
+perfil. O perfil administrativo demonstrativo e somente para leitura é protegido por papel e reúne
+cadastro, histórico, recorrência, pagamentos e anamnese. Os dados comerciais e pessoais usados nessas
+telas são fictícios e ainda não existe integração real para administrá-los.
+
+Não existem painel geral, agenda persistida, processamento de pagamentos, edição de anamnese,
+relatórios ou integração com WhatsApp.

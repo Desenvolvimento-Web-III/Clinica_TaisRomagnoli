@@ -1,8 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, type UserCredential } from 'firebase/auth';
 import { setDoc, doc } from 'firebase/firestore';
 
 // Mocks do Firebase
@@ -13,6 +13,7 @@ vi.mock('../lib/firebase', () => ({
 
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(),
+  updateProfile: vi.fn(),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -62,7 +63,7 @@ describe('RegisterPage', () => {
   it('valida formato de e-mail', async () => {
     renderWithRouter(<RegisterPage />);
 
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(emailInput, { target: { value: 'email-invalido' } });
@@ -85,7 +86,9 @@ describe('RegisterPage', () => {
     // Testa telefone incompleto/inválido
     fireEvent.change(telefoneInput, { target: { value: '119888' } });
     fireEvent.click(button);
-    expect(await screen.findByText('Formato de telefone inválido. Use (XX)XXXXX-XXXX')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Formato de telefone inválido. Use (XX)XXXXX-XXXX'),
+    ).toBeInTheDocument();
   });
 
   it('valida tamanho mínimo da senha', async () => {
@@ -104,7 +107,7 @@ describe('RegisterPage', () => {
     renderWithRouter(<RegisterPage />);
 
     const senhaInput = screen.getByLabelText(/^senha$/i);
-    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(senhaInput, { target: { value: 'senha123' } });
@@ -123,9 +126,9 @@ describe('RegisterPage', () => {
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const telefoneInput = screen.getByLabelText(/telefone/i);
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const senhaInput = screen.getByLabelText(/^senha$/i);
-    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
@@ -139,19 +142,27 @@ describe('RegisterPage', () => {
     expect(await screen.findByText('Este e-mail já está em uso')).toBeInTheDocument();
   });
 
-  it('permite cadastro bem-sucedido com dados válidos', async () => {
+  it('leva aos agendamentos após cadastro bem-sucedido', async () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: { uid: 'mock-uid-maria' },
-    } as any);
-    vi.mocked(setDoc).mockResolvedValueOnce({} as any);
+    } as UserCredential);
+    vi.mocked(updateProfile).mockResolvedValueOnce(undefined);
+    vi.mocked(setDoc).mockResolvedValueOnce(undefined);
 
-    renderWithRouter(<RegisterPage />);
+    render(
+      <MemoryRouter initialEntries={['/cadastro']}>
+        <Routes>
+          <Route path="/cadastro" element={<RegisterPage />} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const telefoneInput = screen.getByLabelText(/telefone/i);
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const senhaInput = screen.getByLabelText(/^senha$/i);
-    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
@@ -162,10 +173,13 @@ describe('RegisterPage', () => {
 
     fireEvent.click(button);
 
-    expect(await screen.findByText('Cadastro realizado com sucesso!')).toBeInTheDocument();
-    
+    expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
+
     // Valida que o doc foi criado na coleção e UID certos, e o setDoc usou a referência e modelagem corretas
     expect(doc).toHaveBeenCalledWith({}, 'clientes', 'mock-uid-maria');
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ uid: 'mock-uid-maria' }), {
+      displayName: 'Maria Silva',
+    });
     expect(setDoc).toHaveBeenCalledWith(
       { id: 'mock-doc-ref' },
       expect.objectContaining({
@@ -176,14 +190,7 @@ describe('RegisterPage', () => {
         role: 'cliente',
         status: 'ativo',
         createdAt: expect.any(String),
-      })
+      }),
     );
-
-    // Os campos devem ter sido limpos
-    expect(nomeInput).toHaveValue('');
-    expect(telefoneInput).toHaveValue('');
-    expect(emailInput).toHaveValue('');
-    expect(senhaInput).toHaveValue('');
-    expect(confirmarSenhaInput).toHaveValue('');
   });
 });

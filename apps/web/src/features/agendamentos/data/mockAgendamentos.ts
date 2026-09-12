@@ -1,0 +1,68 @@
+import type { Agendamento } from '../types/agendamento';
+import massagemRelaxanteImage from '@/assets/services/massagem-relaxante.jpg';
+import drenagemLinfaticaImage from '@/assets/services/drenagem-linfatica.jpg';
+import massagemTerapeuticaImage from '@/assets/services/massagem-terapeutica.jpg';
+import liberacaoMiofascialImage from '@/assets/services/liberacao-miofascial.jpg';
+
+export const MOCK_AGENDAMENTOS: Agendamento[] = [
+  {
+    id: 'ag-101',
+    servicoNome: 'Massagem Relaxante com Óleos',
+    servicoCategoria: 'Relaxamento',
+    duracaoMinutos: 60,
+    profissionalNome: 'Tais Romagnoli',
+    dataHoraIso: '2026-10-15T14:00:00',
+    dataFormatada: 'Qui, 15 de Outubro',
+    horarioFormatado: '14:00 - 15:00',
+    valorTotal: 150.0,
+    sinalPago: 45.0,
+    status: 'confirmado',
+    imagemUrl: massagemRelaxanteImage,
+    observacao: 'Foco na região cervical e ombros.',
+  },
+  {
+    id: 'ag-102',
+    servicoNome: 'Drenagem Linfática Corporal',
+    servicoCategoria: 'Estética',
+    duracaoMinutos: 50,
+    profissionalNome: 'Tais Romagnoli',
+    dataHoraIso: '2026-10-18T10:30:00',
+    dataFormatada: 'Dom, 18 de Outubro',
+    horarioFormatado: '10:30 - 11:20',
+    valorTotal: 160.0,
+    sinalPago: 48.0,
+    status: 'pendente',
+    imagemUrl: drenagemLinfaticaImage,
+    observacao: 'Aguardando validação do sinal de 30%.',
+  },
+  {
+    id: 'ag-103',
+    servicoNome: 'Massagem Terapêutica Desportiva',
+    servicoCategoria: 'Terapêutica',
+    duracaoMinutos: 60,
+    profissionalNome: 'Tais Romagnoli',
+    dataHoraIso: '2026-09-28T16:00:00',
+    dataFormatada: 'Seg, 28 de Setembro',
+    horarioFormatado: '16:00 - 17:00',
+    valorTotal: 180.0,
+    sinalPago: 54.0,
+    status: 'concluido',
+    imagemUrl: massagemTerapeuticaImage,
+    observacao: 'Atendimento concluído com sucesso.',
+  },
+  {
+    id: 'ag-104',
+    servicoNome: 'Massagem com Pedras Quentes',
+    servicoCategoria: 'Relaxamento',
+    duracaoMinutos: 75,
+    profissionalNome: 'Tais Romagnoli',
+    dataHoraIso: '2026-09-10T11:00:00',
+    dataFormatada: 'Qui, 10 de Setembro',
+    horarioFormatado: '11:00 - 12:15',
+    valorTotal: 210.0,
+    sinalPago: 0.0,
+    status: 'cancelado',
+    imagemUrl: liberacaoMiofascialImage,
+    observacao: 'Cancelado com antecedência de 24 horas.',
+  },
+];
