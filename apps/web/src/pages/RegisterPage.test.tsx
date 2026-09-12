@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
-import { createUserWithEmailAndPassword, type UserCredential } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, type UserCredential } from 'firebase/auth';
 import { setDoc, doc } from 'firebase/firestore';
 
 // Mocks do Firebase
@@ -13,6 +13,7 @@ vi.mock('../lib/firebase', () => ({
 
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(),
+  updateProfile: vi.fn(),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -62,7 +63,7 @@ describe('RegisterPage', () => {
   it('valida formato de e-mail', async () => {
     renderWithRouter(<RegisterPage />);
 
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(emailInput, { target: { value: 'email-invalido' } });
@@ -106,7 +107,7 @@ describe('RegisterPage', () => {
     renderWithRouter(<RegisterPage />);
 
     const senhaInput = screen.getByLabelText(/^senha$/i);
-    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(senhaInput, { target: { value: 'senha123' } });
@@ -125,9 +126,9 @@ describe('RegisterPage', () => {
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const telefoneInput = screen.getByLabelText(/telefone/i);
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const senhaInput = screen.getByLabelText(/^senha$/i);
-    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
@@ -145,6 +146,7 @@ describe('RegisterPage', () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: { uid: 'mock-uid-maria' },
     } as UserCredential);
+    vi.mocked(updateProfile).mockResolvedValueOnce(undefined);
     vi.mocked(setDoc).mockResolvedValueOnce(undefined);
 
     render(
@@ -158,9 +160,9 @@ describe('RegisterPage', () => {
 
     const nomeInput = screen.getByLabelText(/nome completo/i);
     const telefoneInput = screen.getByLabelText(/telefone/i);
-    const emailInput = screen.getByLabelText(/email/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
     const senhaInput = screen.getByLabelText(/^senha$/i);
-    const confirmarSenhaInput = screen.getByLabelText(/confirmar senha/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
     const button = screen.getByRole('button', { name: /criar conta/i });
 
     fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
@@ -175,6 +177,9 @@ describe('RegisterPage', () => {
 
     // Valida que o doc foi criado na coleção e UID certos, e o setDoc usou a referência e modelagem corretas
     expect(doc).toHaveBeenCalledWith({}, 'clientes', 'mock-uid-maria');
+    expect(updateProfile).toHaveBeenCalledWith(expect.objectContaining({ uid: 'mock-uid-maria' }), {
+      displayName: 'Maria Silva',
+    });
     expect(setDoc).toHaveBeenCalledWith(
       { id: 'mock-doc-ref' },
       expect.objectContaining({

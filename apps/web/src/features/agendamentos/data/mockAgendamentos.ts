@@ -1,4 +1,8 @@
 import type { Agendamento } from '../types/agendamento';
+import massagemRelaxanteImage from '@/assets/services/massagem-relaxante.jpg';
+import drenagemLinfaticaImage from '@/assets/services/drenagem-linfatica.jpg';
+import massagemTerapeuticaImage from '@/assets/services/massagem-terapeutica.jpg';
+import liberacaoMiofascialImage from '@/assets/services/liberacao-miofascial.jpg';
 
 export const MOCK_AGENDAMENTOS: Agendamento[] = [
   {
@@ -13,8 +17,7 @@ export const MOCK_AGENDAMENTOS: Agendamento[] = [
     valorTotal: 150.0,
     sinalPago: 45.0,
     status: 'confirmado',
-    imagemUrl:
-      'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=400&q=80',
+    imagemUrl: massagemRelaxanteImage,
     observacao: 'Foco na região cervical e ombros.',
   },
   {
@@ -29,8 +32,7 @@ export const MOCK_AGENDAMENTOS: Agendamento[] = [
     valorTotal: 160.0,
     sinalPago: 48.0,
     status: 'pendente',
-    imagemUrl:
-      'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=400&q=80',
+    imagemUrl: drenagemLinfaticaImage,
     observacao: 'Aguardando validação do sinal de 30%.',
   },
   {
@@ -45,8 +47,7 @@ export const MOCK_AGENDAMENTOS: Agendamento[] = [
     valorTotal: 180.0,
     sinalPago: 54.0,
     status: 'concluido',
-    imagemUrl:
-      'https://images.unsplash.com/photo-1574680096145-d05b474e2155?auto=format&fit=crop&w=400&q=80',
+    imagemUrl: massagemTerapeuticaImage,
     observacao: 'Atendimento concluído com sucesso.',
   },
   {
@@ -61,8 +62,7 @@ export const MOCK_AGENDAMENTOS: Agendamento[] = [
     valorTotal: 210.0,
     sinalPago: 0.0,
     status: 'cancelado',
-    imagemUrl:
-      'https://images.unsplash.com/photo-1600334129128-685c5582fd35?auto=format&fit=crop&w=400&q=80',
+    imagemUrl: liberacaoMiofascialImage,
     observacao: 'Cancelado com antecedência de 24 horas.',
   },
 ];

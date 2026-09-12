@@ -3,10 +3,17 @@ import { MemoryRouter } from 'react-router-dom';
 import type { AdministrativeClientProfile } from '@/features/admin-client-profile/types';
 import { AdminClientProfilePage } from './AdminClientProfilePage';
 
-vi.mock('@/lib/firebase', () => ({ auth: {} }));
-
-vi.mock('firebase/auth', () => ({
-  signOut: vi.fn(),
+vi.mock('@/features/auth/auth-context', () => ({
+  useAuth: () => ({
+    currentUser: { uid: 'admin-1', displayName: 'Tais Romagnoli' },
+    isAuthReady: true,
+    logout: vi.fn(),
+  }),
+  useOptionalAuth: () => ({
+    currentUser: { uid: 'admin-1', displayName: 'Tais Romagnoli' },
+    isAuthReady: true,
+    logout: vi.fn(),
+  }),
 }));
 
 const profile: AdministrativeClientProfile = {

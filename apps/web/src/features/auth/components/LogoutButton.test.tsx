@@ -1,12 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
 import { LogoutButton } from './LogoutButton';
 
-vi.mock('@/lib/firebase', () => ({ auth: {} }));
+const { logoutMock } = vi.hoisted(() => ({ logoutMock: vi.fn() }));
 
-vi.mock('firebase/auth', () => ({
-  signOut: vi.fn(),
+vi.mock('@/features/auth/auth-context', () => ({
+  useAuth: () => ({ currentUser: { uid: 'user-1' }, isAuthReady: true, logout: logoutMock }),
 }));
 
 function renderLogoutButton() {
@@ -26,17 +25,17 @@ describe('LogoutButton', () => {
   });
 
   it('encerra a sessão e redireciona para o catálogo público', async () => {
-    vi.mocked(signOut).mockResolvedValueOnce();
+    logoutMock.mockResolvedValueOnce(undefined);
     renderLogoutButton();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
 
     expect(await screen.findByText('Catálogo público')).toBeInTheDocument();
-    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(logoutMock).toHaveBeenCalledTimes(1);
   });
 
   it('mantém a tela atual e informa quando o logout falha', async () => {
-    vi.mocked(signOut).mockRejectedValueOnce(new Error('Falha de rede'));
+    logoutMock.mockRejectedValueOnce(new Error('Falha de rede'));
     renderLogoutButton();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sair' }));

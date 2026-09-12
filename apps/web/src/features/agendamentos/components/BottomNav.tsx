@@ -8,15 +8,18 @@ export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
   return (
     <nav
       aria-label="Navegação principal"
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-purple-100 bg-white/90 px-6 py-2 backdrop-blur-md shadow-lg"
+      data-testid="mobile-navigation"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border-default)] bg-white/95 px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-4px_20px_rgb(76_61_116_/_0.08)] backdrop-blur-xl md:hidden"
     >
-      <div className="mx-auto flex max-w-md items-center justify-around">
+      <div className="mx-auto flex max-w-lg items-center justify-around">
         {/* Início / Serviços */}
         <Link
           to="/servicos"
           aria-current={activeTab === 'inicio' ? 'page' : undefined}
-          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
-            activeTab === 'inicio' ? 'text-purple-700' : 'text-slate-400 hover:text-slate-600'
+          className={`min-h-12 min-w-20 rounded-xl px-2 py-1 flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
+            activeTab === 'inicio'
+              ? 'bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)]'
+              : 'text-[var(--color-nav-muted)] hover:text-[var(--color-brand-deep)]'
           }`}
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -34,10 +37,10 @@ export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
         <Link
           to="/agendamentos"
           aria-current={activeTab === 'agendamentos' ? 'page' : undefined}
-          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
+          className={`min-h-12 min-w-20 rounded-xl px-2 py-1 flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
             activeTab === 'agendamentos'
-              ? 'text-purple-700 font-semibold'
-              : 'text-slate-400 hover:text-slate-600'
+              ? 'bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)] font-semibold'
+              : 'text-[var(--color-nav-muted)] hover:text-[var(--color-brand-deep)]'
           }`}
         >
           <div className="relative">
@@ -50,7 +53,7 @@ export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
               />
             </svg>
             {activeTab === 'agendamentos' && (
-              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-purple-600 ring-2 ring-white" />
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--color-brand-strong)] ring-2 ring-white" />
             )}
           </div>
           <span>Agendamentos</span>
@@ -60,8 +63,10 @@ export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
         <Link
           to="/login"
           aria-current={activeTab === 'perfil' ? 'page' : undefined}
-          className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors ${
-            activeTab === 'perfil' ? 'text-purple-700' : 'text-slate-400 hover:text-slate-600'
+          className={`min-h-12 min-w-20 rounded-xl px-2 py-1 flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
+            activeTab === 'perfil'
+              ? 'bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)]'
+              : 'text-[var(--color-nav-muted)] hover:text-[var(--color-brand-deep)]'
           }`}
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
