@@ -23,12 +23,12 @@ service cloud.firestore {
                     && request.resource.data.role == 'cliente'
                     && request.resource.data.status == 'ativo'
                     && request.resource.data.keys().hasOnly([
-                      'uid', 'nome', 'telefone', 'email', 'role', 'status', 'createdAt'
+                      'uid', 'nome', 'telefone', 'email', 'role', 'status', 'createdAt', 'preferenciasContato'
                     ]);
 
       allow update: if isOwner(uid)
                     && request.resource.data.diff(resource.data).affectedKeys()
-                      .hasOnly(['nome', 'telefone', 'updatedAt']);
+                      .hasOnly(['nome', 'telefone', 'preferenciasContato', 'updatedAt']);
 
       allow delete: if false;
 

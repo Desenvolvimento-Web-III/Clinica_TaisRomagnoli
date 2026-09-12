@@ -11,7 +11,7 @@ describe('BottomNav', () => {
       'href',
       '/agendamentos',
     );
-    expect(screen.getByRole('link', { name: 'Perfil' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Perfil' })).toHaveAttribute('href', '/perfil');
     expect(screen.getByRole('link', { name: 'Agendamentos' })).toHaveAttribute(
       'aria-current',
       'page',

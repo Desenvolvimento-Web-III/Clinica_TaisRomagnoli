@@ -1,6 +1,15 @@
 export type UserRole = 'admin' | 'client' | 'professional' | 'cliente';
 export type UserStatus = 'ativo' | 'inativo' | 'pendente';
 
+export interface ContactPreferences {
+  /** Deseja receber confirmações e mensagens via WhatsApp */
+  whatsapp: boolean;
+  /** Deseja receber notificações e comprovantes por e-mail */
+  email: boolean;
+  /** Deseja receber lembretes automáticos antes de cada sessão */
+  lembretesAgendamento: boolean;
+}
+
 export interface UserProfile {
   /** Identificador único do usuário no Firebase Auth */
   uid: string;
@@ -18,4 +27,6 @@ export interface UserProfile {
   createdAt: string;
   /** Data de atualização opcional */
   updatedAt?: string;
+  /** Preferências de contato e notificações do cliente */
+  preferenciasContato?: ContactPreferences;
 }
