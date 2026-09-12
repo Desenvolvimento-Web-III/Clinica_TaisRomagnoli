@@ -47,6 +47,9 @@ describe('service-firestore-repository', () => {
 
       const imgMiofascial = resolveLocalServiceImage('serv-2', 'Liberação Miofascial');
       expect(imgMiofascial).toBe(localServiceImages['liberacao-miofascial']);
+
+      const imgAroma = resolveLocalServiceImage('aromaterapia', 'Massagem com Aromaterapia');
+      expect(imgAroma).toBe(localServiceImages['aromaterapia']);
     });
 
     it('retorna a imagem padrão relaxante caso não encontre correspondência exata', () => {

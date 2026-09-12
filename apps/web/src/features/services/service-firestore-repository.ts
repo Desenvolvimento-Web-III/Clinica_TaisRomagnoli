@@ -4,6 +4,7 @@ import { serviceCatalog } from './catalog';
 import type { Service } from './types';
 
 // Imagens locais do projeto
+import aromatherapyImage from '@/assets/services/aromaterapia.jpg';
 import lymphaticDrainageImage from '@/assets/services/drenagem-linfatica.jpg';
 import myofascialReleaseImage from '@/assets/services/liberacao-miofascial.jpg';
 import relaxingMassageImage from '@/assets/services/massagem-relaxante.jpg';
@@ -21,6 +22,8 @@ export const localServiceImages: Record<string, string> = {
   drenagem: lymphaticDrainageImage,
   'liberacao-miofascial': myofascialReleaseImage,
   liberacao: myofascialReleaseImage,
+  aromaterapia: aromatherapyImage,
+  aroma: aromatherapyImage,
 };
 
 /**

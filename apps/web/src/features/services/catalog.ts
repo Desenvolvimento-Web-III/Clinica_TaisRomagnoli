@@ -1,3 +1,4 @@
+import aromatherapyImage from '@/assets/services/aromaterapia.jpg';
 import lymphaticDrainageImage from '@/assets/services/drenagem-linfatica.jpg';
 import myofascialReleaseImage from '@/assets/services/liberacao-miofascial.jpg';
 import relaxingMassageImage from '@/assets/services/massagem-relaxante.jpg';
@@ -29,7 +30,7 @@ export const serviceCatalog = [
     durationMinutes: 60,
     priceInCents: 14000,
     imageSrc: therapeuticMassageImage,
-    imageAlt: 'Profissional realizando massagem sobre uma cobertura de tecido',
+    imageAlt: 'Profissional realizando massagem terapêutica cuidando da musculatura das costas',
     active: true,
   },
   {
@@ -50,7 +51,18 @@ export const serviceCatalog = [
     durationMinutes: 45,
     priceInCents: 11000,
     imageSrc: myofascialReleaseImage,
-    imageAlt: 'Profissional aplicando pressão controlada no ombro de uma cliente vestida',
+    imageAlt: 'Profissional aplicando pressão controlada no ombro e escápula de uma cliente',
+    active: true,
+  },
+  {
+    id: 'aromaterapia',
+    name: 'Massagem com Aromaterapia',
+    description:
+      'Sessão revigorante com óleos essenciais puros, combinando toque sutil e alívio do estresse.',
+    durationMinutes: 60,
+    priceInCents: 15000,
+    imageSrc: aromatherapyImage,
+    imageAlt: 'Terapeuta aplicando óleos essenciais de aromaterapia em sessão de relaxamento',
     active: true,
   },
 ] satisfies readonly Service[];
