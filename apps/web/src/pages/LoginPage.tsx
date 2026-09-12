@@ -82,17 +82,31 @@ export function LoginPage() {
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, formData.email, formData.senha);
+      const cleanEmail = formData.email.trim();
+      await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
       navigate('/agendamentos', { replace: true });
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
-      setGeneralError(
+      if (
         errorCode === 'auth/invalid-credential' ||
-          errorCode === 'auth/wrong-password' ||
-          errorCode === 'auth/user-not-found'
-          ? 'E-mail ou senha incorretos.'
-          : 'Ocorreu um erro ao tentar entrar. Tente novamente.',
-      );
+        errorCode === 'auth/wrong-password' ||
+        errorCode === 'auth/user-not-found' ||
+        errorCode === 'auth/invalid-email'
+      ) {
+        setGeneralError('E-mail ou senha incorretos.');
+      } else if (errorCode === 'auth/too-many-requests') {
+        setGeneralError(
+          'Muitas tentativas sem sucesso. Aguarde alguns instantes e tente novamente.',
+        );
+      } else if (errorCode === 'auth/user-disabled') {
+        setGeneralError('Esta conta foi desativada. Entre em contato com a clínica.');
+      } else if (errorCode === 'auth/network-request-failed') {
+        setGeneralError(
+          'Falha de conexão com o servidor. Verifique sua conexão com a internet e tente novamente.',
+        );
+      } else {
+        setGeneralError('Ocorreu um erro ao tentar entrar. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
