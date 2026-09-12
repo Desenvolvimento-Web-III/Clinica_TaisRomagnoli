@@ -48,6 +48,14 @@ service cloud.firestore {
       }
     }
 
+    // Coleção de serviços da clínica (massagens, duração, valor e imagem)
+    match /servicos/{serviceId} {
+      // Leitura pública liberada para visualização do catálogo e agendamento
+      allow read: if true;
+      // Criação, atualização e exclusão restritas à administração autenticada
+      allow write: if isSignedIn();
+    }
+
     // Configurações da clínica (intervalo, folgas, percentual do sinal)
     // Leitura liberada para que a interface de agendamento consulte as regras vigentes
     // Escrita bloqueada no client-side para evitar alteração não autorizada de parâmetros de negócio
