@@ -6,10 +6,9 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 
-describe('Regras de Segurança para Configurações e Profissionais', () => {
+describe('Regras de Segurança para Configurações, Profissionais e Serviços', () => {
   let testEnvironment: RulesTestEnvironment;
 
   beforeAll(async () => {
@@ -27,34 +26,50 @@ describe('Regras de Segurança para Configurações e Profissionais', () => {
 
   it('permite leitura pública de configurações da clínica e bloqueia escrita por cliente', async () => {
     const unauthenticatedDb = testEnvironment.unauthenticatedContext().firestore();
-    const settingsRef = doc(unauthenticatedDb, 'configuracoes/geral');
+    const settingsRef = unauthenticatedDb.doc('configuracoes/geral');
 
     // Leitura liberada para visualização das regras no agendamento
-    await assertSucceeds(getDoc(settingsRef));
+    await assertSucceeds(settingsRef.get());
 
     // Escrita bloqueada para clientes não autorizados
     const clientDb = testEnvironment.authenticatedContext('cliente-qualquer').firestore();
-    const clientSettingsRef = doc(clientDb, 'configuracoes/geral');
-    await assertFails(setDoc(clientSettingsRef, { percentualSinal: 0 }));
+    const clientSettingsRef = clientDb.doc('configuracoes/geral');
+    await assertFails(clientSettingsRef.set({ percentualSinal: 0 }));
   });
 
   it('permite leitura pública de profissionais e bloqueia escrita não autorizada', async () => {
     const unauthenticatedDb = testEnvironment.unauthenticatedContext().firestore();
-    const profRef = doc(unauthenticatedDb, 'profissionais/prof-tais-romagnoli');
+    const profRef = unauthenticatedDb.doc('profissionais/prof-tais-romagnoli');
 
     // Leitura liberada para exibir na grade de agendamentos
-    await assertSucceeds(getDoc(profRef));
+    await assertSucceeds(profRef.get());
 
     // Escrita bloqueada para cliente
     const clientDb = testEnvironment.authenticatedContext('cliente-qualquer').firestore();
-    const clientProfRef = doc(clientDb, 'profissionais/prof-tais-romagnoli');
-    await assertFails(setDoc(clientProfRef, { nome: 'Invasor' }));
+    const clientProfRef = clientDb.doc('profissionais/prof-tais-romagnoli');
+    await assertFails(clientProfRef.set({ nome: 'Invasor' }));
+  });
+
+  it('permite leitura pública de serviços e restringe gravação para usuários não autenticados', async () => {
+    const unauthenticatedDb = testEnvironment.unauthenticatedContext().firestore();
+    const serviceRef = unauthenticatedDb.doc('servicos/massagem-relaxante');
+
+    // Leitura pública liberada para catálogo de serviços
+    await assertSucceeds(serviceRef.get());
+
+    // Escrita bloqueada para visitantes não autenticados
+    await assertFails(serviceRef.set({ name: 'Serviço Não Autorizado' }));
+
+    // Escrita permitida para usuário autenticado (admin)
+    const adminDb = testEnvironment.authenticatedContext('admin-user').firestore();
+    const adminServiceRef = adminDb.doc('servicos/novo-servico');
+    await assertSucceeds(adminServiceRef.set({ name: 'Novo Serviço', active: true }));
   });
 
   it('impede criação ou modificação de usuário com privilégio administrativo direto pelo cliente', async () => {
     const clientDb = testEnvironment.authenticatedContext('cliente-qualquer').firestore();
-    const userRef = doc(clientDb, 'usuarios/admin-tais-romagnoli');
+    const userRef = clientDb.doc('usuarios/admin-tais-romagnoli');
 
-    await assertFails(setDoc(userRef, { role: 'admin' }));
+    await assertFails(userRef.set({ role: 'admin' }));
   });
 });

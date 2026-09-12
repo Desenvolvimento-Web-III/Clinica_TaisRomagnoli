@@ -6,7 +6,6 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 
 describe('regras iniciais do Firestore', () => {
@@ -27,20 +26,22 @@ describe('regras iniciais do Firestore', () => {
 
   it('nega leitura e escrita para um usuário autenticado', async () => {
     const database = testEnvironment.authenticatedContext('client-test').firestore();
-    const reference = doc(database, 'technical-tests/blocked');
+    const reference = database.doc('technical-tests/blocked');
 
-    await assertFails(getDoc(reference));
-    await assertFails(setDoc(reference, { status: 'blocked' }));
+    await assertFails(reference.get());
+    await assertFails(reference.set({ status: 'blocked' }));
   });
 
   it('permite que somente a administradora consulte histórico e pagamentos', async () => {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), 'clientes/client-1/historico/session-1'), {
-        status: 'concluido',
-      });
-      await setDoc(doc(context.firestore(), 'clientes/client-1/pagamentos/payment-1'), {
-        status: 'pago',
-      });
+      await context
+        .firestore()
+        .doc('clientes/client-1/historico/session-1')
+        .set({ status: 'concluido' });
+      await context
+        .firestore()
+        .doc('clientes/client-1/pagamentos/payment-1')
+        .set({ status: 'pago' });
     });
 
     const adminDatabase = testEnvironment
@@ -50,15 +51,15 @@ describe('regras iniciais do Firestore', () => {
       .authenticatedContext('client-1', { role: 'cliente' })
       .firestore();
 
-    await assertSucceeds(getDoc(doc(adminDatabase, 'clientes/client-1/historico/session-1')));
-    await assertSucceeds(getDoc(doc(adminDatabase, 'clientes/client-1/pagamentos/payment-1')));
-    await assertFails(getDoc(doc(clientDatabase, 'clientes/client-1/historico/session-1')));
-    await assertFails(getDoc(doc(clientDatabase, 'clientes/client-1/pagamentos/payment-1')));
+    await assertSucceeds(adminDatabase.doc('clientes/client-1/historico/session-1').get());
+    await assertSucceeds(adminDatabase.doc('clientes/client-1/pagamentos/payment-1').get());
+    await assertFails(clientDatabase.doc('clientes/client-1/historico/session-1').get());
+    await assertFails(clientDatabase.doc('clientes/client-1/pagamentos/payment-1').get());
   });
 
   it('permite consulta do cadastro ao proprietário e à administradora, mas não a terceiros', async () => {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), 'clientes/client-1'), {
+      await context.firestore().doc('clientes/client-1').set({
         uid: 'client-1',
         nome: 'Cliente de teste',
         telefone: '(11) 99999-9999',
@@ -80,14 +81,14 @@ describe('regras iniciais do Firestore', () => {
       .firestore();
 
     const path = 'clientes/client-1';
-    await assertSucceeds(getDoc(doc(adminDatabase, path)));
-    await assertSucceeds(getDoc(doc(ownerDatabase, path)));
-    await assertFails(getDoc(doc(otherClientDatabase, path)));
+    await assertSucceeds(adminDatabase.doc(path).get());
+    await assertSucceeds(ownerDatabase.doc(path).get());
+    await assertFails(otherClientDatabase.doc(path).get());
   });
 
   it('mantém papel e status protegidos contra alteração pelo próprio cliente', async () => {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), 'clientes/client-1'), {
+      await context.firestore().doc('clientes/client-1').set({
         uid: 'client-1',
         nome: 'Cliente de teste',
         telefone: '(11) 99999-9999',
@@ -101,16 +102,16 @@ describe('regras iniciais do Firestore', () => {
     const ownerDatabase = testEnvironment
       .authenticatedContext('client-1', { role: 'cliente' })
       .firestore();
-    const reference = doc(ownerDatabase, 'clientes/client-1');
+    const reference = ownerDatabase.doc('clientes/client-1');
 
-    await assertFails(setDoc(reference, { role: 'admin' }, { merge: true }));
-    await assertFails(setDoc(reference, { status: 'inativo' }, { merge: true }));
-    await assertSucceeds(setDoc(reference, { telefone: '(11) 98888-8888' }, { merge: true }));
+    await assertFails(reference.set({ role: 'admin' }, { merge: true }));
+    await assertFails(reference.set({ status: 'inativo' }, { merge: true }));
+    await assertSucceeds(reference.set({ telefone: '(11) 98888-8888' }, { merge: true }));
   });
 
   it('restringe a anamnese ao cliente proprietário e à administradora', async () => {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), 'clientes/client-1/anamneses/current'), {
+      await context.firestore().doc('clientes/client-1/anamneses/current').set({
         consentConfirmed: true,
       });
     });
@@ -126,8 +127,8 @@ describe('regras iniciais do Firestore', () => {
       .firestore();
 
     const path = 'clientes/client-1/anamneses/current';
-    await assertSucceeds(getDoc(doc(adminDatabase, path)));
-    await assertSucceeds(getDoc(doc(ownerDatabase, path)));
-    await assertFails(getDoc(doc(otherClientDatabase, path)));
+    await assertSucceeds(adminDatabase.doc(path).get());
+    await assertSucceeds(ownerDatabase.doc(path).get());
+    await assertFails(otherClientDatabase.doc(path).get());
   });
 });

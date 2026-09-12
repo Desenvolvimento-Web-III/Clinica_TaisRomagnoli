@@ -1,12 +1,18 @@
 import { getIdTokenResult } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
-export async function resolveAdministrativeAccess() {
-  if (!auth) return false;
+export type AdminAccessResult = 'allowed' | 'unauthenticated' | 'unauthorized';
+
+export async function resolveAdministrativeAccess(): Promise<AdminAccessResult> {
+  if (!auth) return 'unauthenticated';
 
   await auth.authStateReady();
-  if (!auth.currentUser) return false;
+  if (!auth.currentUser) return 'unauthenticated';
 
-  const token = await getIdTokenResult(auth.currentUser);
-  return token.claims.role === 'admin';
+  try {
+    const token = await getIdTokenResult(auth.currentUser);
+    return token.claims.role === 'admin' ? 'allowed' : 'unauthorized';
+  } catch {
+    return 'unauthorized';
+  }
 }

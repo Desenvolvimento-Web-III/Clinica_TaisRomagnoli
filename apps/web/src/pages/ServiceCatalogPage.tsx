@@ -1,14 +1,29 @@
+import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/ui/AppShell';
 import { getActiveServices, serviceCatalog } from '@/features/services/catalog';
 import { ServiceCard } from '@/features/services/components/ServiceCard';
+import { subscribeToServicesFromFirestore } from '@/features/services/service-firestore-repository';
 import type { Service } from '@/features/services/types';
 
 type ServiceCatalogPageProps = {
   services?: readonly Service[];
 };
 
-export function ServiceCatalogPage({ services = serviceCatalog }: ServiceCatalogPageProps) {
-  const activeServices = getActiveServices(services);
+export function ServiceCatalogPage({ services }: ServiceCatalogPageProps) {
+  const [firestoreServices, setFirestoreServices] = useState<readonly Service[] | null>(null);
+
+  useEffect(() => {
+    if (services) return;
+
+    const unsubscribe = subscribeToServicesFromFirestore((updatedServices) => {
+      setFirestoreServices(updatedServices);
+    });
+
+    return () => unsubscribe();
+  }, [services]);
+
+  const currentServices = services ?? firestoreServices ?? serviceCatalog;
+  const activeServices = getActiveServices(currentServices);
 
   return (
     <AppShell
