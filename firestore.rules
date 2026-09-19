@@ -58,10 +58,10 @@ service cloud.firestore {
 
     // Configurações da clínica (intervalo, folgas, percentual do sinal)
     // Leitura liberada para que a interface de agendamento consulte as regras vigentes
-    // Escrita bloqueada no client-side para evitar alteração não autorizada de parâmetros de negócio
+    // Escrita restrita à administração com custom claim admin
     match /configuracoes/{configId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isAdmin() || (request.auth != null && request.auth.token.admin == true);
     }
 
     // Profissionais da clínica (dados de exibição, especialidade, folgas e intervalos)

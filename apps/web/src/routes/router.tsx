@@ -6,6 +6,7 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
+import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
 import { AdminRoute } from './AdminRoute';
 
 export const router = createBrowserRouter([
@@ -42,6 +43,22 @@ export const router = createBrowserRouter([
     element: (
       <AdminRoute>
         <AdminClientProfilePage />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: '/admin/horarios',
+    element: (
+      <AdminRoute>
+        <AdminHorariosPage />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: '/horarios',
+    element: (
+      <AdminRoute>
+        <AdminHorariosPage />
       </AdminRoute>
     ),
   },
