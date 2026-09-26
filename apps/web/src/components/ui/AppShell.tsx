@@ -2,11 +2,10 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BrandLogo } from './BrandLogo';
 import { BottomNav } from '@/features/agendamentos/components/BottomNav';
-import { LogoutButton } from '@/features/auth/components/LogoutButton';
+import { AuthenticatedUserNav } from '@/features/auth/components/AuthenticatedUserNav';
 import { useOptionalAuth } from '@/features/auth/auth-context';
-import { getUserDisplayName, getUserInitials } from '@/features/auth/user-display';
 
-type ActiveTab = 'inicio' | 'agendamentos' | 'perfil';
+export type ActiveTab = 'inicio' | 'agendamentos' | 'notificacoes' | 'perfil';
 
 type AppShellProps = Readonly<{
   activeTab: ActiveTab;
@@ -31,7 +30,6 @@ export function AppShell({
   headerAside,
 }: AppShellProps) {
   const currentUser = useOptionalAuth()?.currentUser ?? null;
-  const userName = getUserDisplayName(currentUser);
 
   return (
     <div className="min-h-dvh bg-[var(--color-canvas-neutral)] pb-20 text-[var(--color-text-primary)] md:pb-0">
@@ -62,38 +60,7 @@ export function AppShell({
           </nav>
 
           {currentUser ? (
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <Link
-                to="/perfil"
-                aria-label="Acessar meu perfil"
-                className="group flex min-w-0 items-center gap-2 rounded-xl p-1 transition-colors hover:bg-[var(--color-canvas-neutral)] sm:gap-3"
-              >
-                <div
-                  aria-hidden="true"
-                  className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-sm font-bold text-[var(--color-brand-deep)] transition-transform group-hover:scale-105 sm:flex"
-                >
-                  {getUserInitials(userName)}
-                </div>
-                <div className="hidden min-w-0 text-left lg:block">
-                  <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-                    Sessão ativa
-                  </p>
-                  <p
-                    className="max-w-44 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-brand-deep)]"
-                    title={userName}
-                  >
-                    {userName}
-                  </p>
-                </div>
-                <span
-                  className="max-w-28 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-brand-deep)] sm:max-w-40 lg:hidden"
-                  title={userName}
-                >
-                  {userName}
-                </span>
-              </Link>
-              <LogoutButton />
-            </div>
+            <AuthenticatedUserNav />
           ) : (
             <Link
               to="/login"

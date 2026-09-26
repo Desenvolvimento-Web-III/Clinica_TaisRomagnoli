@@ -1,11 +1,12 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { z } from 'zod';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 import { getUserDisplayName, getUserInitials } from '@/features/auth/user-display';
+import { LogoutButton } from '@/features/auth/components/LogoutButton';
 import { auth, db } from '@/lib/firebase';
 import type { ContactPreferences } from '@clinica/shared';
 
@@ -197,291 +198,409 @@ export function ClientProfilePage() {
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} noValidate className="space-y-6">
-            {successMessage && (
-              <div
-                role="status"
-                className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"
-              >
-                <svg
-                  className="h-5 w-5 shrink-0 text-emerald-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                <span>{successMessage}</span>
-              </div>
-            )}
-
-            {errorMessage && (
-              <div
-                role="alert"
-                className="flex items-center gap-3 rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-4 text-sm font-medium text-[var(--color-error-text)]"
-              >
-                <svg
-                  className="h-5 w-5 shrink-0 text-[var(--color-error-text)]"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
-                </svg>
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            {/* Card de Identificação */}
-            <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
-              <div className="flex items-center gap-4">
+          <>
+            <form onSubmit={handleSubmit} noValidate className="space-y-6">
+              {successMessage && (
                 <div
-                  aria-hidden="true"
-                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-xl font-bold text-[var(--color-brand-deep)]"
+                  role="status"
+                  className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"
                 >
-                  {initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-lg font-bold text-[var(--color-text-primary)]">
-                    {displayName}
-                  </h2>
-                  <p className="truncate text-sm text-[var(--color-text-secondary)]">
-                    {currentUser?.email}
-                  </p>
-                  <span className="mt-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-                    Conta Ativa
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            {/* Card de Dados Pessoais */}
-            <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
-              <h2 className="text-base font-bold text-[var(--color-text-primary)]">
-                Dados Pessoais
-              </h2>
-              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                Mantenha suas informações corretas para identificação nos atendimentos.
-              </p>
-
-              <div className="mt-5 space-y-4">
-                {/* Nome Completo */}
-                <div>
-                  <label
-                    htmlFor="profile-nome"
-                    className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
+                  <svg
+                    className="h-5 w-5 shrink-0 text-emerald-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    aria-hidden="true"
                   >
-                    Nome Completo
-                  </label>
-                  <input
-                    id="profile-nome"
-                    type="text"
-                    disabled={saving}
-                    value={nome}
-                    onChange={handleNomeChange}
-                    placeholder="Seu nome completo"
-                    aria-invalid={Boolean(errors.nome)}
-                    aria-describedby={errors.nome ? 'nome-error' : undefined}
-                    className={`min-h-11 w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] transition-colors placeholder:text-[var(--color-icon-muted)] disabled:bg-[var(--color-canvas-neutral)] ${
-                      errors.nome
-                        ? 'border-[var(--color-error-border)]'
-                        : 'border-[var(--color-border-default)] hover:border-[var(--color-brand-primary)]'
-                    }`}
-                  />
-                  {errors.nome && (
-                    <p
-                      id="nome-error"
-                      role="alert"
-                      className="mt-1.5 text-xs font-medium text-[var(--color-error-text)]"
-                    >
-                      {errors.nome}
-                    </p>
-                  )}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  <span>{successMessage}</span>
                 </div>
+              )}
 
-                {/* Telefone / WhatsApp */}
-                <div>
-                  <label
-                    htmlFor="profile-telefone"
-                    className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-3 rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-4 text-sm font-medium text-[var(--color-error-text)]"
+                >
+                  <svg
+                    className="h-5 w-5 shrink-0 text-[var(--color-error-text)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    aria-hidden="true"
                   >
-                    Telefone / WhatsApp
-                  </label>
-                  <input
-                    id="profile-telefone"
-                    type="tel"
-                    disabled={saving}
-                    value={telefone}
-                    onChange={handleTelefoneChange}
-                    placeholder="(11)99999-9999"
-                    aria-invalid={Boolean(errors.telefone)}
-                    aria-describedby={errors.telefone ? 'telefone-error' : undefined}
-                    className={`min-h-11 w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] transition-colors placeholder:text-[var(--color-icon-muted)] disabled:bg-[var(--color-canvas-neutral)] ${
-                      errors.telefone
-                        ? 'border-[var(--color-error-border)]'
-                        : 'border-[var(--color-border-default)] hover:border-[var(--color-brand-primary)]'
-                    }`}
-                  />
-                  {errors.telefone && (
-                    <p
-                      id="telefone-error"
-                      role="alert"
-                      className="mt-1.5 text-xs font-medium text-[var(--color-error-text)]"
-                    >
-                      {errors.telefone}
-                    </p>
-                  )}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                  <span>{errorMessage}</span>
                 </div>
+              )}
 
-                {/* E-mail (somente leitura) */}
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <label
-                      htmlFor="profile-email"
-                      className="block text-sm font-medium text-[var(--color-text-secondary)]"
-                    >
-                      E-mail de Login
-                    </label>
-                    <span className="text-xs text-[var(--color-text-secondary)]">
-                      Somente leitura
+              {/* Card de Identificação */}
+              <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
+                <div className="flex items-center gap-4">
+                  <div
+                    aria-hidden="true"
+                    className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] text-xl font-bold text-[var(--color-brand-deep)]"
+                  >
+                    {initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-lg font-bold text-[var(--color-text-primary)]">
+                      {displayName}
+                    </h2>
+                    <p className="truncate text-sm text-[var(--color-text-secondary)]">
+                      {currentUser?.email}
+                    </p>
+                    <span className="mt-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                      Conta Ativa
                     </span>
                   </div>
-                  <input
-                    id="profile-email"
-                    type="email"
-                    disabled
-                    value={currentUser?.email || ''}
-                    className="min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] px-3.5 py-2.5 text-sm text-[var(--color-text-secondary)]"
-                  />
                 </div>
-              </div>
-            </section>
+              </section>
 
-            {/* Card de Preferências de Contato */}
-            <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
+              {/* Card de Dados Pessoais */}
+              <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
+                <h2 className="text-base font-bold text-[var(--color-text-primary)]">
+                  Dados Pessoais
+                </h2>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  Mantenha suas informações corretas para identificação nos atendimentos.
+                </p>
+
+                <div className="mt-5 space-y-4">
+                  {/* Nome Completo */}
+                  <div>
+                    <label
+                      htmlFor="profile-nome"
+                      className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
+                    >
+                      Nome Completo
+                    </label>
+                    <input
+                      id="profile-nome"
+                      type="text"
+                      disabled={saving}
+                      value={nome}
+                      onChange={handleNomeChange}
+                      placeholder="Seu nome completo"
+                      aria-invalid={Boolean(errors.nome)}
+                      aria-describedby={errors.nome ? 'nome-error' : undefined}
+                      className={`min-h-11 w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] transition-colors placeholder:text-[var(--color-icon-muted)] disabled:bg-[var(--color-canvas-neutral)] ${
+                        errors.nome
+                          ? 'border-[var(--color-error-border)]'
+                          : 'border-[var(--color-border-default)] hover:border-[var(--color-brand-primary)]'
+                      }`}
+                    />
+                    {errors.nome && (
+                      <p
+                        id="nome-error"
+                        role="alert"
+                        className="mt-1.5 text-xs font-medium text-[var(--color-error-text)]"
+                      >
+                        {errors.nome}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Telefone / WhatsApp */}
+                  <div>
+                    <label
+                      htmlFor="profile-telefone"
+                      className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]"
+                    >
+                      Telefone / WhatsApp
+                    </label>
+                    <input
+                      id="profile-telefone"
+                      type="tel"
+                      disabled={saving}
+                      value={telefone}
+                      onChange={handleTelefoneChange}
+                      placeholder="(11)99999-9999"
+                      aria-invalid={Boolean(errors.telefone)}
+                      aria-describedby={errors.telefone ? 'telefone-error' : undefined}
+                      className={`min-h-11 w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] transition-colors placeholder:text-[var(--color-icon-muted)] disabled:bg-[var(--color-canvas-neutral)] ${
+                        errors.telefone
+                          ? 'border-[var(--color-error-border)]'
+                          : 'border-[var(--color-border-default)] hover:border-[var(--color-brand-primary)]'
+                      }`}
+                    />
+                    {errors.telefone && (
+                      <p
+                        id="telefone-error"
+                        role="alert"
+                        className="mt-1.5 text-xs font-medium text-[var(--color-error-text)]"
+                      >
+                        {errors.telefone}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* E-mail (somente leitura) */}
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label
+                        htmlFor="profile-email"
+                        className="block text-sm font-medium text-[var(--color-text-secondary)]"
+                      >
+                        E-mail de Login
+                      </label>
+                      <span className="text-xs text-[var(--color-text-secondary)]">
+                        Somente leitura
+                      </span>
+                    </div>
+                    <input
+                      id="profile-email"
+                      type="email"
+                      disabled
+                      value={currentUser?.email || ''}
+                      className="min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] px-3.5 py-2.5 text-sm text-[var(--color-text-secondary)]"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Card de Preferências de Contato */}
+              <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
+                <h2 className="text-base font-bold text-[var(--color-text-primary)]">
+                  Preferências de Contato
+                </h2>
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  Escolha por quais canais você deseja receber comunicações e avisos da clínica.
+                </p>
+
+                <div className="mt-5 divide-y divide-[var(--color-border-default)]">
+                  {/* WhatsApp */}
+                  <div className="flex items-center justify-between py-3.5">
+                    <div className="pr-4">
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        WhatsApp
+                      </p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        Receber confirmações de horários e contato direto da terapeuta.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={preferencias.whatsapp}
+                      disabled={saving}
+                      onClick={() => handlePreferenceToggle('whatsapp')}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${
+                        preferencias.whatsapp ? 'bg-[var(--color-brand-strong)]' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className="sr-only">Notificações por WhatsApp</span>
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          preferencias.whatsapp ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* E-mail */}
+                  <div className="flex items-center justify-between py-3.5">
+                    <div className="pr-4">
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        E-mail
+                      </p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        Receber comprovantes de reservas, novidades e recibos.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={preferencias.email}
+                      disabled={saving}
+                      onClick={() => handlePreferenceToggle('email')}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${
+                        preferencias.email ? 'bg-[var(--color-brand-strong)]' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className="sr-only">Notificações por E-mail</span>
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          preferencias.email ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Lembretes de agendamento */}
+                  <div className="flex items-center justify-between py-3.5">
+                    <div className="pr-4">
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        Lembretes de Sessão
+                      </p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        Avisos com antecedência para não esquecer de comparecer à sua massagem.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={preferencias.lembretesAgendamento}
+                      disabled={saving}
+                      onClick={() => handlePreferenceToggle('lembretesAgendamento')}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${
+                        preferencias.lembretesAgendamento
+                          ? 'bg-[var(--color-brand-strong)]'
+                          : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className="sr-only">Lembretes de sessão</span>
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          preferencias.lembretesAgendamento ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Botão Salvar */}
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-6 py-3 text-sm font-semibold text-white shadow transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
+                >
+                  {saving ? 'Salvando alterações…' : 'Salvar alterações'}
+                </button>
+              </div>
+            </form>
+
+            {/* Atalhos da Conta e Saída */}
+            <section className="mt-8 rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
               <h2 className="text-base font-bold text-[var(--color-text-primary)]">
-                Preferências de Contato
+                Atalhos da Conta
               </h2>
               <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                Escolha por quais canais você deseja receber comunicações e avisos da clínica.
+                Acesse rapidamente suas áreas exclusivas ou encerre sua sessão com segurança.
               </p>
 
-              <div className="mt-5 divide-y divide-[var(--color-border-default)]">
-                {/* WhatsApp */}
-                <div className="flex items-center justify-between py-3.5">
-                  <div className="pr-4">
-                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                      WhatsApp
-                    </p>
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      Receber confirmações de horários e contato direto da terapeuta.
-                    </p>
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Link
+                  to="/agendamentos"
+                  className="flex items-center justify-between rounded-xl border border-[var(--color-border-default)] p-3.5 transition-colors hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-brand-soft)]/40"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)]">
+                      <svg
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="1.8"
+                          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        Meus Agendamentos
+                      </p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        Histórico e próximos horários
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={preferencias.whatsapp}
-                    disabled={saving}
-                    onClick={() => handlePreferenceToggle('whatsapp')}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${
-                      preferencias.whatsapp ? 'bg-[var(--color-brand-strong)]' : 'bg-gray-200'
-                    }`}
+                  <svg
+                    className="h-4 w-4 text-[var(--color-icon-muted)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
                   >
-                    <span className="sr-only">Notificações por WhatsApp</span>
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        preferencias.whatsapp ? 'translate-x-5' : 'translate-x-0'
-                      }`}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 5l7 7-7 7"
                     />
-                  </button>
-                </div>
+                  </svg>
+                </Link>
 
-                {/* E-mail */}
-                <div className="flex items-center justify-between py-3.5">
-                  <div className="pr-4">
-                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">E-mail</p>
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      Receber comprovantes de reservas, novidades e recibos.
-                    </p>
+                <Link
+                  to="/notificacoes"
+                  className="flex items-center justify-between rounded-xl border border-[var(--color-border-default)] p-3.5 transition-colors hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-brand-soft)]/40"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)]">
+                      <svg
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="1.8"
+                          d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        Notificações
+                      </p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        Comunicados e avisos da clínica
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={preferencias.email}
-                    disabled={saving}
-                    onClick={() => handlePreferenceToggle('email')}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${
-                      preferencias.email ? 'bg-[var(--color-brand-strong)]' : 'bg-gray-200'
-                    }`}
+                  <svg
+                    className="h-4 w-4 text-[var(--color-icon-muted)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
                   >
-                    <span className="sr-only">Notificações por E-mail</span>
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        preferencias.email ? 'translate-x-5' : 'translate-x-0'
-                      }`}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 5l7 7-7 7"
                     />
-                  </button>
-                </div>
+                  </svg>
+                </Link>
+              </div>
 
-                {/* Lembretes de agendamento */}
-                <div className="flex items-center justify-between py-3.5">
-                  <div className="pr-4">
+              <div className="mt-5 border-t border-[var(--color-border-default)] pt-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
                     <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                      Lembretes de Sessão
+                      Encerrar Sessão
                     </p>
                     <p className="text-xs text-[var(--color-text-secondary)]">
-                      Avisos com antecedência para não esquecer de comparecer à sua massagem.
+                      Desconecte sua conta com segurança deste aparelho.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={preferencias.lembretesAgendamento}
-                    disabled={saving}
-                    onClick={() => handlePreferenceToggle('lembretesAgendamento')}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)] ${
-                      preferencias.lembretesAgendamento
-                        ? 'bg-[var(--color-brand-strong)]'
-                        : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className="sr-only">Lembretes de sessão</span>
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        preferencias.lembretesAgendamento ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                  <LogoutButton />
                 </div>
               </div>
             </section>
-
-            {/* Botão Salvar */}
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-6 py-3 text-sm font-semibold text-white shadow transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
-              >
-                {saving ? 'Salvando alterações…' : 'Salvar alterações'}
-              </button>
-            </div>
-          </form>
+          </>
         )}
       </div>
     </AppShell>

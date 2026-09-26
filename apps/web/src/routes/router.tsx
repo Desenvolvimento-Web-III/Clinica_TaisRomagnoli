@@ -5,6 +5,7 @@ import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
+import { NotificationsPage } from '@/pages/NotificationsPage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
 import { AdminRoute } from './AdminRoute';
@@ -37,6 +38,10 @@ export const router = createBrowserRouter([
   {
     path: '/perfil',
     element: <ClientProfilePage />,
+  },
+  {
+    path: '/notificacoes',
+    element: <NotificationsPage />,
   },
   {
     path: '/admin/clientes/:clientId',
