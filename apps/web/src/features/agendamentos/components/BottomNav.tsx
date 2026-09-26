@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 import { useClientNotifications } from '@/features/notifications/notifications-store';
 
+export type BottomNavTab = 'inicio' | 'agendamentos' | 'notificacoes' | 'perfil' | 'admin_horarios';
+
 interface BottomNavProps {
-  activeTab?: 'inicio' | 'agendamentos' | 'notificacoes' | 'perfil';
+  activeTab?: BottomNavTab;
 }
 
 export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {

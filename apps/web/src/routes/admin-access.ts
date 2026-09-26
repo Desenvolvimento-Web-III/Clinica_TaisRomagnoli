@@ -11,7 +11,8 @@ export async function resolveAdministrativeAccess(): Promise<AdminAccessResult> 
 
   try {
     const token = await getIdTokenResult(auth.currentUser);
-    return token.claims.role === 'admin' ? 'allowed' : 'unauthorized';
+    const isAdmin = token.claims.role === 'admin' || token.claims.admin === true;
+    return isAdmin ? 'allowed' : 'unauthorized';
   } catch {
     return 'unauthorized';
   }

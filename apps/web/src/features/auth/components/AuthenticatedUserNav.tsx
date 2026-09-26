@@ -7,7 +7,7 @@ import { LogoutButton } from '@/features/auth/components/LogoutButton';
 
 export function AuthenticatedUserNav() {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, isAdmin } = useAuth();
   const { unreadCount } = useClientNotifications(currentUser?.uid);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -127,7 +127,9 @@ export function AuthenticatedUserNav() {
           </div>
 
           <div className="hidden min-w-0 text-left lg:block">
-            <p className="text-xs font-medium text-[var(--color-text-secondary)]">Sessão ativa</p>
+            <p className="text-xs font-medium text-[var(--color-text-secondary)]">
+              {isAdmin ? 'Administradora' : 'Sessão ativa'}
+            </p>
             <p
               className="max-w-40 truncate text-sm font-semibold text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-brand-deep)]"
               title={userName}
@@ -150,7 +152,7 @@ export function AuthenticatedUserNav() {
           </svg>
         </button>
 
-        {/* Menu Dropdown com os 4 atalhos */}
+        {/* Menu Dropdown com atalhos */}
         {isOpen && (
           <div
             ref={menuRef}
@@ -161,9 +163,16 @@ export function AuthenticatedUserNav() {
           >
             {/* Cabeçalho do Menu */}
             <div className="border-b border-[var(--color-border-default)] px-3 py-2.5">
-              <p className="text-xs font-medium text-[var(--color-text-secondary)]">
-                Conectado como
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-[var(--color-text-secondary)]">
+                  Conectado como
+                </p>
+                {isAdmin && (
+                  <span className="rounded-md bg-[var(--color-brand-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--color-brand-deep)]">
+                    Administradora
+                  </span>
+                )}
+              </div>
               <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">
                 {userName}
               </p>
@@ -253,6 +262,61 @@ export function AuthenticatedUserNav() {
                 )}
               </Link>
             </div>
+
+            {/* Seção Administrativa (somente se isAdmin) */}
+            {isAdmin && (
+              <div className="border-t border-[var(--color-border-default)] py-1">
+                <div className="px-3 py-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Administração
+                  </p>
+                </div>
+                <Link
+                  to="/admin/horarios"
+                  role="menuitem"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)]"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="h-5 w-5 text-[var(--color-brand-deep)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <span>Horários da Clínica</span>
+                </Link>
+                <Link
+                  to="/admin/clientes/demo-client-1"
+                  role="menuitem"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)]"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="h-5 w-5 text-[var(--color-brand-deep)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
+                    />
+                  </svg>
+                  <span>Perfil de Clientes</span>
+                </Link>
+              </div>
+            )}
 
             {/* Divisor */}
             <div className="my-1 border-t border-[var(--color-border-default)]" />

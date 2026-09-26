@@ -5,7 +5,7 @@ import { BottomNav } from '@/features/agendamentos/components/BottomNav';
 import { AuthenticatedUserNav } from '@/features/auth/components/AuthenticatedUserNav';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 
-export type ActiveTab = 'inicio' | 'agendamentos' | 'notificacoes' | 'perfil';
+export type ActiveTab = 'inicio' | 'agendamentos' | 'notificacoes' | 'perfil' | 'admin_horarios';
 
 type AppShellProps = Readonly<{
   activeTab: ActiveTab;
@@ -16,10 +16,18 @@ type AppShellProps = Readonly<{
   headerAside?: ReactNode;
 }>;
 
-const navigationItems: ReadonlyArray<{ label: string; to: string; tab: ActiveTab }> = [
+type NavigationItem = Readonly<{ label: string; to: string; tab: ActiveTab }>;
+
+const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { label: 'Serviços', to: '/servicos', tab: 'inicio' },
   { label: 'Agendamentos', to: '/agendamentos', tab: 'agendamentos' },
 ];
+
+const adminNavigationItem: NavigationItem = {
+  label: 'Horários da Clínica',
+  to: '/admin/horarios',
+  tab: 'admin_horarios',
+};
 
 export function AppShell({
   activeTab,
@@ -29,7 +37,13 @@ export function AppShell({
   children,
   headerAside,
 }: AppShellProps) {
-  const currentUser = useOptionalAuth()?.currentUser ?? null;
+  const authContext = useOptionalAuth();
+  const currentUser = authContext?.currentUser ?? null;
+  const isAdmin = authContext?.isAdmin ?? false;
+
+  const navigationItems = isAdmin
+    ? [...baseNavigationItems, adminNavigationItem]
+    : baseNavigationItems;
 
   return (
     <div className="min-h-dvh bg-[var(--color-canvas-neutral)] pb-20 text-[var(--color-text-primary)] md:pb-0">

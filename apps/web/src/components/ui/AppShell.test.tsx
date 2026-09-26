@@ -72,5 +72,39 @@ describe('AppShell', () => {
     const notifLinks = screen.getAllByRole('link', { name: /notificações/i });
     expect(notifLinks.length).toBeGreaterThanOrEqual(1);
     expect(notifLinks[0]).toHaveAttribute('href', '/notificacoes');
+
+    // Não deve exibir link administrativo para usuário sem perfil admin
+    expect(screen.queryByRole('link', { name: /horários da clínica/i })).not.toBeInTheDocument();
+  });
+
+  it('exibe atalho de administracao na barra de navegacao superior quando o usuario e admin', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: {
+        uid: 'admin-123',
+        displayName: 'Tais Romagnoli',
+        email: 'tais@clinica.com',
+      },
+      isAdmin: true,
+      role: 'admin',
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const adminLink = screen.getByRole('link', { name: 'Horários da Clínica' });
+    expect(adminLink).toBeInTheDocument();
+    expect(adminLink).toHaveAttribute('href', '/admin/horarios');
   });
 });

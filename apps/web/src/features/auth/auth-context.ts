@@ -1,10 +1,14 @@
 import { createContext, useContext } from 'react';
 import type { User } from 'firebase/auth';
+import type { UserRole } from '@/types/user';
 
 export type AuthContextValue = Readonly<{
   currentUser: User | null;
   isAuthReady: boolean;
+  isAdmin: boolean;
+  role: UserRole | null;
   logout: () => Promise<void>;
+  refreshRole?: () => Promise<void>;
 }>;
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

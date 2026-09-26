@@ -101,6 +101,45 @@ describe('AuthenticatedUserNav', () => {
     // 4. Saída da conta
     const sairItem = screen.getByRole('menuitem', { name: /sair da conta/i });
     expect(sairItem).toBeInTheDocument();
+
+    // Menus administrativos NÃO devem estar presentes para cliente comum
+    expect(
+      screen.queryByRole('menuitem', { name: /horários da clínica/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /perfil de clientes/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Administradora')).not.toBeInTheDocument();
+  });
+
+  it('exibe menus administrativos e badge de administradora quando o usuario possui perfil admin', () => {
+    mockUseAuth.mockReturnValue({
+      currentUser: {
+        uid: 'admin-123',
+        displayName: 'Tais Romagnoli',
+        email: 'tais@clinica.com',
+      },
+      isAdmin: true,
+      role: 'admin',
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter>
+        <AuthenticatedUserNav />
+      </MemoryRouter>,
+    );
+
+    const menuButton = screen.getByRole('button', { name: /menu da conta do cliente/i });
+    fireEvent.click(menuButton);
+
+    expect(screen.getAllByText('Administradora').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('menuitem', { name: /horários da clínica/i })).toHaveAttribute(
+      'href',
+      '/admin/horarios',
+    );
+    expect(screen.getByRole('menuitem', { name: /perfil de clientes/i })).toHaveAttribute(
+      'href',
+      '/admin/clientes/demo-client-1',
+    );
   });
 
   it('fecha o menu ao pressionar Escape', () => {
