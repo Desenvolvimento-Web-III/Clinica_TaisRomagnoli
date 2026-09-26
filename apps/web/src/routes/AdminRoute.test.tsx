@@ -27,9 +27,9 @@ describe('AdminRoute', () => {
     expect(
       screen.getByText(/Você não tem permissão para acessar esta área administrativa/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: 'Voltar ao catálogo de serviços' }),
-    ).toBeInTheDocument();
+    const backLink = screen.getByRole('link', { name: 'Voltar ao catálogo de serviços' });
+    expect(backLink).toBeInTheDocument();
+    expect(backLink).toHaveAttribute('href', '/servicos');
     expect(screen.queryByText('Conteúdo protegido')).not.toBeInTheDocument();
   });
 
@@ -44,7 +44,9 @@ describe('AdminRoute', () => {
     expect(
       screen.getByText(/Sua sessão expirou ou você ainda não realizou login/),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Ir para o login' })).toBeInTheDocument();
+    const loginLink = screen.getByRole('link', { name: 'Ir para o login' });
+    expect(loginLink).toBeInTheDocument();
+    expect(loginLink).toHaveAttribute('href', '/login');
     expect(screen.queryByText('Conteúdo protegido')).not.toBeInTheDocument();
   });
 });

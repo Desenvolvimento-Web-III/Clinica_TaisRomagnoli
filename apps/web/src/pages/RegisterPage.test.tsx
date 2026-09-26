@@ -142,6 +142,58 @@ describe('RegisterPage', () => {
     expect(await screen.findByText('Este e-mail já está em uso')).toBeInTheDocument();
   });
 
+  it('exibe erro de senha fraca retornado pelo Firebase Auth', async () => {
+    vi.mocked(createUserWithEmailAndPassword).mockRejectedValueOnce({
+      code: 'auth/weak-password',
+    });
+
+    renderWithRouter(<RegisterPage />);
+
+    const nomeInput = screen.getByLabelText(/nome completo/i);
+    const telefoneInput = screen.getByLabelText(/telefone/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
+    const button = screen.getByRole('button', { name: /criar conta/i });
+
+    fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
+    fireEvent.change(telefoneInput, { target: { value: '11988887777' } });
+    fireEvent.change(emailInput, { target: { value: 'maria.fraca@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: '123456' } });
+    fireEvent.change(confirmarSenhaInput, { target: { value: '123456' } });
+
+    fireEvent.click(button);
+
+    expect(await screen.findByText('A senha é muito fraca')).toBeInTheDocument();
+  });
+
+  it('exibe erro geral quando ocorre uma falha inesperada no cadastro', async () => {
+    vi.mocked(createUserWithEmailAndPassword).mockRejectedValueOnce(
+      new Error('Erro interno do servidor'),
+    );
+
+    renderWithRouter(<RegisterPage />);
+
+    const nomeInput = screen.getByLabelText(/nome completo/i);
+    const telefoneInput = screen.getByLabelText(/telefone/i);
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const confirmarSenhaInput = screen.getByLabelText(/^confirmar senha$/i);
+    const button = screen.getByRole('button', { name: /criar conta/i });
+
+    fireEvent.change(nomeInput, { target: { value: 'Maria Silva' } });
+    fireEvent.change(telefoneInput, { target: { value: '11988887777' } });
+    fireEvent.change(emailInput, { target: { value: 'maria.erro@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.change(confirmarSenhaInput, { target: { value: 'senha123' } });
+
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText('Ocorreu um erro ao realizar o cadastro. Tente novamente.'),
+    ).toBeInTheDocument();
+  });
+
   it('leva aos agendamentos após cadastro bem-sucedido', async () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: { uid: 'mock-uid-maria' },
