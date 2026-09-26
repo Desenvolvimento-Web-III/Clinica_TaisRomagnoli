@@ -178,4 +178,12 @@ describe('LoginPage', () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it('exibe link para recuperação de senha apontando para /recuperar-senha', () => {
+    renderWithRouter(<LoginPage />);
+
+    const forgotPasswordLink = screen.getByRole('link', { name: /esqueceu a senha\?/i });
+    expect(forgotPasswordLink).toBeInTheDocument();
+    expect(forgotPasswordLink).toHaveAttribute('href', '/recuperar-senha');
+  });
 });

@@ -4,6 +4,7 @@ import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
@@ -34,6 +35,14 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/recuperar-senha',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/esqueci-senha',
+    element: <Navigate to="/recuperar-senha" replace />,
   },
   {
     path: '/perfil',

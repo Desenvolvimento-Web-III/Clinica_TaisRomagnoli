@@ -178,9 +178,12 @@ export function LoginPage() {
             >
               Senha
             </label>
-            <span className="text-xs text-[var(--color-text-secondary)]">
-              Mínimo de 6 caracteres
-            </span>
+            <Link
+              to="/recuperar-senha"
+              className="text-xs font-semibold text-[var(--color-brand-deep)] hover:underline"
+            >
+              Esqueceu a senha?
+            </Link>
           </div>
           <div className="relative">
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[var(--color-icon-muted)]">
