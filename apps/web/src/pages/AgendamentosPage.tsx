@@ -165,9 +165,7 @@ export function AgendamentosPage() {
                   setAgendamentoParaCancelar(item);
                   setModalOpen(true);
                 }}
-                onReagendarClick={(item) =>
-                  mostrarToast(`Iniciando reagendamento para ${item.servicoNome}...`)
-                }
+                onReagendarClick={(item) => navigate(`/agendamentos/reagendar/${item.id}`)}
               />
             ))}
           </div>

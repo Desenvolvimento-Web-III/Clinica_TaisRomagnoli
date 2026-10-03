@@ -236,6 +236,7 @@ export const AgendamentoCard: React.FC<AgendamentoCardProps> = ({
           {podeReagendar && (
             <button
               type="button"
+              data-testid={`reagendar-button-${agendamento.id}`}
               onClick={() => onReagendarClick(agendamento)}
               className="min-h-11 rounded-xl border border-[var(--color-brand-primary)] bg-white px-3 py-2 text-xs font-semibold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-soft)]"
             >
