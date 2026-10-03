@@ -99,6 +99,33 @@ describe('LoginPage', () => {
     expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
   });
 
+  it('redireciona para a rota privada de origem preservada em state.from após login bem-sucedido', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
+
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/login', state: { from: { pathname: '/perfil' } } }]}
+      >
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/perfil" element={<p>Página do Perfil Privado</p>} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'cliente@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(await screen.findByText('Página do Perfil Privado')).toBeInTheDocument();
+    expect(screen.queryByText('Meus agendamentos')).not.toBeInTheDocument();
+  });
+
   it('redireciona para /admin quando o login é realizado com o e-mail oficial da administradora', async () => {
     vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
       user: { email: 'admin@clinicataisromagnoli.com.br' },

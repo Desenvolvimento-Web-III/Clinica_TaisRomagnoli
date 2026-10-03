@@ -11,6 +11,7 @@ import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
 import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
 import { AdminRoute } from './AdminRoute';
+import { ProtectedRoute } from './ProtectedRoute';
 
 export const router = createBrowserRouter([
   {
@@ -47,11 +48,19 @@ export const router = createBrowserRouter([
   },
   {
     path: '/perfil',
-    element: <ClientProfilePage />,
+    element: (
+      <ProtectedRoute>
+        <ClientProfilePage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/notificacoes',
-    element: <NotificationsPage />,
+    element: (
+      <ProtectedRoute>
+        <NotificationsPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/admin',

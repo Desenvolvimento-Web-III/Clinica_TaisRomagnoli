@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getIdTokenResult, signInWithEmailAndPassword } from 'firebase/auth';
 import { z } from 'zod';
 import { AuthLayout } from '@/components/ui/AuthLayout';
@@ -46,6 +46,7 @@ function FieldIcon({ kind }: Readonly<{ kind: 'email' | 'password' }>) {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState<LoginFormData>({ email: '', senha: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -99,10 +100,14 @@ export function LoginPage() {
         }
       }
 
+      const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
+
       if (isAdmin) {
-        navigate('/admin', { replace: true });
+        const target = fromPath && fromPath.startsWith('/admin') ? fromPath : '/admin';
+        navigate(target, { replace: true });
       } else {
-        navigate('/agendamentos', { replace: true });
+        const target = fromPath && fromPath !== '/login' ? fromPath : '/agendamentos';
+        navigate(target, { replace: true });
       }
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
