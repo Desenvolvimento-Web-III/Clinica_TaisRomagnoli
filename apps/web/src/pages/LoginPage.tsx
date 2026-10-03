@@ -1,10 +1,11 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { getIdTokenResult, signInWithEmailAndPassword } from 'firebase/auth';
 import { z } from 'zod';
 import { AuthLayout } from '@/components/ui/AuthLayout';
 import { auth } from '@/lib/firebase';
 import { getFirebaseErrorCode } from '@/lib/firebase-error';
+import { isAdministratorEmail } from '@/routes/admin-access';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'O e-mail é obrigatório').email('Insira um e-mail válido'),
@@ -83,8 +84,26 @@ export function LoginPage() {
     setLoading(true);
     try {
       const cleanEmail = formData.email.trim();
-      await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
-      navigate('/agendamentos', { replace: true });
+      const credential = await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
+
+      let isAdmin = isAdministratorEmail(cleanEmail);
+      if (!isAdmin && credential?.user) {
+        try {
+          const tokenResult = await getIdTokenResult(credential.user);
+          isAdmin =
+            tokenResult.claims.role === 'admin' ||
+            tokenResult.claims.admin === true ||
+            isAdministratorEmail(credential.user.email);
+        } catch {
+          // Mantém verificação baseada no email
+        }
+      }
+
+      if (isAdmin) {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/agendamentos', { replace: true });
+      }
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
       if (

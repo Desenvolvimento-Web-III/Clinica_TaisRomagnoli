@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { getIdTokenResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { AuthContext } from './auth-context';
 import { auth } from '@/lib/firebase';
+import { isAdministratorEmail } from '@/routes/admin-access';
 import type { UserRole } from '@/types/user';
 
 export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
@@ -11,14 +12,16 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [role, setRole] = useState<UserRole | null>(null);
 
   const evaluateUserRole = useCallback(async (user: User, forceRefresh = false) => {
+    const isEmailAdmin = isAdministratorEmail(user.email);
     try {
       const tokenResult = await getIdTokenResult(user, forceRefresh);
-      const admin = tokenResult.claims.role === 'admin' || tokenResult.claims.admin === true;
+      const admin =
+        tokenResult.claims.role === 'admin' || tokenResult.claims.admin === true || isEmailAdmin;
       setIsAdmin(admin);
       setRole(admin ? 'admin' : (tokenResult.claims.role as UserRole) || 'cliente');
     } catch {
-      setIsAdmin(false);
-      setRole('cliente');
+      setIsAdmin(isEmailAdmin);
+      setRole(isEmailAdmin ? 'admin' : 'cliente');
     }
   }, []);
 

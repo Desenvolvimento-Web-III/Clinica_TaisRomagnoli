@@ -132,6 +132,10 @@ describe('AuthenticatedUserNav', () => {
     fireEvent.click(menuButton);
 
     expect(screen.getAllByText('Administradora').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('menuitem', { name: /painel administrativo/i })).toHaveAttribute(
+      'href',
+      '/admin',
+    );
     expect(screen.getByRole('menuitem', { name: /horários da clínica/i })).toHaveAttribute(
       'href',
       '/admin/horarios',

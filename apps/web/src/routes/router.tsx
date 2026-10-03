@@ -9,6 +9,7 @@ import { ClientProfilePage } from '@/pages/ClientProfilePage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
+import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
 import { AdminRoute } from './AdminRoute';
 
 export const router = createBrowserRouter([
@@ -53,6 +54,14 @@ export const router = createBrowserRouter([
     element: <NotificationsPage />,
   },
   {
+    path: '/admin',
+    element: (
+      <AdminRoute>
+        <AdminDashboardPage />
+      </AdminRoute>
+    ),
+  },
+  {
     path: '/admin/clientes/:clientId',
     element: (
       <AdminRoute>
@@ -65,6 +74,14 @@ export const router = createBrowserRouter([
     element: (
       <AdminRoute>
         <AdminHorariosPage />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: '/admin/:section',
+    element: (
+      <AdminRoute>
+        <AdminDashboardPage />
       </AdminRoute>
     ),
   },
