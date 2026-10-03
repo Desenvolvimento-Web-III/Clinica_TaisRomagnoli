@@ -65,41 +65,51 @@ export const router = createBrowserRouter([
   {
     path: '/admin',
     element: (
-      <AdminRoute>
-        <AdminDashboardPage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminDashboardPage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/admin/clientes/:clientId',
     element: (
-      <AdminRoute>
-        <AdminClientProfilePage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminClientProfilePage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/admin/horarios',
     element: (
-      <AdminRoute>
-        <AdminHorariosPage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminHorariosPage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/admin/:section',
     element: (
-      <AdminRoute>
-        <AdminDashboardPage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminDashboardPage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/horarios',
     element: (
-      <AdminRoute>
-        <AdminHorariosPage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminHorariosPage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
