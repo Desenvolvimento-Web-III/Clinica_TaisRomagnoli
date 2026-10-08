@@ -113,5 +113,49 @@ describe('AgendamentoFlowPage', () => {
     // Alterna para Boleto
     fireEvent.click(screen.getByTestId('metodo-boleto-btn'));
     expect(screen.getByTestId('boleto-info-container')).toBeInTheDocument();
+    expect(screen.getByTestId('copiar-boleto-btn')).toBeInTheDocument();
+  });
+
+  it('valida campos do cartão de crédito e aplica máscaras antes de finalizar', () => {
+    renderFlow('/agendar/massagem-relaxante');
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('metodo-cartao-btn'));
+
+    // Tenta finalizar com campos vazios
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    // Deve exibir mensagens de erro
+    expect(screen.getByTestId('cartao-numero-error')).toHaveTextContent(
+      'Informe o número do cartão.',
+    );
+    expect(screen.getByTestId('cartao-nome-error')).toHaveTextContent(
+      'Informe o nome impresso no cartão.',
+    );
+    expect(screen.getByTestId('cartao-validade-error')).toHaveTextContent('Informe a validade.');
+    expect(screen.getByTestId('cartao-cvv-error')).toHaveTextContent('Informe o código CVV.');
+
+    // Preenche com máscaras
+    const inputNumero = screen.getByLabelText(/Número do Cartão/i);
+    fireEvent.change(inputNumero, { target: { value: '4111222233334444' } });
+    expect(inputNumero).toHaveValue('4111 2222 3333 4444');
+    expect(screen.getByTestId('cartao-bandeira-badge')).toHaveTextContent(/visa/i);
+
+    const inputNome = screen.getByLabelText(/Nome impresso no Cartão/i);
+    fireEvent.change(inputNome, { target: { value: 'mariana souza' } });
+    expect(inputNome).toHaveValue('MARIANA SOUZA');
+
+    const inputValidade = screen.getByLabelText(/Validade/i);
+    fireEvent.change(inputValidade, { target: { value: '1230' } });
+    expect(inputValidade).toHaveValue('12/30');
+
+    const inputCvv = screen.getByLabelText(/CVV/i);
+    fireEvent.change(inputCvv, { target: { value: '123' } });
+    expect(inputCvv).toHaveValue('123');
+
+    // Finaliza com sucesso
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+    expect(screen.getByText('Agendamento Concluído!')).toBeInTheDocument();
   });
 });

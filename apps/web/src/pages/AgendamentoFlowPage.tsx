@@ -7,6 +7,15 @@ import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import {
+  maskCardNumber,
+  maskCardExpiry,
+  maskCardCvv,
+  maskCardHolderName,
+  detectCardBrand,
+  validateCreditCardForm,
+  type CardValidationErrors,
+} from '@/features/agendamentos/utils/payment-formatters';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
 
 type FlowStep = 'calendario' | 'confirmacao' | 'pagamento' | 'concluido';
@@ -77,11 +86,13 @@ export function AgendamentoFlowPage() {
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
   const [novoAgendamentoCriado, setNovoAgendamentoCriado] = useState<Agendamento | null>(null);
 
-  // Cartão de crédito mock form state
+  // Cartão de crédito state, máscaras e erros
   const [cartaoNumero, setCartaoNumero] = useState('');
   const [cartaoNome, setCartaoNome] = useState('');
   const [cartaoValidade, setCartaoValidade] = useState('');
   const [cartaoCvv, setCartaoCvv] = useState('');
+  const [cardErrors, setCardErrors] = useState<CardValidationErrors>({});
+  const [boletoCopiado, setBoletoCopiado] = useState(false);
 
   // Cálculos de valor
   const valorTotalReais = servicoAtual.priceInCents / 100;
@@ -93,8 +104,25 @@ export function AgendamentoFlowPage() {
     ? `${diaSelecionadoObj.dataCurta} • ${diaSelecionadoObj.diaSemana}`
     : dataSelecionada;
 
-  // Finalizar agendamento
+  const cardBrand = useMemo(() => detectCardBrand(cartaoNumero), [cartaoNumero]);
+
+  // Finalizar agendamento com validação de pagamento
   const handleFinalizar = () => {
+    if (metodoPagamento === 'cartao') {
+      const validation = validateCreditCardForm({
+        numero: cartaoNumero,
+        nome: cartaoNome,
+        validade: cartaoValidade,
+        cvv: cartaoCvv,
+      });
+
+      if (!validation.isValid) {
+        setCardErrors(validation.errors);
+        return;
+      }
+      setCardErrors({});
+    }
+
     const novo: Agendamento = {
       id: generateAppointmentId(),
       servicoNome: servicoAtual.name,
@@ -348,61 +376,183 @@ export function AgendamentoFlowPage() {
               {metodoPagamento === 'cartao' && (
                 <div
                   data-testid="cartao-form-container"
-                  className="space-y-3 rounded-3xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm sm:p-6"
+                  className="space-y-4 rounded-3xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm sm:p-6"
                 >
-                  <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
-                    Dados do Cartão de Crédito
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
+                      Dados do Cartão de Crédito
+                    </p>
+                    {cardBrand !== 'desconhecido' && (
+                      <span
+                        data-testid="cartao-bandeira-badge"
+                        className="rounded-lg bg-[var(--color-brand-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)] border border-[#DDD6FE]"
+                      >
+                        {cardBrand}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Número do Cartão */}
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                    <label
+                      htmlFor="cartao-numero-input"
+                      className="block text-xs font-semibold text-[var(--color-text-secondary)]"
+                    >
                       Número do Cartão
                     </label>
-                    <input
-                      type="text"
-                      placeholder="0000 0000 0000 0000"
-                      value={cartaoNumero}
-                      onChange={(e) => setCartaoNumero(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
-                    />
+                    <div className="relative mt-1">
+                      <input
+                        id="cartao-numero-input"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0000 0000 0000 0000"
+                        value={cartaoNumero}
+                        maxLength={19}
+                        onChange={(e) => {
+                          setCartaoNumero(maskCardNumber(e.target.value));
+                          if (cardErrors.numero) {
+                            setCardErrors((prev) => ({ ...prev, numero: undefined }));
+                          }
+                        }}
+                        aria-invalid={!!cardErrors.numero}
+                        aria-describedby={cardErrors.numero ? 'cartao-numero-error' : undefined}
+                        className={`w-full rounded-xl border bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] transition-colors focus:outline-none ${
+                          cardErrors.numero
+                            ? 'border-[var(--color-error-border)] focus:border-[var(--color-error-text)]'
+                            : 'border-[var(--color-border-default)] focus:border-[var(--color-brand-primary)]'
+                        }`}
+                      />
+                    </div>
+                    {cardErrors.numero && (
+                      <p
+                        id="cartao-numero-error"
+                        data-testid="cartao-numero-error"
+                        className="mt-1 text-[11px] font-medium text-[var(--color-error-text)]"
+                      >
+                        {cardErrors.numero}
+                      </p>
+                    )}
                   </div>
+
+                  {/* Nome do Titular */}
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                    <label
+                      htmlFor="cartao-nome-input"
+                      className="block text-xs font-semibold text-[var(--color-text-secondary)]"
+                    >
                       Nome impresso no Cartão
                     </label>
                     <input
+                      id="cartao-nome-input"
                       type="text"
-                      placeholder="Nome Completo"
+                      placeholder="NOME COMPLETO"
                       value={cartaoNome}
-                      onChange={(e) => setCartaoNome(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                      onChange={(e) => {
+                        setCartaoNome(maskCardHolderName(e.target.value));
+                        if (cardErrors.nome) {
+                          setCardErrors((prev) => ({ ...prev, nome: undefined }));
+                        }
+                      }}
+                      aria-invalid={!!cardErrors.nome}
+                      aria-describedby={cardErrors.nome ? 'cartao-nome-error' : undefined}
+                      className={`mt-1 w-full rounded-xl border bg-[var(--color-canvas-neutral)] p-3 text-xs uppercase text-[var(--color-text-primary)] transition-colors focus:outline-none ${
+                        cardErrors.nome
+                          ? 'border-[var(--color-error-border)] focus:border-[var(--color-error-text)]'
+                          : 'border-[var(--color-border-default)] focus:border-[var(--color-brand-primary)]'
+                      }`}
                     />
+                    {cardErrors.nome && (
+                      <p
+                        id="cartao-nome-error"
+                        data-testid="cartao-nome-error"
+                        className="mt-1 text-[11px] font-medium text-[var(--color-error-text)]"
+                      >
+                        {cardErrors.nome}
+                      </p>
+                    )}
                   </div>
+
+                  {/* Validade e CVV */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                      <label
+                        htmlFor="cartao-validade-input"
+                        className="block text-xs font-semibold text-[var(--color-text-secondary)]"
+                      >
                         Validade (MM/AA)
                       </label>
                       <input
+                        id="cartao-validade-input"
                         type="text"
-                        placeholder="12/28"
+                        inputMode="numeric"
+                        placeholder="MM/AA"
                         value={cartaoValidade}
-                        onChange={(e) => setCartaoValidade(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                        maxLength={5}
+                        onChange={(e) => {
+                          setCartaoValidade(maskCardExpiry(e.target.value));
+                          if (cardErrors.validade) {
+                            setCardErrors((prev) => ({ ...prev, validade: undefined }));
+                          }
+                        }}
+                        aria-invalid={!!cardErrors.validade}
+                        aria-describedby={cardErrors.validade ? 'cartao-validade-error' : undefined}
+                        className={`mt-1 w-full rounded-xl border bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] transition-colors focus:outline-none ${
+                          cardErrors.validade
+                            ? 'border-[var(--color-error-border)] focus:border-[var(--color-error-text)]'
+                            : 'border-[var(--color-border-default)] focus:border-[var(--color-brand-primary)]'
+                        }`}
                       />
+                      {cardErrors.validade && (
+                        <p
+                          id="cartao-validade-error"
+                          data-testid="cartao-validade-error"
+                          className="mt-1 text-[11px] font-medium text-[var(--color-error-text)]"
+                        >
+                          {cardErrors.validade}
+                        </p>
+                      )}
                     </div>
+
                     <div>
-                      <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                      <label
+                        htmlFor="cartao-cvv-input"
+                        className="block text-xs font-semibold text-[var(--color-text-secondary)]"
+                      >
                         CVV
                       </label>
                       <input
+                        id="cartao-cvv-input"
                         type="text"
+                        inputMode="numeric"
                         placeholder="123"
                         value={cartaoCvv}
-                        onChange={(e) => setCartaoCvv(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] focus:border-[var(--color-brand-primary)] focus:outline-none"
+                        maxLength={4}
+                        onChange={(e) => {
+                          setCartaoCvv(maskCardCvv(e.target.value));
+                          if (cardErrors.cvv) {
+                            setCardErrors((prev) => ({ ...prev, cvv: undefined }));
+                          }
+                        }}
+                        aria-invalid={!!cardErrors.cvv}
+                        aria-describedby={cardErrors.cvv ? 'cartao-cvv-error' : undefined}
+                        className={`mt-1 w-full rounded-xl border bg-[var(--color-canvas-neutral)] p-3 text-xs text-[var(--color-text-primary)] transition-colors focus:outline-none ${
+                          cardErrors.cvv
+                            ? 'border-[var(--color-error-border)] focus:border-[var(--color-error-text)]'
+                            : 'border-[var(--color-border-default)] focus:border-[var(--color-brand-primary)]'
+                        }`}
                       />
+                      {cardErrors.cvv && (
+                        <p
+                          id="cartao-cvv-error"
+                          data-testid="cartao-cvv-error"
+                          className="mt-1 text-[11px] font-medium text-[var(--color-error-text)]"
+                        >
+                          {cardErrors.cvv}
+                        </p>
+                      )}
                     </div>
                   </div>
+
                   <p className="text-xs text-[var(--color-text-secondary)]">
                     * Cobrança imediata do sinal de {formatServicePrice(valorSinalReais * 100)}.
                   </p>
@@ -420,6 +570,58 @@ export function AgendamentoFlowPage() {
                   <p className="mt-2 rounded-xl bg-[var(--color-canvas-neutral)] p-3 font-mono text-xs text-[var(--color-text-secondary)] break-all border border-[var(--color-border-default)]">
                     34191.79001 01043.510047 91020.150008 5 91450000005100
                   </p>
+
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      data-testid="copiar-boleto-btn"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(
+                          '34191.79001 01043.510047 91020.150008 5 91450000005100',
+                        );
+                        setBoletoCopiado(true);
+                        setTimeout(() => setBoletoCopiado(false), 3000);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#DDD6FE] bg-[var(--color-brand-soft)] px-4 py-2 text-xs font-bold text-[var(--color-brand-deep)] transition hover:bg-white"
+                    >
+                      {boletoCopiado ? (
+                        <>
+                          <svg
+                            className="h-4 w-4 text-emerald-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2.5}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                          <span>Linha digitável copiada!</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            className="h-4 w-4 text-[var(--color-brand-deep)]"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
+                            />
+                          </svg>
+                          <span>Copiar linha digitável</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
                   <p className="mt-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">
                     O boleto tem compensação de 1 a 3 dias úteis. A confirmação da reserva ocorre
                     após a liquidação.
