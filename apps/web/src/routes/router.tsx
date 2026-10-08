@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AgendamentosPage } from '@/pages/AgendamentosPage';
+import { AgendamentoFlowPage } from '@/pages/AgendamentoFlowPage';
 import { ReagendamentoPage } from '@/pages/ReagendamentoPage';
 import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
@@ -19,6 +20,14 @@ export const router = createBrowserRouter([
   {
     path: '/agendamentos',
     element: <AgendamentosPage />,
+  },
+  {
+    path: '/agendar/:serviceId',
+    element: <AgendamentoFlowPage />,
+  },
+  {
+    path: '/agendar',
+    element: <AgendamentoFlowPage />,
   },
   {
     path: '/agendamentos/reagendar/:id',
