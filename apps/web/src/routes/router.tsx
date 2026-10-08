@@ -6,6 +6,7 @@ import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
+import { FichaAnamnesePage } from '@/pages/FichaAnamnesePage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
 import { AdminRoute } from './AdminRoute';
@@ -46,6 +47,10 @@ export const router = createBrowserRouter([
   {
     path: '/perfil',
     element: <ClientProfilePage />,
+  },
+  {
+    path: '/anamnese',
+    element: <FichaAnamnesePage />,
   },
   {
     path: '/admin/clientes/:clientId',
