@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { z } from 'zod';
@@ -468,6 +468,27 @@ export function ClientProfilePage() {
                     />
                   </button>
                 </div>
+              </div>
+            </section>
+
+            {/* Card de Ficha de Anamnese */}
+            <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-[var(--color-text-primary)]">
+                    Ficha de Anamnese e Avaliação
+                  </h2>
+                  <p className="mt-1 text-xs/5 text-[var(--color-text-secondary)]">
+                    Informe seu histórico de saúde, queixas principais e preferências para que a
+                    terapeuta personalize seus atendimentos com total segurança.
+                  </p>
+                </div>
+                <Link
+                  to="/anamnese"
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-brand-primary)] bg-[var(--color-brand-soft)] px-4 py-2.5 text-xs font-semibold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-primary)] hover:text-white"
+                >
+                  Preencher / Consultar Ficha
+                </Link>
               </div>
             </section>
 
