@@ -30,15 +30,6 @@ const DIAS_DISPONIVEIS_MOCK: DiaOpcao[] = [
   { isoDate: '2026-10-28', diaSemana: 'Quarta-feira', dataCurta: '28 Out', disponivel: true },
 ];
 
-const HORARIOS_SLOTS_MOCK: Record<string, string[]> = {
-  '2026-10-21': ['09:00', '10:30', '15:30', '17:00'],
-  '2026-10-22': ['08:30', '10:00', '11:30', '14:00', '16:00'],
-  '2026-10-23': ['09:00', '11:00', '13:30', '15:00', '16:30'],
-  '2026-10-24': ['08:00', '09:30', '11:00'],
-  '2026-10-26': ['10:00', '11:30', '14:30', '16:00'],
-  '2026-10-28': ['09:00', '10:30', '14:00', '15:30', '17:00'],
-};
-
 function generateAppointmentId() {
   return `ag-${Date.now()}`;
 }
@@ -60,9 +51,7 @@ export function AgendamentoFlowPage() {
   const currentUser = auth?.currentUser ?? null;
 
   // Serviço selecionado
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(
-    serviceId || serviceCatalog[0]?.id || 'massagem-relaxante',
-  );
+  const selectedServiceId = serviceId || serviceCatalog[0]?.id || 'massagem-relaxante';
 
   const servicoAtual = useMemo(() => {
     return (
@@ -82,9 +71,7 @@ export function AgendamentoFlowPage() {
 
   // Estados do fluxo
   const [step, setStep] = useState<FlowStep>('calendario');
-  const [nomeCliente, setNomeCliente] = useState<string>(
-    currentUser ? getUserDisplayName(currentUser) : 'Mariana Souza',
-  );
+  const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Mariana Souza';
   const [dataSelecionada, setDataSelecionada] = useState<string>('2026-10-22');
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
@@ -100,13 +87,6 @@ export function AgendamentoFlowPage() {
   const valorTotalReais = servicoAtual.priceInCents / 100;
   const valorSinalReais = Math.round(valorTotalReais * 0.3 * 100) / 100;
   const saldoRestanteReais = Math.round((valorTotalReais - valorSinalReais) * 100) / 100;
-
-  const horariosDisponiveis = HORARIOS_SLOTS_MOCK[dataSelecionada] || [
-    '09:00',
-    '10:00',
-    '14:00',
-    '16:00',
-  ];
 
   const diaSelecionadoObj = DIAS_DISPONIVEIS_MOCK.find((d) => d.isoDate === dataSelecionada);
   const dataFormatadaTexto = diaSelecionadoObj
@@ -466,12 +446,12 @@ export function AgendamentoFlowPage() {
   }
 
   // ====================================================
-  // TELA 2: CONFIRMAÇÃO DO AGENDAMENTO (RESPONSIVO)
+  // TELA 2: CONFIRMAÇÃO DO AGENDAMENTO (SOMENTE LEITURA)
   // ====================================================
   return (
     <div className="min-h-dvh bg-[var(--color-canvas-neutral)] pb-16 text-[var(--color-text-primary)]">
       {/* Cabeçalho Roxo Curvo e Responsivo */}
-      <header className="sticky top-0 z-30 bg-gradient-to-b from-[#8F75D0] to-[#7A60B8] pb-6 pt-4 text-white shadow-md backdrop-blur-md">
+      <header className="sticky top-0 z-30 bg-gradient-to-b from-[#8F75D0] to-[#7A60B8] py-4 text-white shadow-md backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 sm:px-6">
           <button
             type="button"
@@ -498,141 +478,79 @@ export function AgendamentoFlowPage() {
 
       <main className="mx-auto mt-6 max-w-4xl px-4 sm:px-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start lg:gap-8">
-          {/* Coluna Esquerda: Dados do Cliente e Seleções */}
+          {/* Coluna Esquerda: Dados do Agendamento (Somente Leitura) */}
           <div className="space-y-4 rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-surface)] p-5 shadow-sm sm:p-6 lg:col-span-7">
-            {/* Nome do Cliente */}
-            <div className="rounded-2xl bg-[var(--color-brand-soft)] border border-[#DDD6FE] p-3.5 sm:p-4">
-              <label
-                htmlFor="nome-cliente-input"
-                className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]"
-              >
+            <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
+              Detalhes da Reserva
+            </h2>
+
+            {/* Nome do Cliente (Visualização) */}
+            <div className="rounded-2xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] p-4">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
                 Nome do cliente
-              </label>
-              <input
-                id="nome-cliente-input"
-                type="text"
-                data-testid="nome-cliente-input"
-                value={nomeCliente}
-                onChange={(e) => setNomeCliente(e.target.value)}
-                placeholder="Digite seu nome completo"
-                className="mt-1 w-full bg-transparent text-sm font-semibold text-[var(--color-text-primary)] focus:outline-none"
-              />
+              </span>
+              <p
+                data-testid="nome-cliente-display"
+                className="mt-1 text-sm font-bold text-[var(--color-text-primary)]"
+              >
+                {nomeCliente}
+              </p>
+            </div>
+
+            {/* Profissional */}
+            <div className="rounded-2xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] p-4">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
+                Profissional responsável
+              </span>
+              <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
+                Tais Romagnoli
+              </p>
             </div>
 
             {/* Serviço Escolhido */}
-            <div className="rounded-2xl bg-[var(--color-brand-soft)] border border-[#DDD6FE] p-3.5 sm:p-4">
+            <div className="rounded-2xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] p-4">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
                   Serviço escolhido
                 </span>
-                <span className="text-xs font-semibold text-[var(--color-brand-primary)]">
+                <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-[var(--color-brand-deep)] shadow-sm">
                   {formatServiceDuration(servicoAtual.durationMinutes)}
                 </span>
               </div>
               <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
                 {servicoAtual.name}
               </p>
-
-              {/* Troca Rápida de Serviço se desejar */}
-              <div className="mt-2.5 pt-2 border-t border-[#DDD6FE]/60">
-                <label htmlFor="select-servico" className="sr-only">
-                  Alterar serviço
-                </label>
-                <select
-                  id="select-servico"
-                  data-testid="select-outro-servico"
-                  value={selectedServiceId}
-                  onChange={(e) => setSelectedServiceId(e.target.value)}
-                  className="w-full rounded-xl border border-[#DDD6FE] bg-white p-2.5 text-xs font-medium text-[var(--color-brand-deep)] focus:outline-none"
-                >
-                  {serviceCatalog.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} — {formatServicePrice(s.priceInCents)} ({s.durationMinutes} min)
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {servicoAtual.description && (
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  {servicoAtual.description}
+                </p>
+              )}
             </div>
 
-            {/* Data Escolhida */}
-            <div className="rounded-2xl bg-[var(--color-brand-soft)] border border-[#DDD6FE] p-3.5 sm:p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
+            {/* Data e Horário Escolhidos */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] p-4">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
                   Data escolhida
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setStep('calendario')}
-                  className="text-xs font-semibold text-[var(--color-brand-deep)] hover:underline"
-                >
-                  Alterar no calendário
-                </button>
+                <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
+                  {dataFormatadaTexto}
+                </p>
               </div>
-              <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
-                {dataFormatadaTexto}
-              </p>
 
-              {/* Chips de Seleção Rápida */}
-              <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1">
-                {DIAS_DISPONIVEIS_MOCK.filter((d) => d.disponivel).map((dia) => {
-                  const isSelected = dia.isoDate === dataSelecionada;
-                  return (
-                    <button
-                      key={dia.isoDate}
-                      type="button"
-                      data-testid={`dia-btn-${dia.isoDate}`}
-                      onClick={() => setDataSelecionada(dia.isoDate)}
-                      className={`inline-flex min-h-10 shrink-0 flex-col items-center justify-center rounded-xl px-3 py-1 text-xs font-semibold transition-all ${
-                        isSelected
-                          ? 'bg-[var(--color-brand-strong)] text-white shadow-sm'
-                          : 'bg-white text-[var(--color-brand-deep)] border border-[#DDD6FE] hover:bg-white/80'
-                      }`}
-                    >
-                      <span>{dia.dataCurta}</span>
-                      <span className="text-[10px] font-normal opacity-80">
-                        {dia.diaSemana.substring(0, 3)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Horário Escolhido */}
-            <div className="rounded-2xl bg-[var(--color-brand-soft)] border border-[#DDD6FE] p-3.5 sm:p-4">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
-                Horário escolhido
-              </span>
-              <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
-                {horarioSelecionado} às{' '}
-                {calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes)}
-              </p>
-
-              {/* Slots de Horários Disponíveis */}
-              <div className="mt-2.5 flex flex-wrap gap-2">
-                {horariosDisponiveis.map((hora) => {
-                  const isSelected = hora === horarioSelecionado;
-                  return (
-                    <button
-                      key={hora}
-                      type="button"
-                      data-testid={`horario-slot-${hora}`}
-                      onClick={() => setHorarioSelecionado(hora)}
-                      className={`inline-flex min-h-9 items-center justify-center rounded-xl px-3 py-1 text-xs font-semibold transition-all ${
-                        isSelected
-                          ? 'bg-[var(--color-brand-strong)] text-white shadow-sm'
-                          : 'bg-white text-[var(--color-brand-deep)] border border-[#DDD6FE] hover:bg-white/80'
-                      }`}
-                    >
-                      {hora}
-                    </button>
-                  );
-                })}
+              <div className="rounded-2xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] p-4">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-brand-deep)]">
+                  Horário escolhido
+                </span>
+                <p className="mt-1 text-sm font-bold text-[var(--color-text-primary)]">
+                  {horarioSelecionado} às{' '}
+                  {calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes)}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Coluna Direita: Valores e Ações */}
+          {/* Coluna Direita: Resumo Financeiro e Ações */}
           <div className="space-y-4 lg:col-span-5">
             {/* Card de Valores */}
             <div className="rounded-3xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm sm:p-6">
@@ -640,7 +558,7 @@ export function AgendamentoFlowPage() {
                 Resumo de Valores
               </p>
 
-              <div className="mt-3 space-y-3 text-sm">
+              <div className="mt-4 space-y-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-[var(--color-text-secondary)]">Valor total da sessão:</span>
                   <span className="text-base font-extrabold text-[var(--color-brand-deep)]">
@@ -648,7 +566,7 @@ export function AgendamentoFlowPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl bg-[var(--color-brand-soft)] p-3 border border-[#DDD6FE]">
+                <div className="flex items-center justify-between rounded-xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] p-3.5">
                   <div>
                     <p className="text-xs font-bold text-[var(--color-brand-deep)]">
                       Sinal de 30% para reserva
@@ -662,7 +580,7 @@ export function AgendamentoFlowPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-[var(--color-text-secondary)] pt-1">
+                <div className="flex items-center justify-between pt-1 text-xs text-[var(--color-text-secondary)]">
                   <span>Saldo a acertar no atendimento:</span>
                   <span className="font-bold text-[var(--color-text-primary)]">
                     {formatServicePrice(saldoRestanteReais * 100)}
@@ -679,16 +597,16 @@ export function AgendamentoFlowPage() {
                 onClick={() => setStep('pagamento')}
                 className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--color-brand-strong)] px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98]"
               >
-                Pagamento
+                Avançar para Pagamento
               </button>
 
               <button
                 type="button"
                 data-testid="voltar-btn"
                 onClick={() => setStep('calendario')}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--color-brand-soft)] px-6 py-3.5 text-sm font-bold text-[var(--color-brand-deep)] border border-[#DDD6FE] transition-all hover:bg-white active:scale-[0.98]"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-[#DDD6FE] bg-[var(--color-brand-soft)] px-6 py-3.5 text-sm font-bold text-[var(--color-brand-deep)] transition-all hover:bg-white active:scale-[0.98]"
               >
-                Voltar
+                Voltar ao Calendário
               </button>
             </div>
           </div>

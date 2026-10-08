@@ -48,13 +48,18 @@ describe('AgendamentoFlowPage', () => {
     // Clica em Confirmar Agendamento
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
 
-    // Chega na tela de Confirmação do Agendamento
+    // Chega na tela de Confirmação do Agendamento (Somente leitura)
     expect(screen.getByText('Confirmação do Agendamento')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Nome do cliente/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nome do cliente/i)).toBeInTheDocument();
+    expect(screen.getByTestId('nome-cliente-display')).toHaveTextContent('Mariana Souza');
+    expect(screen.getByText('Tais Romagnoli')).toBeInTheDocument();
     expect(screen.getByText('Massagem Relaxante')).toBeInTheDocument();
     expect(screen.getByText(/11:00 às 12:00/i)).toBeInTheDocument();
     expect(screen.getByTestId('avancar-pagamento-btn')).toBeInTheDocument();
     expect(screen.getByTestId('voltar-btn')).toBeInTheDocument();
+    // Confirma que não existem campos editáveis (inputs/selects de alteração)
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('permite voltar do formulário de confirmação para o Calendário', () => {
