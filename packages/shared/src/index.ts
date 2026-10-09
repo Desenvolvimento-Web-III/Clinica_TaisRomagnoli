@@ -10,6 +10,9 @@ export * from './schemas/clinic-settings.js';
 export * from './seed-firestore.js';
 export * from './run-seed.js';
 
+export * from './types/agendamento.js';
+export * from './schemas/agendamento.js';
+
 export {
   diaSemanaSchema,
   NOMES_DIAS_SEMANA,

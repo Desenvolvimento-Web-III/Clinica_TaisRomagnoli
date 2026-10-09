@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AgendamentosPage } from './AgendamentosPage';
 
@@ -16,6 +16,10 @@ vi.mock('@/features/auth/auth-context', () => ({
 }));
 
 describe('AgendamentosPage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   const renderPage = () => render(<AgendamentosPage />, { wrapper: MemoryRouter });
 
   it('renderiza o título da página e a lista de agendamentos', () => {
@@ -87,5 +91,46 @@ describe('AgendamentosPage', () => {
     fireEvent.click(fab);
 
     expect(await screen.findByText('Catálogo de serviços')).toBeInTheDocument();
+  });
+
+  it('abre o modal de detalhes e exibe serviço, data, horário, pagamento, saldo e situação atual', () => {
+    renderPage();
+
+    // Clica no botão "Ver detalhes" do primeiro agendamento (Massagem Relaxante com Óleos)
+    const botaoDetalhes = screen.getByTestId('detalhes-button-ag-101');
+    fireEvent.click(botaoDetalhes);
+
+    // Modal deve estar visível
+    const modal = screen.getByTestId('detalhes-agendamento-modal');
+    expect(modal).toBeInTheDocument();
+
+    const modalScope = within(modal);
+
+    // 1. Serviço
+    expect(
+      modalScope.getByRole('heading', { name: 'Massagem Relaxante com Óleos' }),
+    ).toBeInTheDocument();
+    expect(modalScope.getByText('Tais Romagnoli')).toBeInTheDocument();
+
+    // 2. Data
+    expect(modalScope.getByText('Qui, 15 de Outubro')).toBeInTheDocument();
+
+    // 3. Horário
+    expect(modalScope.getByText('14:00 - 15:00')).toBeInTheDocument();
+
+    // 4. Pagamento (Sinal)
+    expect(modalScope.getByText(/R\$ 45,00/)).toBeInTheDocument();
+
+    // 5. Saldo Restante (R$ 150 - R$ 45 = R$ 105,00)
+    expect(modalScope.getByText(/R\$ 105,00/)).toBeInTheDocument();
+
+    // 6. Situação atual
+    expect(modalScope.getByTestId('modal-status-badge-ag-101')).toHaveTextContent('Confirmado');
+
+    // Fecha o modal pelo botão Fechar
+    const botaoFechar = modalScope.getByRole('button', { name: 'Fechar' });
+    fireEvent.click(botaoFechar);
+
+    expect(screen.queryByTestId('detalhes-agendamento-modal')).not.toBeInTheDocument();
   });
 });

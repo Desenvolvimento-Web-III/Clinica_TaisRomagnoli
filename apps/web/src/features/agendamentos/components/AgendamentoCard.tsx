@@ -5,6 +5,7 @@ interface AgendamentoCardProps {
   agendamento: Agendamento;
   onCancelarClick: (agendamento: Agendamento) => void;
   onReagendarClick: (agendamento: Agendamento) => void;
+  onDetalhesClick?: (agendamento: Agendamento) => void;
 }
 
 const STATUS_CONFIG: Record<
@@ -76,6 +77,7 @@ export const AgendamentoCard: React.FC<AgendamentoCardProps> = ({
   agendamento,
   onCancelarClick,
   onReagendarClick,
+  onDetalhesClick,
 }) => {
   const statusInfo = STATUS_CONFIG[agendamento.status];
   const podeCancelar = agendamento.status === 'confirmado' || agendamento.status === 'pendente';
@@ -233,9 +235,21 @@ export const AgendamentoCard: React.FC<AgendamentoCardProps> = ({
         </a>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {onDetalhesClick && (
+            <button
+              type="button"
+              data-testid={`detalhes-button-${agendamento.id}`}
+              onClick={() => onDetalhesClick(agendamento)}
+              className="min-h-11 rounded-xl border border-[var(--color-border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-canvas-neutral)]"
+            >
+              Ver detalhes
+            </button>
+          )}
+
           {podeReagendar && (
             <button
               type="button"
+              data-testid={`reagendar-button-${agendamento.id}`}
               onClick={() => onReagendarClick(agendamento)}
               className="min-h-11 rounded-xl border border-[var(--color-brand-primary)] bg-white px-3 py-2 text-xs font-semibold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-soft)]"
             >

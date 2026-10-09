@@ -2,8 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { AgendamentoCard } from '@/features/agendamentos/components/AgendamentoCard';
+import { AgendamentoDetalhesModal } from '@/features/agendamentos/components/AgendamentoDetalhesModal';
 import { CancelModal } from '@/features/agendamentos/components/CancelModal';
-import { MOCK_AGENDAMENTOS } from '@/features/agendamentos/data/mockAgendamentos';
+import {
+  getAgendamentosStorage,
+  saveAgendamentosStorage,
+} from '@/features/agendamentos/data/agendamentos-storage';
 import type { Agendamento, StatusAgendamento } from '@/features/agendamentos/types/agendamento';
 
 type FiltroTab = 'todos' | StatusAgendamento;
@@ -18,10 +22,12 @@ const tabs: ReadonlyArray<{ id: FiltroTab; label: string }> = [
 
 export function AgendamentosPage() {
   const navigate = useNavigate();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(MOCK_AGENDAMENTOS);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => getAgendamentosStorage());
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroTab>('todos');
   const [agendamentoParaCancelar, setAgendamentoParaCancelar] = useState<Agendamento | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [agendamentoParaDetalhes, setAgendamentoParaDetalhes] = useState<Agendamento | null>(null);
+  const [detalhesModalOpen, setDetalhesModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const mostrarToast = (mensagem: string) => {
@@ -30,9 +36,13 @@ export function AgendamentosPage() {
   };
 
   const handleConfirmarCancelamento = (agendamentoId: string) => {
-    setAgendamentos((current) =>
-      current.map((item) => (item.id === agendamentoId ? { ...item, status: 'cancelado' } : item)),
-    );
+    setAgendamentos((current) => {
+      const updated = current.map((item) =>
+        item.id === agendamentoId ? { ...item, status: 'cancelado' as const } : item,
+      );
+      saveAgendamentosStorage(updated);
+      return updated;
+    });
     mostrarToast('Agendamento cancelado com sucesso.');
   };
 
@@ -161,18 +171,31 @@ export function AgendamentosPage() {
               <AgendamentoCard
                 key={agendamento.id}
                 agendamento={agendamento}
+                onDetalhesClick={(item) => {
+                  setAgendamentoParaDetalhes(item);
+                  setDetalhesModalOpen(true);
+                }}
                 onCancelarClick={(item) => {
                   setAgendamentoParaCancelar(item);
                   setModalOpen(true);
                 }}
-                onReagendarClick={(item) =>
-                  mostrarToast(`Iniciando reagendamento para ${item.servicoNome}...`)
-                }
+                onReagendarClick={(item) => navigate(`/agendamentos/reagendar/${item.id}`)}
               />
             ))}
           </div>
         )}
       </section>
+
+      <AgendamentoDetalhesModal
+        agendamento={agendamentoParaDetalhes}
+        isOpen={detalhesModalOpen}
+        onClose={() => setDetalhesModalOpen(false)}
+        onCancelarClick={(item) => {
+          setAgendamentoParaCancelar(item);
+          setModalOpen(true);
+        }}
+        onReagendarClick={(item) => navigate(`/agendamentos/reagendar/${item.id}`)}
+      />
 
       <CancelModal
         agendamento={agendamentoParaCancelar}

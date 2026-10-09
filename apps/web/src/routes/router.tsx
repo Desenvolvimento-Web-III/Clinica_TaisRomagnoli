@@ -1,5 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AgendamentosPage } from '@/pages/AgendamentosPage';
+import { AgendamentoFlowPage } from '@/pages/AgendamentoFlowPage';
+import { ReagendamentoPage } from '@/pages/ReagendamentoPage';
 import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
@@ -7,6 +9,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
+import { FichaAnamnesePage } from '@/pages/FichaAnamnesePage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
 import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
@@ -21,6 +24,22 @@ export const router = createBrowserRouter([
   {
     path: '/agendamentos',
     element: <AgendamentosPage />,
+  },
+  {
+    path: '/agendar/:serviceId',
+    element: <AgendamentoFlowPage />,
+  },
+  {
+    path: '/agendar',
+    element: <AgendamentoFlowPage />,
+  },
+  {
+    path: '/agendamentos/reagendar/:id',
+    element: <ReagendamentoPage />,
+  },
+  {
+    path: '/agendamentos/reagendar',
+    element: <ReagendamentoPage />,
   },
   {
     path: '/servicos',
@@ -71,6 +90,10 @@ export const router = createBrowserRouter([
         </AdminRoute>
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/anamnese',
+    element: <FichaAnamnesePage />,
   },
   {
     path: '/admin/clientes/:clientId',
