@@ -1,28 +1,71 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MOCK_AGENDAMENTOS } from '@/features/agendamentos/data/mockAgendamentos';
+import { saveAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
 import { AgendamentosPage } from './AgendamentosPage';
 
+const mockUseOptionalAuth = vi.fn();
+
 vi.mock('@/features/auth/auth-context', () => ({
-  useAuth: () => ({
-    currentUser: { uid: 'user-1', displayName: 'Maria Silva' },
-    isAuthReady: true,
-    logout: vi.fn(),
-  }),
-  useOptionalAuth: () => ({
-    currentUser: { uid: 'user-1', displayName: 'Maria Silva' },
-    isAuthReady: true,
-    logout: vi.fn(),
-  }),
+  useAuth: () => mockUseOptionalAuth(),
+  useOptionalAuth: () => mockUseOptionalAuth(),
 }));
 
 describe('AgendamentosPage', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'user-1', displayName: 'Maria Silva' },
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
   });
 
   const renderPage = () => render(<AgendamentosPage />, { wrapper: MemoryRouter });
 
-  it('renderiza o título da página e a lista de agendamentos', () => {
+  it('exibe lista vazia e botão de login quando não há usuário autenticado', () => {
+    // Mesmo que existam agendamentos salvos de um usuário no navegador
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
+
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: 'Meus Agendamentos' })).toBeInTheDocument();
+    expect(screen.getByTestId('empty-agendamentos-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agendamentos-list')).not.toBeInTheDocument();
+    expect(screen.queryByText('Massagem Relaxante com Óleos')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Entre na sua conta para visualizar e acompanhar os seus agendamentos.'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('empty-login-cta')).toBeInTheDocument();
+  });
+
+  it('exibe lista vazia para usuário autenticado que ainda não possui agendamentos', () => {
+    renderPage();
+
+    expect(screen.getByTestId('empty-agendamentos-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agendamentos-list')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Não existem atendimentos nesta categoria no momento.'),
+    ).toBeInTheDocument();
+  });
+
+  it('não exibe agendamentos pertencentes a outro usuário', () => {
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'outro-usuario');
+
+    renderPage();
+
+    expect(screen.getByTestId('empty-agendamentos-state')).toBeInTheDocument();
+    expect(screen.queryByText('Massagem Relaxante com Óleos')).not.toBeInTheDocument();
+  });
+
+  it('renderiza o título da página e a lista de agendamentos do cliente autenticado', () => {
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
     renderPage();
 
     expect(screen.getByRole('heading', { name: 'Meus Agendamentos' })).toBeInTheDocument();
@@ -34,6 +77,7 @@ describe('AgendamentosPage', () => {
   });
 
   it('filtra agendamentos ao selecionar a aba de status', () => {
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
     renderPage();
 
     // Clica na aba 'Confirmados'
@@ -52,6 +96,7 @@ describe('AgendamentosPage', () => {
   });
 
   it('abre o modal de cancelamento e altera o status após confirmação', () => {
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
     renderPage();
 
     // Clica no primeiro botão de Cancelar (Massagem Relaxante com Óleos)
@@ -94,6 +139,7 @@ describe('AgendamentosPage', () => {
   });
 
   it('abre o modal de detalhes e exibe serviço, data, horário, pagamento, saldo e situação atual', () => {
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
     renderPage();
 
     // Clica no botão "Ver detalhes" do primeiro agendamento (Massagem Relaxante com Óleos)

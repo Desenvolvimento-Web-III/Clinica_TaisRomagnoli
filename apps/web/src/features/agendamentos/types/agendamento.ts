@@ -2,6 +2,7 @@ export type StatusAgendamento = 'confirmado' | 'pendente' | 'concluido' | 'cance
 
 export interface Agendamento {
   id: string;
+  clienteId?: string;
   servicoNome: string;
   servicoCategoria: string;
   duracaoMinutos: number;

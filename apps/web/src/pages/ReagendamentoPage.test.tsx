@@ -1,5 +1,7 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MOCK_AGENDAMENTOS } from '@/features/agendamentos/data/mockAgendamentos';
+import { saveAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
 import { ReagendamentoPage } from './ReagendamentoPage';
 
 vi.mock('@/features/auth/auth-context', () => ({
@@ -17,6 +19,8 @@ vi.mock('@/features/auth/auth-context', () => ({
 
 describe('ReagendamentoPage', () => {
   beforeEach(() => {
+    localStorage.clear();
+    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 

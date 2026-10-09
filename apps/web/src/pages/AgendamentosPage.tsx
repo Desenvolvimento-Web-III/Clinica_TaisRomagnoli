@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
+import { useOptionalAuth } from '@/features/auth/auth-context';
 import { AgendamentoCard } from '@/features/agendamentos/components/AgendamentoCard';
 import { AgendamentoDetalhesModal } from '@/features/agendamentos/components/AgendamentoDetalhesModal';
 import { CancelModal } from '@/features/agendamentos/components/CancelModal';
@@ -21,8 +22,21 @@ const tabs: ReadonlyArray<{ id: FiltroTab; label: string }> = [
 ];
 
 export function AgendamentosPage() {
+  const auth = useOptionalAuth();
+  const userId = auth?.currentUser?.uid ?? null;
+
+  return <AgendamentosPageContent key={userId ?? 'guest'} userId={userId} />;
+}
+
+interface AgendamentosPageContentProps {
+  userId: string | null;
+}
+
+function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
   const navigate = useNavigate();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() => getAgendamentosStorage());
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() =>
+    getAgendamentosStorage(userId),
+  );
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroTab>('todos');
   const [agendamentoParaCancelar, setAgendamentoParaCancelar] = useState<Agendamento | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -40,7 +54,7 @@ export function AgendamentosPage() {
       const updated = current.map((item) =>
         item.id === agendamentoId ? { ...item, status: 'cancelado' as const } : item,
       );
-      saveAgendamentosStorage(updated);
+      saveAgendamentosStorage(updated, userId);
       return updated;
     });
     mostrarToast('Agendamento cancelado com sucesso.');
@@ -162,8 +176,20 @@ export function AgendamentosPage() {
             </div>
             <h3 className="mt-4 text-base/6 font-semibold">Nenhum agendamento encontrado</h3>
             <p className="mt-2 max-w-sm text-sm/5 text-[var(--color-text-secondary)]">
-              Não existem atendimentos nesta categoria no momento.
+              {userId
+                ? 'Não existem atendimentos nesta categoria no momento.'
+                : 'Entre na sua conta para visualizar e acompanhar os seus agendamentos.'}
             </p>
+            {!userId && (
+              <button
+                type="button"
+                data-testid="empty-login-cta"
+                onClick={() => navigate('/login')}
+                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-brand-deep)]"
+              >
+                Entrar na conta
+              </button>
+            )}
           </div>
         ) : (
           <div data-testid="agendamentos-list" className="grid gap-5 lg:grid-cols-2">

@@ -125,6 +125,7 @@ export function AgendamentoFlowPage() {
 
     const novo: Agendamento = {
       id: generateAppointmentId(),
+      clienteId: currentUser?.uid,
       servicoNome: servicoAtual.name,
       servicoCategoria: 'Massoterapia',
       duracaoMinutos: servicoAtual.durationMinutes,
@@ -141,7 +142,7 @@ export function AgendamentoFlowPage() {
       observacao: `Agendado via aplicativo por ${nomeCliente}. Método: ${metodoPagamento.toUpperCase()}.`,
     };
 
-    addAgendamentoStorage(novo);
+    addAgendamentoStorage(novo, currentUser?.uid);
     setNovoAgendamentoCriado(novo);
     setStep('concluido');
   };
