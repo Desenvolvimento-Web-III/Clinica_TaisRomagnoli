@@ -20,6 +20,9 @@ describe('AdminDashboardPage', () => {
         displayName: 'Tais Romagnoli',
         email: 'admin@clinicataisromagnoli.com.br',
       } as unknown as User,
+      isAuthenticated: true,
+      isLoading: false,
+      status: 'authenticated',
       isAuthReady: true,
       isAdmin: true,
       role: 'admin',
@@ -95,6 +98,42 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('heading', { name: /serviços e procedimentos/i })).toBeInTheDocument();
     expect(screen.getByText('Massagem com Pedras Quentes')).toBeInTheDocument();
     expect(screen.getAllByText(/ativo/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /novo serviço/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /editar/i }).length).toBeGreaterThan(0);
+  });
+
+  it('permite abrir o modal de cadastro através do botão Novo Serviço', () => {
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole('tab', { name: /serviços/i }));
+
+    const btnNovo = screen.getByRole('button', { name: /novo serviço/i });
+    fireEvent.click(btnNovo);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Cadastrar Novo Serviço')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cadastrar serviço/i })).toBeInTheDocument();
+
+    // Fecha o modal
+    const btnCancelar = screen.getByRole('button', { name: /cancelar/i });
+    fireEvent.click(btnCancelar);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('permite abrir o modal de edição pré-preenchido ao clicar em Editar', () => {
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole('tab', { name: /serviços/i }));
+
+    const botoesEditar = screen.getAllByRole('button', { name: /editar/i });
+    expect(botoesEditar.length).toBeGreaterThan(0);
+    fireEvent.click(botoesEditar[0]!);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Editar Serviço')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nome do Serviço/i)).toHaveValue('Massagem Relaxante');
+    expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeInTheDocument();
   });
 
   it('permite alternar para a aba Relatórios e exibe os 8 indicadores previstos', () => {

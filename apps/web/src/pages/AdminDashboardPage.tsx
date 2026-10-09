@@ -1,10 +1,17 @@
-import { useState, useId } from 'react';
+import { useEffect, useState, useId } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useAuth } from '@/features/auth/auth-context';
 import { getUserDisplayName } from '@/features/auth/user-display';
 import { AdminNav } from '@/features/admin-dashboard/components/AdminNav';
 import type { AdminSection } from '@/features/admin-dashboard/types';
+import { AdminServiceFormModal } from '@/features/services/components/AdminServiceFormModal';
+import {
+  saveServiceToFirestore,
+  subscribeToServicesFromFirestore,
+  type UpsertServiceInput,
+} from '@/features/services/service-firestore-repository';
+import type { Service } from '@/features/services/types';
 
 interface AgendamentoDemo {
   id: string;
@@ -109,52 +116,110 @@ const CLIENTES_DEMO: ClienteDemo[] = [
   },
 ];
 
-interface ServicoDemo {
-  id: string;
-  nome: string;
-  duracao: string;
-  preco: number;
-  categoria: string;
-}
-
-const SERVICOS_DEMO: ServicoDemo[] = [
-  { id: 'srv-1', nome: 'Massagem Relaxante', duracao: '60 min', preco: 150, categoria: 'Corporal' },
+const SERVICOS_INICIAIS: Service[] = [
+  {
+    id: 'srv-1',
+    name: 'Massagem Relaxante',
+    description: 'Massagem suave com movimentos fluidos para alívio de estresse.',
+    durationMinutes: 60,
+    priceInCents: 15000,
+    sinalPercentual: 30,
+    sinalInCents: 4500,
+    category: 'Corporal',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Massagem Relaxante',
+  },
   {
     id: 'srv-2',
-    nome: 'Massagem com Pedras Quentes',
-    duracao: '90 min',
-    preco: 200,
-    categoria: 'Termoterapia',
+    name: 'Massagem com Pedras Quentes',
+    description: 'Termoterapia com pedras vulcânicas aquecidas para relaxamento profundo.',
+    durationMinutes: 90,
+    priceInCents: 20000,
+    sinalPercentual: 30,
+    sinalInCents: 6000,
+    category: 'Termoterapia',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Massagem com Pedras Quentes',
   },
   {
     id: 'srv-3',
-    nome: 'Drenagem Linfática',
-    duracao: '60 min',
-    preco: 160,
-    categoria: 'Estética/Saúde',
+    name: 'Drenagem Linfática',
+    description: 'Massagem manual suave para diminuir edemas e retenção de líquidos.',
+    durationMinutes: 60,
+    priceInCents: 16000,
+    sinalPercentual: 30,
+    sinalInCents: 4800,
+    category: 'Estética/Saúde',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Drenagem Linfática',
   },
   {
     id: 'srv-4',
-    nome: 'Liberação Miofascial',
-    duracao: '60 min',
-    preco: 170,
-    categoria: 'Terapêutica',
+    name: 'Liberação Miofascial',
+    description: 'Terapia manual profunda para alívio de pontos-gatilho e tensões.',
+    durationMinutes: 60,
+    priceInCents: 17000,
+    sinalPercentual: 30,
+    sinalInCents: 5100,
+    category: 'Terapêutica',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Liberação Miofascial',
   },
-  { id: 'srv-5', nome: 'Aromaterapia', duracao: '60 min', preco: 140, categoria: 'Holística' },
-  { id: 'srv-6', nome: 'Reflexologia Podal', duracao: '45 min', preco: 120, categoria: 'Podal' },
+  {
+    id: 'srv-5',
+    name: 'Aromaterapia',
+    description: 'Aplicação de óleos essenciais terapêuticos com massagem suave.',
+    durationMinutes: 60,
+    priceInCents: 14000,
+    sinalPercentual: 30,
+    sinalInCents: 4200,
+    category: 'Holística',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Aromaterapia',
+  },
+  {
+    id: 'srv-6',
+    name: 'Reflexologia Podal',
+    description: 'Pressão em zonas reflexas dos pés para equilíbrio do organismo.',
+    durationMinutes: 45,
+    priceInCents: 12000,
+    sinalPercentual: 30,
+    sinalInCents: 3600,
+    category: 'Podal',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Reflexologia Podal',
+  },
   {
     id: 'srv-7',
-    nome: 'Shiatsu Tradicional',
-    duracao: '60 min',
-    preco: 180,
-    categoria: 'Oriental',
+    name: 'Shiatsu Tradicional',
+    description: 'Terapia oriental de pressão digital ao longo dos meridianos corporais.',
+    durationMinutes: 60,
+    priceInCents: 18000,
+    sinalPercentual: 30,
+    sinalInCents: 5400,
+    category: 'Oriental',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Shiatsu Tradicional',
   },
   {
     id: 'srv-8',
-    nome: 'Reiki & Terapia Energética',
-    duracao: '50 min',
-    preco: 130,
-    categoria: 'Energética',
+    name: 'Reiki & Terapia Energética',
+    description: 'Harmonização bioenergética suave para equilíbrio e serenidade.',
+    durationMinutes: 50,
+    priceInCents: 13000,
+    sinalPercentual: 30,
+    sinalInCents: 3900,
+    category: 'Energética',
+    active: true,
+    imageSrc: '',
+    imageAlt: 'Reiki & Terapia Energética',
   },
 ];
 
@@ -181,6 +246,56 @@ export function AdminDashboardPage() {
   const [activeSection, setActiveSection] = useState<AdminSection>(resolvedSection);
   const [buscaCliente, setBuscaCliente] = useState('');
   const [modalPresencialAberto, setModalPresencialAberto] = useState(false);
+
+  // Estados de Gerenciamento de Serviços
+  const [servicos, setServicos] = useState<Service[]>(SERVICOS_INICIAIS);
+  const [modalServicoAberto, setModalServicoAberto] = useState(false);
+  const [servicoParaEdicao, setServicoParaEdicao] = useState<Service | null>(null);
+  const [feedbackServico, setFeedbackServico] = useState<{
+    tipo: 'sucesso' | 'erro';
+    texto: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToServicesFromFirestore(
+      (novosServicos) => {
+        if (novosServicos && novosServicos.length > 0) {
+          setServicos(novosServicos);
+        }
+      },
+      undefined,
+      false,
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleAbrirModalCadastro = () => {
+    setServicoParaEdicao(null);
+    setModalServicoAberto(true);
+  };
+
+  const handleAbrirModalEdicao = (servico: Service) => {
+    setServicoParaEdicao(servico);
+    setModalServicoAberto(true);
+  };
+
+  const handleSalvarServico = async (input: UpsertServiceInput) => {
+    const salvo = await saveServiceToFirestore(input);
+    setServicos((prev) => {
+      const idx = prev.findIndex((s) => s.id === salvo.id);
+      if (idx >= 0) {
+        const atualizados = [...prev];
+        atualizados[idx] = salvo;
+        return atualizados;
+      }
+      return [salvo, ...prev];
+    });
+    setFeedbackServico({
+      tipo: 'sucesso',
+      texto: `Procedimento "${salvo.name}" ${input.id ? 'atualizado' : 'cadastrado'} com sucesso!`,
+    });
+  };
 
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -471,51 +586,157 @@ export function AdminDashboardPage() {
             aria-labelledby="admin-tab-servicos"
             className="space-y-6"
           >
+            {feedbackServico && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-sm"
+              >
+                <span>{feedbackServico.texto}</span>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackServico(null)}
+                  className="ml-4 text-xs font-bold text-emerald-700 hover:text-emerald-950"
+                >
+                  Fechar
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-2xl">
                   Serviços e Procedimentos
                 </h1>
                 <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  Catálogo administrativo dos procedimentos com valores, durações e status ativo.
+                  Catálogo administrativo dos procedimentos com valores, durações, sinal de reserva
+                  e edição completa.
                 </p>
               </div>
 
-              <Link
-                to="/servicos"
-                className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-2 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)]"
-              >
-                <span>Visualizar como Cliente</span>
-              </Link>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleAbrirModalCadastro}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-brand-dark)]"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  <span>Novo Serviço</span>
+                </button>
+
+                <Link
+                  to="/servicos"
+                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-2 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)]"
+                >
+                  <span>Visualizar como Cliente</span>
+                </Link>
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {SERVICOS_DEMO.map((servico) => (
-                <div
-                  key={servico.id}
-                  className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="rounded-md bg-[var(--color-brand-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-brand-deep)]">
-                      {servico.categoria}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Ativo
-                    </span>
-                  </div>
+              {servicos.map((servico) => {
+                const precoEmReais = servico.priceInCents / 100;
+                const sinalEmReais =
+                  (servico.sinalInCents ?? Math.round(servico.priceInCents * 0.3)) / 100;
+                const percentualSinal =
+                  servico.sinalPercentual ??
+                  (precoEmReais > 0 ? Math.round((sinalEmReais / precoEmReais) * 100) : 30);
 
-                  <h3 className="mt-3 font-bold text-[var(--color-text-primary)]">
-                    {servico.nome}
-                  </h3>
-                  <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border-default)] pt-3 text-sm">
-                    <span className="text-[var(--color-text-secondary)]">{servico.duracao}</span>
-                    <strong className="text-base text-[var(--color-brand-deep)]">
-                      R$ {servico.preco.toFixed(2).replace('.', ',')}
-                    </strong>
+                return (
+                  <div
+                    key={servico.id}
+                    className="flex flex-col justify-between rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="rounded-md bg-[var(--color-brand-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-brand-deep)]">
+                          {servico.category || 'Corporal'}
+                        </span>
+                        {servico.active ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Ativo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">
+                            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+                            Inativo
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="mt-3 font-bold text-[var(--color-text-primary)]">
+                        {servico.name}
+                      </h3>
+
+                      {servico.description && (
+                        <p className="mt-1.5 text-xs text-[var(--color-text-secondary)] line-clamp-2">
+                          {servico.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 border-t border-[var(--color-border-default)] pt-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-[var(--color-text-secondary)]">
+                          {servico.durationMinutes} min
+                        </span>
+                        <strong className="text-base text-[var(--color-brand-deep)]">
+                          R$ {precoEmReais.toFixed(2).replace('.', ',')}
+                        </strong>
+                      </div>
+
+                      {/* Sinal de Reserva */}
+                      <div className="mt-2 flex items-center justify-between rounded-lg bg-[var(--color-canvas-neutral)] px-2.5 py-1.5 text-xs">
+                        <span className="text-[var(--color-text-secondary)]">
+                          Sinal de reserva:
+                        </span>
+                        <span className="font-semibold text-[var(--color-brand-deep)]">
+                          R$ {sinalEmReais.toFixed(2).replace('.', ',')} ({percentualSinal}%)
+                        </span>
+                      </div>
+
+                      {/* Ações */}
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirModalEdicao(servico)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-default)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)]"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                            />
+                          </svg>
+                          <span>Editar</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -784,10 +1005,10 @@ export function AdminDashboardPage() {
                 <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
                   Procedimento
                 </label>
-                <select className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] px-3 py-2 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none">
-                  {SERVICOS_DEMO.map((s) => (
+                <select className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] px-3 py-2 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden">
+                  {servicos.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.nome} — R$ {s.preco},00
+                      {s.name} — R$ {(s.priceInCents / 100).toFixed(2).replace('.', ',')}
                     </option>
                   ))}
                 </select>
@@ -812,6 +1033,14 @@ export function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Cadastro e Edição de Serviços */}
+      <AdminServiceFormModal
+        isOpen={modalServicoAberto}
+        onClose={() => setModalServicoAberto(false)}
+        serviceToEdit={servicoParaEdicao}
+        onSave={handleSalvarServico}
+      />
     </div>
   );
 }

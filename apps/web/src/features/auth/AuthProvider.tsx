@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getIdTokenResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { AuthContext } from './auth-context';
+import { AuthContext, type AuthStatus, type AuthenticatedState } from './auth-context';
 import { auth } from '@/lib/firebase';
 import { isAdministratorEmail } from '@/routes/admin-access';
 import type { UserRole } from '@/types/user';
@@ -69,9 +69,37 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     setRole(null);
   }, []);
 
-  const value = useMemo(
-    () => ({ currentUser, isAuthReady, isAdmin, role, logout, refreshRole }),
-    [currentUser, isAuthReady, isAdmin, role, logout, refreshRole],
+  const isAuthenticated = Boolean(currentUser);
+  const isLoading = !isAuthReady;
+  const status: AuthStatus = !isAuthReady
+    ? 'loading'
+    : currentUser
+      ? 'authenticated'
+      : 'unauthenticated';
+
+  const value: AuthenticatedState = useMemo(
+    () => ({
+      currentUser,
+      isAuthenticated,
+      isAuthReady,
+      isLoading,
+      status,
+      isAdmin,
+      role,
+      logout,
+      refreshRole,
+    }),
+    [
+      currentUser,
+      isAuthenticated,
+      isAuthReady,
+      isLoading,
+      status,
+      isAdmin,
+      role,
+      logout,
+      refreshRole,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

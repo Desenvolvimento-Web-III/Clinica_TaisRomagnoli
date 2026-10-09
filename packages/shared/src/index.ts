@@ -33,3 +33,14 @@ export type {
   HorariosFuncionamento,
   SalvarHorariosInput,
 } from './schemas/horarios-funcionamento.js';
+
+export {
+  servicoInputSchema,
+  PERCENTUAL_SINAL_PADRAO,
+  calcularSinal,
+  calcularPercentualSinal,
+  reaisParaCentavos,
+  centavosParaReais,
+} from './schemas/servico.js';
+
+export type { ServicoInput, ServicoModel } from './schemas/servico.js';

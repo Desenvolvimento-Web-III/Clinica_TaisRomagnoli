@@ -19,7 +19,10 @@ export function ProtectedRoute({
   const location = useLocation();
 
   const isAuthReady = isLoading !== undefined ? !isLoading : (authContext?.isAuthReady ?? true);
-  const user = isAuthenticated !== undefined ? isAuthenticated : Boolean(authContext?.currentUser);
+  const user =
+    isAuthenticated !== undefined
+      ? isAuthenticated
+      : (authContext?.isAuthenticated ?? Boolean(authContext?.currentUser));
 
   if (!isAuthReady) {
     return (

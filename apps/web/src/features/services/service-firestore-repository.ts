@@ -1,4 +1,4 @@
-import { collection, getDocs, onSnapshot, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, setDoc, type Firestore } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { serviceCatalog } from './catalog';
 import type { Service } from './types';
@@ -161,10 +161,17 @@ export interface FirestoreServiceData {
   priceInCents?: number | string;
   preco?: number | string;
   precoCentavos?: number | string;
+  sinal?: number | string;
+  sinalCentavos?: number | string;
+  sinalInCents?: number | string;
+  sinalPercentual?: number | string;
+  categoria?: string;
+  category?: string;
   active?: boolean;
   ativo?: boolean;
   imageAlt?: string;
   createdAt?: unknown;
+  updatedAt?: unknown;
 }
 
 /**
@@ -188,6 +195,31 @@ export function mapFirestoreDocToService(id: string, data: FirestoreServiceData)
     priceInCents = Number.isNaN(parsed) ? 12000 : Math.round(parsed * 100);
   }
 
+  let sinalPercentual: number | undefined =
+    data.sinalPercentual !== undefined && data.sinalPercentual !== null
+      ? Number(data.sinalPercentual)
+      : undefined;
+
+  let sinalInCents: number | undefined =
+    data.sinalInCents !== undefined && data.sinalInCents !== null
+      ? Number(data.sinalInCents)
+      : data.sinalCentavos !== undefined && data.sinalCentavos !== null
+        ? Number(data.sinalCentavos)
+        : data.sinal !== undefined && data.sinal !== null
+          ? Math.round(Number(data.sinal) * 100)
+          : undefined;
+
+  if (sinalInCents === undefined && sinalPercentual !== undefined) {
+    sinalInCents = Math.round(priceInCents * (sinalPercentual / 100));
+  } else if (sinalInCents === undefined) {
+    sinalPercentual = 30;
+    sinalInCents = Math.round(priceInCents * 0.3);
+  } else if (sinalPercentual === undefined && priceInCents > 0) {
+    sinalPercentual = Math.min(100, Math.round((sinalInCents / priceInCents) * 100));
+  }
+
+  const category = data.categoria || data.category || 'Corporal';
+
   const active =
     data.active !== undefined
       ? Boolean(data.active)
@@ -204,6 +236,9 @@ export function mapFirestoreDocToService(id: string, data: FirestoreServiceData)
     description,
     durationMinutes,
     priceInCents,
+    sinalPercentual,
+    sinalInCents,
+    category,
     imageSrc,
     imageAlt,
     active,
@@ -215,23 +250,26 @@ export function mapFirestoreDocToService(id: string, data: FirestoreServiceData)
  */
 export async function fetchServicesFromFirestore(
   customDb: Firestore | null = db,
+  onlyActive: boolean = true,
 ): Promise<Service[]> {
   if (!customDb) {
-    return [...serviceCatalog];
+    return onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog];
   }
 
   try {
     const snapshot = await getDocs(collection(customDb, 'servicos'));
 
     if (snapshot.empty) {
-      return [...serviceCatalog];
+      return onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog];
     }
 
-    return snapshot.docs
-      .map((doc) => mapFirestoreDocToService(doc.id, doc.data() as FirestoreServiceData))
-      .filter((service) => service.active);
+    const mapped = snapshot.docs.map((doc) =>
+      mapFirestoreDocToService(doc.id, doc.data() as FirestoreServiceData),
+    );
+
+    return onlyActive ? mapped.filter((service) => service.active) : mapped;
   } catch {
-    return [...serviceCatalog];
+    return onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog];
   }
 }
 
@@ -241,9 +279,10 @@ export async function fetchServicesFromFirestore(
 export function subscribeToServicesFromFirestore(
   onUpdate: (services: Service[]) => void,
   customDb: Firestore | null = db,
+  onlyActive: boolean = true,
 ): () => void {
   if (!customDb) {
-    onUpdate([...serviceCatalog]);
+    onUpdate(onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog]);
     return () => {};
   }
 
@@ -253,24 +292,106 @@ export function subscribeToServicesFromFirestore(
       colRef,
       (snapshot) => {
         if (snapshot.empty) {
-          onUpdate([...serviceCatalog]);
+          onUpdate(onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog]);
           return;
         }
 
-        const services = snapshot.docs
-          .map((doc) => mapFirestoreDocToService(doc.id, doc.data() as FirestoreServiceData))
-          .filter((service) => service.active);
+        const mapped = snapshot.docs.map((doc) =>
+          mapFirestoreDocToService(doc.id, doc.data() as FirestoreServiceData),
+        );
 
-        onUpdate(services.length > 0 ? services : [...serviceCatalog]);
+        const filtered = onlyActive ? mapped.filter((service) => service.active) : mapped;
+        onUpdate(filtered.length > 0 ? filtered : [...serviceCatalog]);
       },
       () => {
-        onUpdate([...serviceCatalog]);
+        onUpdate(onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog]);
       },
     );
 
     return unsubscribe;
   } catch {
-    onUpdate([...serviceCatalog]);
+    onUpdate(onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog]);
     return () => {};
   }
+}
+
+export interface UpsertServiceInput {
+  id?: string;
+  nome: string;
+  duracaoMinutos: number;
+  preco: number;
+  sinal?: number;
+  sinalPercentual?: number;
+  descricao: string;
+  ativo?: boolean;
+  categoria?: string;
+}
+
+/**
+ * Gera um identificador simples seguro para o documento a partir do nome do serviço.
+ */
+function slugifyService(nome: string): string {
+  return (
+    nome
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'servico'
+  );
+}
+
+/**
+ * Salva ou atualiza um serviço no Firestore (ou em memória em modo demo/teste).
+ */
+export async function saveServiceToFirestore(
+  input: UpsertServiceInput,
+  customDb: Firestore | null = db,
+): Promise<Service> {
+  const serviceId =
+    input.id && input.id.trim().length > 0
+      ? input.id.trim()
+      : `${slugifyService(input.nome)}-${Date.now().toString(36)}`;
+
+  const precoCentavos = Math.round(input.preco * 100);
+  const sinalPercentual =
+    input.sinalPercentual !== undefined
+      ? input.sinalPercentual
+      : input.sinal !== undefined && input.preco > 0
+        ? Math.round((input.sinal / input.preco) * 100)
+        : 30;
+
+  const sinalCentavos =
+    input.sinal !== undefined
+      ? Math.round(input.sinal * 100)
+      : Math.round(precoCentavos * (sinalPercentual / 100));
+
+  const firestoreData: FirestoreServiceData = {
+    nome: input.nome,
+    name: input.nome,
+    descricao: input.descricao,
+    description: input.descricao,
+    duracao: input.duracaoMinutos,
+    durationMinutes: input.duracaoMinutos,
+    preco: input.preco,
+    precoCentavos,
+    priceInCents: precoCentavos,
+    sinal: input.sinal !== undefined ? input.sinal : sinalCentavos / 100,
+    sinalCentavos,
+    sinalInCents: sinalCentavos,
+    sinalPercentual,
+    ativo: input.ativo !== undefined ? input.ativo : true,
+    active: input.ativo !== undefined ? input.ativo : true,
+    categoria: input.categoria || 'Corporal',
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (!customDb) {
+    return mapFirestoreDocToService(serviceId, firestoreData);
+  }
+
+  const docRef = doc(customDb, 'servicos', serviceId);
+  await setDoc(docRef, firestoreData, { merge: true });
+
+  return mapFirestoreDocToService(serviceId, firestoreData);
 }
