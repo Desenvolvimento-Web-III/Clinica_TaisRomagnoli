@@ -5,6 +5,13 @@ export type MetodoPagamento = 'pix' | 'cartao' | 'boleto' | 'dinheiro' | 'presen
 
 export type OrigemAgendamento = 'app_cliente' | 'presencial_admin';
 
+/**
+ * Classificação do cancelamento conforme a antecedência mínima estabelecida (3 horas).
+ * - 'no_prazo': Solicitado com 3 horas ou mais de antecedência. Sinal liberado para reutilização em novo agendamento. Sem estorno em dinheiro.
+ * - 'tardio': Solicitado com menos de 3 horas de antecedência ou após o início. Retenção e perda integral do sinal.
+ */
+export type ClassificacaoCancelamento = 'no_prazo' | 'tardio';
+
 export interface Agendamento {
   id: string;
   clienteId: string;
@@ -30,6 +37,10 @@ export interface Agendamento {
   canceladoEm?: string;
   motivoCancelamento?: string;
   sinalRetido?: boolean;
+  classificacaoCancelamento?: ClassificacaoCancelamento;
+  tipoCancelamento?: ClassificacaoCancelamento;
+  sinalDisponivelReagendamento?: boolean;
+  antecedenciaCancelamentoHoras?: number;
   createdAt: string;
   updatedAt: string;
 }
