@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ClassificacaoCancelamento } from '../types/agendamento.js';
 
 export const statusAgendamentoSchema = z.enum([
   'pendente',
@@ -134,27 +135,80 @@ export function verificarConflitoHorarios(
 }
 
 /**
- * Valida se o cancelamento atende a antecedência mínima (padrão de 3 horas)
+ * Antecedência mínima para cancelamento com aproveitamento do sinal (3 horas),
+ * conforme docs/PRODUCT_RULES.md e docs/BRANDBOOK.md.
+ */
+export const ANTECEDENCIA_MINIMA_CANCELAMENTO_HORAS = 3;
+
+/**
+ * Mensagens padronizadas do Brandbook (Seção 12.4 de docs/BRANDBOOK.md)
+ */
+export const MENSAGENS_CANCELAMENTO_BRANDBOOK = {
+  NO_PRAZO: 'Você pode usar o valor do sinal em um novo agendamento.',
+  TARDIO:
+    'Como faltam menos de três horas para a sessão, o valor do sinal não poderá ser reutilizado.',
+} as const;
+
+export interface ResultadoAntecedenciaCancelamento {
+  permitido: boolean;
+  horasRestantes: number;
+  minutosRestantes: number;
+  sinalRetido: boolean;
+  sinalDisponivelReagendamento: boolean;
+  classificacao: ClassificacaoCancelamento;
+  mensagemBrandbook: string;
+}
+
+/**
+ * Valida e classifica o cancelamento conforme a antecedência mínima estabelecida (padrão de 3 horas).
+ *
+ * Regras de Produto:
+ * - Cancelamento com pelo menos 3 horas de antecedência:
+ *   - Classificação: 'no_prazo'
+ *   - sinalRetido: false
+ *   - sinalDisponivelReagendamento: true (o sinal pode ser reaproveitado em novo agendamento, sem estorno em dinheiro)
+ *   - Mensagem: "Você pode usar o valor do sinal em um novo agendamento."
+ *
+ * - Cancelamento com menos de 3 horas de antecedência ou a posteriori:
+ *   - Classificação: 'tardio'
+ *   - sinalRetido: true (perda integral do sinal pago)
+ *   - sinalDisponivelReagendamento: false
+ *   - Mensagem: "Como faltam menos de três horas para a sessão, o valor do sinal não poderá ser reutilizado."
  */
 export function verificarAntecedenciaCancelamento(
   dataHoraInicioIso: string,
-  antecedenciaMinimaHoras = 3,
+  antecedenciaMinimaHoras = ANTECEDENCIA_MINIMA_CANCELAMENTO_HORAS,
   dataReferencia = new Date(),
-): {
-  permitido: boolean;
-  horasRestantes: number;
-  sinalRetido: boolean;
-} {
+): ResultadoAntecedenciaCancelamento {
   const inicioMs = new Date(dataHoraInicioIso).getTime();
   const agoraMs = dataReferencia.getTime();
   const diferencaMs = inicioMs - agoraMs;
   const horasRestantes = Math.floor(diferencaMs / (1000 * 60 * 60));
+  const minutosRestantes = Math.floor(diferencaMs / (1000 * 60));
 
-  const permitido = horasRestantes >= antecedenciaMinimaHoras;
+  const antecedenciaExigidaMs = antecedenciaMinimaHoras * 60 * 60 * 1000;
+  // Considera no prazo quando a antecedência for maior ou igual ao limite em milissegundos
+  const noPrazo = diferencaMs >= antecedenciaExigidaMs;
+
+  const classificacao: ClassificacaoCancelamento = noPrazo ? 'no_prazo' : 'tardio';
+  const sinalRetido = !noPrazo;
+  const sinalDisponivelReagendamento = noPrazo;
+  const mensagemBrandbook = noPrazo
+    ? MENSAGENS_CANCELAMENTO_BRANDBOOK.NO_PRAZO
+    : MENSAGENS_CANCELAMENTO_BRANDBOOK.TARDIO;
 
   return {
-    permitido,
+    permitido: noPrazo,
     horasRestantes,
-    sinalRetido: !permitido, // Se for cancelado com menos de 3h, perde o sinal
+    minutosRestantes,
+    sinalRetido,
+    sinalDisponivelReagendamento,
+    classificacao,
+    mensagemBrandbook,
   };
 }
+
+/**
+ * Alias semântico para classificar um cancelamento conforme a antecedência mínima
+ */
+export const classificarCancelamento = verificarAntecedenciaCancelamento;

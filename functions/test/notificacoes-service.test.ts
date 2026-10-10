@@ -94,7 +94,10 @@ describe('Serviço de Notificações Internas (Backend)', () => {
       expect(notif.titulo).toContain('Agendamento Cancelado: Massagem Relaxante');
       expect(notif.mensagem).toContain('menos de 3 horas de antecedência');
       expect(notif.mensagem).toContain('sinal de 30% foi retido');
+      expect(notif.mensagem).toContain('o valor do sinal não poderá ser reutilizado');
       expect(notif.metadados?.['sinalRetido']).toBe(true);
+      expect(notif.metadados?.['classificacaoCancelamento']).toBe('tardio');
+      expect(notif.metadados?.['sinalDisponivelReagendamento']).toBe(false);
     });
 
     it('cria notificação de cancelamento com aviso de sinal mantido quando cancelado com antecedência (>=3h)', async () => {
@@ -108,7 +111,10 @@ describe('Serviço de Notificações Internas (Backend)', () => {
       expect(notif.evento).toBe('cancelamento');
       expect(notif.mensagem).toContain('antecedência mínima de 3 horas foi respeitada');
       expect(notif.mensagem).toContain('crédito para reagendamento futuro');
+      expect(notif.mensagem).toContain('Você pode usar o valor do sinal em um novo agendamento.');
       expect(notif.metadados?.['sinalRetido']).toBe(false);
+      expect(notif.metadados?.['classificacaoCancelamento']).toBe('no_prazo');
+      expect(notif.metadados?.['sinalDisponivelReagendamento']).toBe(true);
     });
   });
 

@@ -5,6 +5,7 @@ import {
   gerarConteudoAvisoLembrete,
   type Agendamento,
   type NotificacaoInterna,
+  type ClassificacaoCancelamento,
 } from '@clinica/shared';
 import type {
   NotificacoesRepository,
@@ -102,19 +103,25 @@ export async function criarNotificacaoAlteracao(
 
 /**
  * Cria e salva uma notificação de cancelamento com a regra do sinal aplicada
+ * e classificação de antecedência registrada nos metadados
  */
 export async function criarNotificacaoCancelamento(
   agendamento: Agendamento,
   sinalRetido: boolean,
   repo: NotificacoesRepository,
   motivo?: string,
+  classificacao?: ClassificacaoCancelamento,
 ): Promise<NotificacaoInterna> {
+  const classificacaoFinal: ClassificacaoCancelamento =
+    classificacao || agendamento.classificacaoCancelamento || (sinalRetido ? 'tardio' : 'no_prazo');
+
   const conteudo = gerarConteudoAvisoCancelamento({
     clienteNome: agendamento.clienteNome,
     servicoNome: agendamento.servicoNome,
     dataHoraInicio: agendamento.dataHoraInicio,
     sinalRetido,
     motivo,
+    classificacao: classificacaoFinal,
   });
 
   const agora = new Date().toISOString();
@@ -132,6 +139,8 @@ export async function criarNotificacaoCancelamento(
     link: `/agendamentos`,
     metadados: {
       sinalRetido,
+      classificacaoCancelamento: classificacaoFinal,
+      sinalDisponivelReagendamento: !sinalRetido,
       motivo: motivo || undefined,
       valorSinalEmCentavos: agendamento.valorSinalEmCentavos,
     },

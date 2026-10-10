@@ -158,7 +158,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
   });
 
   describe('cancelarAgendamentoExistente', () => {
-    it('cancela agendamento com mais de 3 horas de antecedência liberando o sinal', async () => {
+    it('cancela agendamento com mais de 3 horas de antecedência, liberando o sinal e classificando como no_prazo', async () => {
       const agendamento = await solicitarNovoAgendamento(
         {
           servicoId: 'massagem-relaxante',
@@ -183,11 +183,15 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       expect(cancelado.status).toBe('cancelado');
+      expect(cancelado.classificacaoCancelamento).toBe('no_prazo');
+      expect(cancelado.tipoCancelamento).toBe('no_prazo');
       expect(cancelado.sinalRetido).toBe(false);
+      expect(cancelado.sinalDisponivelReagendamento).toBe(true);
+      expect(cancelado.antecedenciaCancelamentoHoras).toBe(5);
       expect(cancelado.motivoCancelamento).toBe('Imprevisto');
     });
 
-    it('cancela agendamento com menos de 3 horas de antecedência retendo o sinal', async () => {
+    it('cancela agendamento com menos de 3 horas de antecedência, retendo o sinal e classificando como tardio', async () => {
       const agendamento = await solicitarNovoAgendamento(
         {
           servicoId: 'massagem-relaxante',
@@ -212,7 +216,67 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       expect(cancelado.status).toBe('cancelado');
+      expect(cancelado.classificacaoCancelamento).toBe('tardio');
+      expect(cancelado.tipoCancelamento).toBe('tardio');
       expect(cancelado.sinalRetido).toBe(true); // Retém sinal conforme regra de produto
+      expect(cancelado.sinalDisponivelReagendamento).toBe(false);
+      expect(cancelado.antecedenciaCancelamentoHoras).toBe(1);
+    });
+
+    it('cancela agendamento no limite exato de 3 horas classificando como no_prazo', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Cancelamento às 11:00 (exatamente 3 horas antes)
+      const dataReferencia = new Date('2026-10-22T11:00:00.000Z');
+
+      const cancelado = await cancelarAgendamentoExistente(
+        { agendamentoId: agendamento.id, motivo: 'No limite' },
+        clienteUser,
+        repo,
+        dataReferencia,
+      );
+
+      expect(cancelado.status).toBe('cancelado');
+      expect(cancelado.classificacaoCancelamento).toBe('no_prazo');
+      expect(cancelado.sinalRetido).toBe(false);
+      expect(cancelado.sinalDisponivelReagendamento).toBe(true);
+    });
+
+    it('impede cancelamento de agendamento já concluído ou já cancelado', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Primeiro cancelamento com sucesso
+      await cancelarAgendamentoExistente({ agendamentoId: agendamento.id }, clienteUser, repo);
+
+      // Tentativa de segundo cancelamento
+      await expect(
+        cancelarAgendamentoExistente({ agendamentoId: agendamento.id }, clienteUser, repo),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: 'Este agendamento já se encontra cancelado.',
+      });
     });
 
     it('impede que outro cliente cancele agendamento alheio', async () => {
@@ -313,6 +377,46 @@ describe('Agendamentos Service (Functions Backend)', () => {
       expect(notifs).toHaveLength(1);
       expect(notifs[0].evento).toBe('cancelamento');
       expect(notifs[0].mensagem).toContain('crédito para reagendamento futuro');
+      expect(notifs[0].mensagem).toContain(
+        'Você pode usar o valor do sinal em um novo agendamento.',
+      );
+      expect(notifs[0].metadados?.classificacaoCancelamento).toBe('no_prazo');
+      expect(notifs[0].metadados?.sinalDisponivelReagendamento).toBe(true);
+      expect(notifs[0].metadados?.sinalRetido).toBe(false);
+    });
+
+    it('gera notificação interna de cancelamento tardio com metadados e mensagem do Brandbook', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Cancelamento com apenas 1 hora de antecedência (tardio)
+      const dataRef = new Date('2026-10-22T13:00:00.000Z');
+      await cancelarAgendamentoExistente(
+        { agendamentoId: agendamento.id, motivo: 'Imprevisto de última hora' },
+        clienteUser,
+        repo,
+        notifRepo,
+        dataRef,
+      );
+
+      const notifs = await notifRepo.listarPorDestinatario(clienteUser.uid);
+      expect(notifs).toHaveLength(1);
+      expect(notifs[0].evento).toBe('cancelamento');
+      expect(notifs[0].mensagem).toContain('classificado como tardio');
+      expect(notifs[0].mensagem).toContain('o valor do sinal não poderá ser reutilizado');
+      expect(notifs[0].metadados?.classificacaoCancelamento).toBe('tardio');
+      expect(notifs[0].metadados?.sinalRetido).toBe(true);
+      expect(notifs[0].metadados?.sinalDisponivelReagendamento).toBe(false);
     });
   });
 

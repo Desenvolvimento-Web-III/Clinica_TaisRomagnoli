@@ -120,6 +120,31 @@ describe('Schemas e Utilitários de Notificações Internas', () => {
     expect(aviso.titulo).toBe('Agendamento Cancelado: Shiatsu');
     expect(aviso.mensagem).toContain('menos de 3 horas de antecedência');
     expect(aviso.mensagem).toContain('sinal de 30% foi retido');
+    expect(aviso.mensagem).toContain('o valor do sinal não poderá ser reutilizado');
+  });
+
+  it('gera aviso de cancelamento com classificacao explícita e frases padronizadas do Brandbook', () => {
+    const noPrazo = gerarConteudoAvisoCancelamento({
+      clienteNome: 'Mariana',
+      servicoNome: 'Drenagem Linfática',
+      dataHoraInicio: '2026-10-25T14:00:00.000Z',
+      sinalRetido: false,
+      classificacao: 'no_prazo',
+    });
+    expect(noPrazo.mensagem).toContain('classificado no prazo');
+    expect(noPrazo.mensagem).toContain('Você pode usar o valor do sinal em um novo agendamento.');
+
+    const tardio = gerarConteudoAvisoCancelamento({
+      clienteNome: 'Mariana',
+      servicoNome: 'Drenagem Linfática',
+      dataHoraInicio: '2026-10-25T14:00:00.000Z',
+      sinalRetido: true,
+      classificacao: 'tardio',
+    });
+    expect(tardio.mensagem).toContain('classificado como tardio');
+    expect(tardio.mensagem).toContain(
+      'Como faltam menos de três horas para a sessão, o valor do sinal não poderá ser reutilizado.',
+    );
   });
 
   it('gera aviso de lembrete com dicas de bem-estar', () => {

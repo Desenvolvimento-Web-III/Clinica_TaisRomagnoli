@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ClientNotificationType } from '../types/client-notification.js';
+import type { ClassificacaoCancelamento } from '../types/agendamento.js';
 
 export const eventoNotificacaoAgendamentoSchema = z.enum([
   'confirmacao',
@@ -115,6 +116,7 @@ export function gerarConteudoAvisoAlteracao(params: {
 
 /**
  * Gera conteúdo acolhedor e informativo para aviso de Cancelamento com explicitação da regra do sinal
+ * e classificação de antecedência (Brandbook Seção 12.4).
  */
 export function gerarConteudoAvisoCancelamento(params: {
   clienteNome: string;
@@ -122,12 +124,14 @@ export function gerarConteudoAvisoCancelamento(params: {
   dataHoraInicio: string;
   sinalRetido: boolean;
   motivo?: string;
+  classificacao?: ClassificacaoCancelamento;
 }): { titulo: string; mensagem: string; tipo: ClientNotificationType } {
   const dataFormatada = formatarDataHoraNotificacao(params.dataHoraInicio);
+  const isTardio = params.classificacao === 'tardio' || params.sinalRetido;
 
-  const explicacaoSinal = params.sinalRetido
-    ? 'Como a solicitação ocorreu com menos de 3 horas de antecedência mínima, o sinal de 30% foi retido conforme a política da clínica.'
-    : 'Como a antecedência mínima de 3 horas foi respeitada, o valor do seu sinal de 30% permanece disponível como crédito para reagendamento futuro.';
+  const explicacaoSinal = isTardio
+    ? 'Como a solicitação ocorreu com menos de 3 horas de antecedência mínima, o cancelamento foi classificado como tardio e o sinal de 30% foi retido conforme a política da clínica. Como faltam menos de três horas para a sessão, o valor do sinal não poderá ser reutilizado.'
+    : 'Como a antecedência mínima de 3 horas foi respeitada, o cancelamento foi classificado no prazo e o valor do seu sinal de 30% permanece disponível como crédito para reagendamento futuro. Você pode usar o valor do sinal em um novo agendamento.';
 
   const motivoTexto = params.motivo ? ` Motivo informado: "${params.motivo}".` : '';
 

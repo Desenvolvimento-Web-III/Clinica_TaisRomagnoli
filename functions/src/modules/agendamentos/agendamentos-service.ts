@@ -301,6 +301,10 @@ export async function cancelarAgendamentoExistente(
     canceladoEm: dataReferencia.toISOString(),
     motivoCancelamento: parsed.motivo || 'Cancelado pelo cliente',
     sinalRetido: antecedencia.sinalRetido,
+    classificacaoCancelamento: antecedencia.classificacao,
+    tipoCancelamento: antecedencia.classificacao,
+    sinalDisponivelReagendamento: antecedencia.sinalDisponivelReagendamento,
+    antecedenciaCancelamentoHoras: antecedencia.horasRestantes,
     updatedAt: dataReferencia.toISOString(),
   };
 
@@ -312,6 +316,7 @@ export async function cancelarAgendamentoExistente(
       salvo.sinalRetido ?? false,
       notificacoesRepo,
       parsed.motivo,
+      antecedencia.classificacao,
     );
   }
 
