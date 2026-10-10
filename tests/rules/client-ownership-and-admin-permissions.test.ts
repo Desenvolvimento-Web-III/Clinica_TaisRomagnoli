@@ -79,6 +79,56 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
         lida: false,
         createdAt: '2026-09-01T10:00:00Z',
       });
+
+      await adminDb.doc('agendamentos/ag-joao-1').set({
+        id: 'ag-joao-1',
+        clienteId: 'cliente-joao',
+        clienteNome: 'João Silva',
+        clienteEmail: 'joao@exemplo.com',
+        clienteTelefone: '(11)99999-1111',
+        servicoId: 'serv-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 18000,
+        valorSinalEmCentavos: 5400,
+        saldoRestanteEmCentavos: 12600,
+        dataHoraInicio: '2026-10-15T14:00:00Z',
+        dataHoraFim: '2026-10-15T15:00:00Z',
+        intervaloAposMinutos: 30,
+        profissionalId: 'prof-tais-romagnoli',
+        profissionalNome: 'Tais Romagnoli',
+        status: 'confirmado',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-09-01T10:00:00Z',
+        updatedAt: '2026-09-01T10:00:00Z',
+      });
+
+      await adminDb.doc('agendamentos/ag-maria-1').set({
+        id: 'ag-maria-1',
+        clienteId: 'cliente-maria',
+        clienteNome: 'Maria Souza',
+        clienteEmail: 'maria@exemplo.com',
+        clienteTelefone: '(11)98888-2222',
+        servicoId: 'serv-terapeutica',
+        servicoNome: 'Massagem Terapêutica',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 20000,
+        valorSinalEmCentavos: 6000,
+        saldoRestanteEmCentavos: 14000,
+        dataHoraInicio: '2026-10-16T10:00:00Z',
+        dataHoraFim: '2026-10-16T11:00:00Z',
+        intervaloAposMinutos: 30,
+        profissionalId: 'prof-tais-romagnoli',
+        profissionalNome: 'Tais Romagnoli',
+        status: 'confirmado',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-09-02T10:00:00Z',
+        updatedAt: '2026-09-02T10:00:00Z',
+      });
     });
   });
 
@@ -456,6 +506,108 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
 
       // Bloqueia exclusão direta pela administradora
       await assertFails(adminDb.doc('clientes/cliente-joao/notificacoes/notif-1').delete());
+    });
+  });
+
+  describe('Propriedade do Cliente e Permissões de Agendamentos (/agendamentos/{agendamentoId})', () => {
+    it('permite leitura individual (get) para o cliente dono do agendamento', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      await assertSucceeds(ownerDb.doc('agendamentos/ag-joao-1').get());
+    });
+
+    it('bloqueia leitura individual (get) para outro cliente que não seja o titular', async () => {
+      const otherClientDb = testEnvironment
+        .authenticatedContext('cliente-maria', { role: 'cliente' })
+        .firestore();
+
+      await assertFails(otherClientDb.doc('agendamentos/ag-joao-1').get());
+    });
+
+    it('bloqueia leitura individual (get) para visitante não autenticado', async () => {
+      const unauthDb = testEnvironment.unauthenticatedContext().firestore();
+
+      await assertFails(unauthDb.doc('agendamentos/ag-joao-1').get());
+    });
+
+    it('permite consulta/listagem filtrada por clienteId correspondente ao UID autenticado', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      await assertSucceeds(
+        ownerDb.collection('agendamentos').where('clienteId', '==', 'cliente-joao').get(),
+      );
+    });
+
+    it('bloqueia consulta/listagem sem filtro ou filtrando outro cliente', async () => {
+      const clientDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      // Consulta/Listagem geral sem filtro de clienteId
+      await assertFails(clientDb.collection('agendamentos').get());
+
+      // Consulta/Listagem filtrando agendamentos de outro cliente
+      await assertFails(
+        clientDb.collection('agendamentos').where('clienteId', '==', 'cliente-maria').get(),
+      );
+    });
+
+    it('permite que a administradora leia individualmente qualquer agendamento e liste todos sem filtro', async () => {
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+
+      // Leitura individual de agendamentos de clientes distintos
+      await assertSucceeds(adminDb.doc('agendamentos/ag-joao-1').get());
+      await assertSucceeds(adminDb.doc('agendamentos/ag-maria-1').get());
+
+      // Consulta/Listagem geral sem filtros
+      await assertSucceeds(adminDb.collection('agendamentos').get());
+    });
+
+    it('bloqueia escrita direta client-side (create, update, delete) incondicionalmente para clientes e administradora', async () => {
+      const clientDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+
+      // Criação direta (create)
+      await assertFails(
+        clientDb.doc('agendamentos/ag-joao-2').set({
+          clienteId: 'cliente-joao',
+          servicoId: 'serv-relaxante',
+          status: 'confirmado',
+        }),
+      );
+      await assertFails(
+        adminDb.doc('agendamentos/ag-novo-admin').set({
+          clienteId: 'cliente-maria',
+          servicoId: 'serv-relaxante',
+          status: 'confirmado',
+        }),
+      );
+
+      // Atualização direta (update)
+      await assertFails(
+        clientDb.doc('agendamentos/ag-joao-1').update({
+          status: 'cancelado',
+        }),
+      );
+      await assertFails(
+        adminDb.doc('agendamentos/ag-joao-1').update({
+          status: 'cancelado',
+        }),
+      );
+
+      // Exclusão direta (delete)
+      await assertFails(clientDb.doc('agendamentos/ag-joao-1').delete());
+      await assertFails(adminDb.doc('agendamentos/ag-joao-1').delete());
     });
   });
 });

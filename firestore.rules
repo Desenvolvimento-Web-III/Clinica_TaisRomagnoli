@@ -87,6 +87,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Agendamentos de serviços da clínica
+    // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
+    // Escrita direta client-side bloqueada: criação, reagendamento e cancelamento são processados por Cloud Functions
+    match /agendamentos/{agendamentoId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.clienteId == request.auth.uid);
+      allow write: if false;
+    }
+
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado
     match /{document=**} {
       allow read, write: if false;
