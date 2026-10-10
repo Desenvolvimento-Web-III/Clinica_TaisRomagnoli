@@ -2,6 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
+import {
+  ANAMNESE_NOTIFICATION_ID,
+  markClientNotificationAsRead,
+} from '@/features/notifications/notifications-store';
 import { AnamneseRadioGroup } from '@/features/anamnese/components/AnamneseRadioGroup';
 import { BodyRegionSelector } from '@/features/anamnese/components/BodyRegionSelector';
 import { PainScaleSelector } from '@/features/anamnese/components/PainScaleSelector';
@@ -153,6 +157,8 @@ export function FichaAnamnesePage() {
           pontosAtencao: pontos,
         }),
       );
+
+      markClientNotificationAsRead(currentUser?.uid, ANAMNESE_NOTIFICATION_ID);
 
       // Marca seções como concluídas
       setCompletedSections(new Set(['queixa', 'saude', 'habitos', 'consentimento']));

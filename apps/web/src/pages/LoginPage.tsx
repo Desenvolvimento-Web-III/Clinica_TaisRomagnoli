@@ -1,10 +1,11 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { getIdTokenResult, signInWithEmailAndPassword } from 'firebase/auth';
 import { z } from 'zod';
 import { AuthLayout } from '@/components/ui/AuthLayout';
 import { auth } from '@/lib/firebase';
 import { getFirebaseErrorCode } from '@/lib/firebase-error';
+import { isAdministratorEmail } from '@/routes/admin-access';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'O e-mail é obrigatório').email('Insira um e-mail válido'),
@@ -45,6 +46,7 @@ function FieldIcon({ kind }: Readonly<{ kind: 'email' | 'password' }>) {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState<LoginFormData>({ email: '', senha: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -83,8 +85,30 @@ export function LoginPage() {
     setLoading(true);
     try {
       const cleanEmail = formData.email.trim();
-      await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
-      navigate('/agendamentos', { replace: true });
+      const credential = await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
+
+      let isAdmin = isAdministratorEmail(cleanEmail);
+      if (!isAdmin && credential?.user) {
+        try {
+          const tokenResult = await getIdTokenResult(credential.user);
+          isAdmin =
+            tokenResult.claims.role === 'admin' ||
+            tokenResult.claims.admin === true ||
+            isAdministratorEmail(credential.user.email);
+        } catch {
+          // Mantém verificação baseada no email
+        }
+      }
+
+      const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
+
+      if (isAdmin) {
+        const target = fromPath && fromPath.startsWith('/admin') ? fromPath : '/admin';
+        navigate(target, { replace: true });
+      } else {
+        const target = fromPath && fromPath !== '/login' ? fromPath : '/agendamentos';
+        navigate(target, { replace: true });
+      }
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
       if (
@@ -178,9 +202,12 @@ export function LoginPage() {
             >
               Senha
             </label>
-            <span className="text-xs text-[var(--color-text-secondary)]">
-              Mínimo de 6 caracteres
-            </span>
+            <Link
+              to="/recuperar-senha"
+              className="text-xs font-semibold text-[var(--color-brand-deep)] hover:underline"
+            >
+              Esqueceu a senha?
+            </Link>
           </div>
           <div className="relative">
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[var(--color-icon-muted)]">

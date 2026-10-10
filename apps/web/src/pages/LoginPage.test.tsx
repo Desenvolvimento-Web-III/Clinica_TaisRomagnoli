@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import { LoginPage } from './LoginPage';
-import { signInWithEmailAndPassword, type UserCredential } from 'firebase/auth';
+import { signInWithEmailAndPassword, getIdTokenResult, type UserCredential } from 'firebase/auth';
 
 // Mocks do Firebase
 vi.mock('../lib/firebase', () => ({
@@ -11,6 +11,7 @@ vi.mock('../lib/firebase', () => ({
 
 vi.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: vi.fn(),
+  getIdTokenResult: vi.fn(),
 }));
 
 describe('LoginPage', () => {
@@ -98,6 +99,92 @@ describe('LoginPage', () => {
     expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
   });
 
+  it('redireciona para a rota privada de origem preservada em state.from após login bem-sucedido', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
+
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/login', state: { from: { pathname: '/perfil' } } }]}
+      >
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/perfil" element={<p>Página do Perfil Privado</p>} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'cliente@exemplo.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123' } });
+    fireEvent.click(button);
+
+    expect(await screen.findByText('Página do Perfil Privado')).toBeInTheDocument();
+    expect(screen.queryByText('Meus agendamentos')).not.toBeInTheDocument();
+  });
+
+  it('redireciona para /admin quando o login é realizado com o e-mail oficial da administradora', async () => {
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
+      user: { email: 'admin@clinicataisromagnoli.com.br' },
+    } as unknown as UserCredential);
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin" element={<p>Painel Administrativo Principal</p>} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'admin@clinicataisromagnoli.com.br' } });
+    fireEvent.change(senhaInput, { target: { value: 'senhaAdmin123' } });
+    fireEvent.click(button);
+
+    expect(await screen.findByText('Painel Administrativo Principal')).toBeInTheDocument();
+    expect(screen.queryByText('Meus agendamentos')).not.toBeInTheDocument();
+  });
+
+  it('redireciona para /admin quando o login possui claim de admin', async () => {
+    const mockUser = { email: 'outro-admin@clinica.com' };
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
+      user: mockUser,
+    } as unknown as UserCredential);
+
+    vi.mocked(getIdTokenResult).mockResolvedValueOnce({
+      claims: { role: 'admin' },
+    } as unknown as Awaited<ReturnType<typeof getIdTokenResult>>);
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin" element={<p>Painel Administrativo Principal</p>} />
+          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const emailInput = screen.getByLabelText(/e-mail/i);
+    const senhaInput = screen.getByLabelText(/^senha$/i);
+    const button = screen.getByRole('button', { name: /entrar/i });
+
+    fireEvent.change(emailInput, { target: { value: 'outro-admin@clinica.com' } });
+    fireEvent.change(senhaInput, { target: { value: 'senha123456' } });
+    fireEvent.click(button);
+
+    expect(await screen.findByText('Painel Administrativo Principal')).toBeInTheDocument();
+    expect(screen.queryByText('Meus agendamentos')).not.toBeInTheDocument();
+  });
+
   it('remove espaços em branco acidentais no início e fim do e-mail ao submeter', async () => {
     vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
 
@@ -177,5 +264,13 @@ describe('LoginPage', () => {
         'Falha de conexão com o servidor. Verifique sua conexão com a internet e tente novamente.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('exibe link para recuperação de senha apontando para /recuperar-senha', () => {
+    renderWithRouter(<LoginPage />);
+
+    const forgotPasswordLink = screen.getByRole('link', { name: /esqueceu a senha\?/i });
+    expect(forgotPasswordLink).toBeInTheDocument();
+    expect(forgotPasswordLink).toHaveAttribute('href', '/recuperar-senha');
   });
 });

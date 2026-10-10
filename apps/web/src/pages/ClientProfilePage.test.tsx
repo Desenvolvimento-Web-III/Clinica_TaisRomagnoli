@@ -199,4 +199,36 @@ describe('ClientProfilePage', () => {
       await screen.findByText('Perfil e preferências atualizados com sucesso!'),
     ).toBeInTheDocument();
   });
+
+  it('exibe atalhos da conta para agendamentos, notificacoes e encerramento de sessao', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: {
+        uid: 'client-123',
+        displayName: 'Maria Santos',
+        email: 'maria@exemplo.com',
+      },
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    vi.mocked(getDoc).mockResolvedValueOnce({
+      exists: () => false,
+    } as unknown as ReturnType<typeof getDoc> extends Promise<infer U> ? U : never);
+
+    render(
+      <MemoryRouter initialEntries={['/perfil']}>
+        <ClientProfilePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Atalhos da Conta' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /meus agendamentos/i })).toHaveAttribute(
+      'href',
+      '/agendamentos',
+    );
+    const notifLinks = screen.getAllByRole('link', { name: /notificações/i });
+    expect(notifLinks.length).toBeGreaterThanOrEqual(1);
+    expect(notifLinks[0]).toHaveAttribute('href', '/notificacoes');
+    expect(screen.getAllByRole('button', { name: /sair/i }).length).toBeGreaterThanOrEqual(1);
+  });
 });

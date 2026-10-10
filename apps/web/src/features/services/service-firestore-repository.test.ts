@@ -4,6 +4,7 @@ import {
   mapFirestoreDocToService,
   fetchServicesFromFirestore,
   subscribeToServicesFromFirestore,
+  saveServiceToFirestore,
   localServiceImages,
 } from './service-firestore-repository';
 import { serviceCatalog } from './catalog';
@@ -14,10 +15,14 @@ const mockOnSnapshot = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
 const mockWhere = vi.fn();
+const mockDoc = vi.fn();
+const mockSetDoc = vi.fn();
 
 vi.mock('firebase/firestore', () => ({
   getFirestore: vi.fn(() => ({})),
   collection: (...args: unknown[]) => mockCollection(...args),
+  doc: (...args: unknown[]) => mockDoc(...args),
+  setDoc: (...args: unknown[]) => mockSetDoc(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   where: (...args: unknown[]) => mockWhere(...args),
@@ -194,6 +199,84 @@ describe('service-firestore-repository', () => {
         ]),
       );
       expect(typeof unsubscribe).toBe('function');
+    });
+  });
+
+  describe('saveServiceToFirestore', () => {
+    it('salva novo serviço com cálculo automático de sinal e converte valores', async () => {
+      const fakeDb = {} as unknown as Parameters<typeof saveServiceToFirestore>[1];
+      const fakeDocRef = { id: 'srv-novo' };
+      mockDoc.mockReturnValue(fakeDocRef);
+      mockSetDoc.mockResolvedValue(undefined);
+
+      const saved = await saveServiceToFirestore(
+        {
+          nome: 'Massagem Craniana Especial',
+          duracaoMinutos: 45,
+          preco: 120,
+          sinal: 36,
+          descricao: 'Terapia focada no alívio de enxaqueca.',
+          ativo: true,
+          categoria: 'Terapêutica',
+        },
+        fakeDb,
+      );
+
+      expect(mockDoc).toHaveBeenCalled();
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        fakeDocRef,
+        expect.objectContaining({
+          nome: 'Massagem Craniana Especial',
+          duracao: 45,
+          preco: 120,
+          precoCentavos: 12000,
+          sinal: 36,
+          sinalCentavos: 3600,
+          sinalPercentual: 30,
+          ativo: true,
+        }),
+        { merge: true },
+      );
+      expect(saved.name).toBe('Massagem Craniana Especial');
+      expect(saved.priceInCents).toBe(12000);
+      expect(saved.sinalInCents).toBe(3600);
+    });
+
+    it('atualiza serviço existente mantendo seu id', async () => {
+      const fakeDb = {} as unknown as Parameters<typeof saveServiceToFirestore>[1];
+      const fakeDocRef = { id: 'massagem-relaxante' };
+      mockDoc.mockReturnValue(fakeDocRef);
+      mockSetDoc.mockResolvedValue(undefined);
+
+      const saved = await saveServiceToFirestore(
+        {
+          id: 'massagem-relaxante',
+          nome: 'Massagem Relaxante Renovada',
+          duracaoMinutos: 90,
+          preco: 200,
+          sinalPercentual: 40,
+          descricao: 'Sessão profunda e renovadora.',
+          ativo: false,
+        },
+        fakeDb,
+      );
+
+      expect(mockDoc).toHaveBeenCalledWith(fakeDb, 'servicos', 'massagem-relaxante');
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        fakeDocRef,
+        expect.objectContaining({
+          nome: 'Massagem Relaxante Renovada',
+          duracao: 90,
+          preco: 200,
+          precoCentavos: 20000,
+          sinalCentavos: 8000,
+          sinalPercentual: 40,
+          ativo: false,
+        }),
+        { merge: true },
+      );
+      expect(saved.id).toBe('massagem-relaxante');
+      expect(saved.active).toBe(false);
     });
   });
 });

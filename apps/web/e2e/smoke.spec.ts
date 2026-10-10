@@ -4,7 +4,7 @@ test('abre o catálogo de serviços ativos', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Serviços', exact: true })).toBeVisible();
-  await expect(page.getByRole('article')).toHaveCount(4);
+  await expect(page.getByRole('article')).toHaveCount(16);
   await expect(page.getByRole('heading', { name: 'Massagem relaxante' })).toBeVisible();
 });
 
@@ -29,7 +29,8 @@ test('navega entre serviços e agendamentos pela barra inferior', async ({ page 
 test('protege o perfil administrativo sem uma conta autorizada', async ({ page }) => {
   await page.goto('/admin/clientes/cliente-demonstracao');
 
-  await expect(page.getByRole('heading', { name: 'Acesso não autorizado' })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'Entre na sua conta' })).toBeVisible();
   await expect(page.getByText('Mariana Oliveira')).not.toBeVisible();
 });
 
@@ -54,12 +55,12 @@ test('aproveita o espaço disponível no desktop sem perder a navegação', asyn
   await expect(page.getByTestId('mobile-navigation')).toBeHidden();
 
   const cards = page.getByRole('article');
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(16);
   const firstCard = await cards.first().boundingBox();
-  const lastCard = await cards.last().boundingBox();
+  const fourthCard = await cards.nth(3).boundingBox();
   expect(firstCard).not.toBeNull();
-  expect(lastCard).not.toBeNull();
-  expect(lastCard!.y).toBe(firstCard!.y);
+  expect(fourthCard).not.toBeNull();
+  expect(fourthCard!.y).toBe(firstCard!.y);
 });
 
 test('mantém os formulários de acesso sem rolagem horizontal no mobile e no desktop', async ({

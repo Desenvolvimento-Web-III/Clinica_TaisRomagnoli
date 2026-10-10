@@ -1,40 +1,78 @@
-import { MOCK_AGENDAMENTOS } from './mockAgendamentos';
 import type { Agendamento } from '../types/agendamento';
 
-const STORAGE_KEY = 'clinica_tais_agendamentos_v1';
+const STORAGE_KEY_PREFIX = 'clinica_tais_agendamentos_v1';
 
-export function getAgendamentosStorage(): Agendamento[] {
-  if (typeof window === 'undefined') {
-    return MOCK_AGENDAMENTOS;
+function normalizeUserId(userId?: string | null): string | null {
+  const trimmed = userId?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function getAgendamentosStorageKey(userId?: string | null): string | null {
+  const normalized = normalizeUserId(userId);
+  if (!normalized) {
+    return null;
+  }
+  return `${STORAGE_KEY_PREFIX}:${normalized}`;
+}
+
+export function getAgendamentosStorage(userId?: string | null): Agendamento[] {
+  const normalizedUserId = normalizeUserId(userId);
+  const storageKey = getAgendamentosStorageKey(normalizedUserId);
+
+  if (!normalizedUserId || !storageKey || typeof window === 'undefined') {
+    return [];
   }
 
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      const parsed: unknown = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return (parsed as Agendamento[]).filter(
+          (item) => !item.clienteId || item.clienteId === normalizedUserId,
+        );
       }
     }
   } catch {
     // Fallback silencioso em ambientes sem suporte ao localStorage
   }
 
-  return MOCK_AGENDAMENTOS;
+  return [];
 }
 
-export function saveAgendamentosStorage(agendamentos: Agendamento[]): void {
-  if (typeof window === 'undefined') return;
+export function saveAgendamentosStorage(agendamentos: Agendamento[], userId?: string | null): void {
+  const normalizedUserId = normalizeUserId(userId);
+  const storageKey = getAgendamentosStorageKey(normalizedUserId);
+
+  if (!normalizedUserId || !storageKey || typeof window === 'undefined') {
+    return;
+  }
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(agendamentos));
+    const agendamentosComCliente = agendamentos.map((item) => ({
+      ...item,
+      clienteId: normalizedUserId,
+    }));
+    localStorage.setItem(storageKey, JSON.stringify(agendamentosComCliente));
   } catch {
     // Fallback silencioso
   }
 }
 
-export function addAgendamentoStorage(novoAgendamento: Agendamento): void {
-  const atuais = getAgendamentosStorage();
-  const atualizados = [novoAgendamento, ...atuais.filter((item) => item.id !== novoAgendamento.id)];
-  saveAgendamentosStorage(atualizados);
+export function addAgendamentoStorage(novoAgendamento: Agendamento, userId?: string | null): void {
+  const targetUserId = normalizeUserId(userId ?? novoAgendamento.clienteId);
+  if (!targetUserId) {
+    return;
+  }
+
+  const atuais = getAgendamentosStorage(targetUserId);
+  const agendamentoVinculado: Agendamento = {
+    ...novoAgendamento,
+    clienteId: targetUserId,
+  };
+  const atualizados = [
+    agendamentoVinculado,
+    ...atuais.filter((item) => item.id !== novoAgendamento.id),
+  ];
+  saveAgendamentosStorage(atualizados, targetUserId);
 }

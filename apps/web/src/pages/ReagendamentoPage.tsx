@@ -1,7 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
-import { MOCK_AGENDAMENTOS } from '@/features/agendamentos/data/mockAgendamentos';
+import { useOptionalAuth } from '@/features/auth/auth-context';
+import {
+  getAgendamentosStorage,
+  saveAgendamentosStorage,
+} from '@/features/agendamentos/data/agendamentos-storage';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
 
 interface DiaDisponivel {
@@ -100,15 +104,23 @@ const HORARIOS_POR_DATA: Record<string, HorarioSlot[]> = {
 };
 
 export function ReagendamentoPage() {
+  const auth = useOptionalAuth();
+  const userId = auth?.currentUser?.uid ?? null;
+
+  return <ReagendamentoPageContent key={userId ?? 'guest'} userId={userId} />;
+}
+
+interface ReagendamentoPageContentProps {
+  userId: string | null;
+}
+
+function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Encontra agendamento original pelo id ou pega o primeiro disponível
-  const agendamentoOriginal = useMemo(() => {
-    return MOCK_AGENDAMENTOS.find((item) => item.id === id) || MOCK_AGENDAMENTOS[0];
-  }, [id]);
-
-  const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>(MOCK_AGENDAMENTOS);
+  const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>(() =>
+    getAgendamentosStorage(userId),
+  );
   const [dataSelecionada, setDataSelecionada] = useState<string>('2026-10-22');
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
   const [motivo, setMotivo] = useState<string>('');
@@ -116,10 +128,9 @@ export function ReagendamentoPage() {
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   const agendamentoAtual = useMemo(() => {
-    return (
-      agendamentosLocais.find((item) => item.id === agendamentoOriginal?.id) || agendamentoOriginal
-    );
-  }, [agendamentosLocais, agendamentoOriginal]);
+    if (!userId) return undefined;
+    return agendamentosLocais.find((item) => item.id === id) || agendamentosLocais[0];
+  }, [agendamentosLocais, id, userId]);
 
   if (!agendamentoAtual) {
     return (
@@ -158,8 +169,8 @@ export function ReagendamentoPage() {
       const horaFim = (parseInt(horaInicio ?? '10', 10) + 1).toString().padStart(2, '0');
       const horarioFormatadoNovo = `${horarioSelecionado} - ${horaFim}:00`;
 
-      setAgendamentosLocais((prev) =>
-        prev.map((item) =>
+      setAgendamentosLocais((prev) => {
+        const atualizados = prev.map((item) =>
           item.id === agendamentoAtual.id
             ? {
                 ...item,
@@ -169,8 +180,10 @@ export function ReagendamentoPage() {
                 observacao: motivo ? `Reagendado. Motivo: ${motivo}` : item.observacao,
               }
             : item,
-        ),
-      );
+        );
+        saveAgendamentosStorage(atualizados, userId);
+        return atualizados;
+      });
 
       setSubmitting(false);
       setIsSucesso(true);

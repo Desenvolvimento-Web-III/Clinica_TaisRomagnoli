@@ -6,11 +6,15 @@ import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
+import { NotificationsPage } from '@/pages/NotificationsPage';
 import { FichaAnamnesePage } from '@/pages/FichaAnamnesePage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
+import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
 import { AdminRoute } from './AdminRoute';
+import { ProtectedRoute } from './ProtectedRoute';
 
 export const router = createBrowserRouter([
   {
@@ -54,8 +58,38 @@ export const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
+    path: '/recuperar-senha',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/esqueci-senha',
+    element: <Navigate to="/recuperar-senha" replace />,
+  },
+  {
     path: '/perfil',
-    element: <ClientProfilePage />,
+    element: (
+      <ProtectedRoute>
+        <ClientProfilePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/notificacoes',
+    element: (
+      <ProtectedRoute>
+        <NotificationsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin',
+    element: (
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminDashboardPage />
+        </AdminRoute>
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/anamnese',
@@ -64,25 +98,41 @@ export const router = createBrowserRouter([
   {
     path: '/admin/clientes/:clientId',
     element: (
-      <AdminRoute>
-        <AdminClientProfilePage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminClientProfilePage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/admin/horarios',
     element: (
-      <AdminRoute>
-        <AdminHorariosPage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminHorariosPage />
+        </AdminRoute>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/:section',
+    element: (
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminDashboardPage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/horarios',
     element: (
-      <AdminRoute>
-        <AdminHorariosPage />
-      </AdminRoute>
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminHorariosPage />
+        </AdminRoute>
+      </ProtectedRoute>
     ),
   },
   {
