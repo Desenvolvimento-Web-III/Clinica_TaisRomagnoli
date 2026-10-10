@@ -57,3 +57,4 @@ export type {
 } from './schemas/servico.js';
 
 export * from './schemas/notificacao.js';
+export * from './schemas/cliente.js';
