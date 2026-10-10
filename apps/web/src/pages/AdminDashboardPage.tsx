@@ -14,6 +14,7 @@ import {
   type UpsertServiceInput,
 } from '@/features/services/service-firestore-repository';
 import type { Service } from '@/features/services/types';
+import { AdminConfiguracoesGerais } from '@/features/admin-dashboard/components/AdminConfiguracoesGerais';
 
 interface AgendamentoDemo {
   id: string;
@@ -766,10 +767,10 @@ export function AdminDashboardPage() {
               </p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Card Destaque: Horários de Funcionamento */}
-              <div className="rounded-2xl border border-[var(--color-brand-deep)]/20 bg-white p-6 shadow-sm">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)]">
+            {/* Card Destaque: Horários de Funcionamento */}
+            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-[var(--color-brand-deep)]/20 bg-white p-5 shadow-xs sm:p-6 md:flex-row md:items-center">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)]">
                   <svg
                     aria-hidden="true"
                     className="h-6 w-6"
@@ -785,80 +786,44 @@ export function AdminDashboardPage() {
                     />
                   </svg>
                 </div>
-                <h3 className="mt-4 text-lg font-bold text-[var(--color-text-primary)]">
-                  Horários de Funcionamento e Manutenção
-                </h3>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  Configure dias de atendimento da semana, horário de abertura e fechamento, e
-                  intervalos de manutenção para descanso ou limpeza.
-                </p>
-
-                <div className="mt-6">
-                  <Link
-                    to="/admin/horarios"
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
-                  >
-                    <span>Abrir Gestor de Horários</span>
-                    <svg
-                      aria-hidden="true"
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </Link>
+                <div>
+                  <h3 className="text-base font-bold text-[var(--color-text-primary)]">
+                    Horários de Funcionamento e Intervalos de Manutenção
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)] sm:text-sm">
+                    Configure os dias da semana atendidos, faixas de abertura/fechamento e pausas
+                    para almoço ou limpeza.
+                  </p>
                 </div>
               </div>
 
-              {/* Card Parâmetros do Negócio */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-                  Parâmetros de Operação Vigentes
-                </h3>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  Políticas consolidadas no documento de produto da clínica:
-                </p>
-
-                <dl className="mt-4 divide-y divide-[var(--color-border-default)] text-sm">
-                  <div className="flex justify-between py-2.5">
-                    <dt className="text-[var(--color-text-secondary)]">
-                      Sinal obrigatório para cliente
-                    </dt>
-                    <dd className="font-semibold text-[var(--color-text-primary)]">30%</dd>
-                  </div>
-                  <div className="flex justify-between py-2.5">
-                    <dt className="text-[var(--color-text-secondary)]">
-                      Antecedência mínima cancelamento
-                    </dt>
-                    <dd className="font-semibold text-[var(--color-text-primary)]">3 horas</dd>
-                  </div>
-                  <div className="flex justify-between py-2.5">
-                    <dt className="text-[var(--color-text-secondary)]">
-                      Intervalo padrão entre sessões
-                    </dt>
-                    <dd className="font-semibold text-[var(--color-text-primary)]">30 minutos</dd>
-                  </div>
-                  <div className="flex justify-between py-2.5">
-                    <dt className="text-[var(--color-text-secondary)]">Critério de recorrência</dt>
-                    <dd className="font-semibold text-[var(--color-text-primary)]">
-                      ≥ 2 atendimentos/mês
-                    </dd>
-                  </div>
-                  <div className="flex justify-between py-2.5">
-                    <dt className="text-[var(--color-text-secondary)]">Dias de folga padrão</dt>
-                    <dd className="font-semibold text-[var(--color-text-primary)]">
-                      Terças e Domingos
-                    </dd>
-                  </div>
-                </dl>
+              <div className="shrink-0">
+                <Link
+                  to="/admin/horarios"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
+                >
+                  <span>Abrir Gestor de Horários</span>
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </Link>
               </div>
+            </div>
+
+            {/* Formulário Interativo: Configurações Gerais da Clínica */}
+            <div className="space-y-6">
+              <AdminConfiguracoesGerais />
             </div>
           </section>
         )}

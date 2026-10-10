@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { User } from 'firebase/auth';
@@ -154,7 +154,7 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText(/8\. Serviço Mais Agendado/i)).toBeInTheDocument();
   });
 
-  it('permite alternar para a aba Configurações e exibe link para gestor de horários', () => {
+  it('permite alternar para a aba Configurações e exibe link para gestor de horários e formulário geral', async () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole('tab', { name: /configurações/i }));
@@ -163,8 +163,11 @@ describe('AdminDashboardPage', () => {
     const linkHorarios = screen.getByRole('link', { name: /abrir gestor de horários/i });
     expect(linkHorarios).toBeInTheDocument();
     expect(linkHorarios).toHaveAttribute('href', '/admin/horarios');
-    expect(screen.getByText(/sinal obrigatório para cliente/i)).toBeInTheDocument();
-    expect(screen.getByText(/30%/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText(/sinal de agendamento online/i)).toBeInTheDocument();
+      expect(screen.getByText(/30%/i)).toBeInTheDocument();
+    });
   });
 
   it('abre e fecha o modal de novo agendamento presencial', () => {
