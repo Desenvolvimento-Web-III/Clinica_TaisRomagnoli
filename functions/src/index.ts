@@ -31,6 +31,12 @@ import {
   obterDetalhesServico,
   ServicoBusinessError,
 } from './modules/servicos/servicos-service.js';
+import { FirestoreClientesRepository } from './modules/clientes/clientes-repository.js';
+import {
+  registrarPerfilCliente,
+  obterPerfilCliente,
+  ClienteBusinessError,
+} from './modules/clientes/clientes-service.js';
 
 initializeApp();
 
@@ -72,6 +78,15 @@ export {
   obterDetalhesServico,
   ServicoBusinessError,
 } from './modules/servicos/servicos-service.js';
+export {
+  FirestoreClientesRepository,
+  InMemoryClientesRepository,
+} from './modules/clientes/clientes-repository.js';
+export {
+  registrarPerfilCliente,
+  obterPerfilCliente,
+  ClienteBusinessError,
+} from './modules/clientes/clientes-service.js';
 
 export const healthCheck = onRequest({ cors: false }, (_request, response) => {
   response.status(200).json(getHealthStatus());
@@ -660,5 +675,69 @@ export const obterServico = onRequest({ cors: true }, async (request, response) 
     }
     console.error('Erro ao obter serviço:', error);
     response.status(500).json({ error: 'Erro interno ao obter serviço.' });
+  }
+});
+
+/**
+ * Registra o perfil básico do cliente após o cadastro no Firebase Auth.
+ * Operação autenticada que vincula nome, telefone, email e preferências ao UID.
+ */
+export const criarPerfil = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreClientesRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+
+    const perfil = await registrarPerfilCliente(request.body, user, repo, notifRepo);
+    response.status(201).json({
+      mensagem: 'Perfil do cliente registrado com sucesso.',
+      dados: perfil,
+    });
+  } catch (error: unknown) {
+    if (error instanceof ClienteBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados do perfil inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao registrar perfil do cliente:', error);
+    response.status(500).json({ error: 'Erro interno ao registrar perfil do cliente.' });
+  }
+});
+
+/**
+ * Consulta o perfil básico de um cliente.
+ * Clientes podem consultar apenas seu próprio perfil; administradores podem consultar qualquer UID.
+ */
+export const obterPerfil = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const targetUid = (request.query['uid'] as string) || user.uid;
+
+    const firestore = getFirestore();
+    const repo = new FirestoreClientesRepository(firestore);
+
+    const perfil = await obterPerfilCliente(targetUid, user, repo);
+    response.status(200).json({ dados: perfil });
+  } catch (error: unknown) {
+    if (error instanceof ClienteBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao consultar perfil do cliente:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar perfil do cliente.' });
   }
 });
