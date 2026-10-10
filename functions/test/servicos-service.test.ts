@@ -111,6 +111,97 @@ describe('Serviços Service (Backend Functions)', () => {
         statusCode: 409,
       });
     });
+
+    it('cadastra serviço já com status inativo quando especificado', async () => {
+      const input = {
+        nome: 'Serviço Experimental',
+        duracaoMinutos: 45,
+        preco: 120,
+        descricao: 'Procedimento piloto para testes clínicos.',
+        ativo: false,
+      };
+
+      const criado = await cadastrarNovoServico(input, adminUser, servicosRepo);
+
+      expect(criado.ativo).toBe(false);
+      expect(criado.nome).toBe('Serviço Experimental');
+      expect(criado.duracaoMinutos).toBe(45);
+      expect(criado.preco).toBe(120);
+    });
+
+    it('cadastra serviço com valor customizado de sinal em Reais', async () => {
+      const input = {
+        nome: 'Shiatsu Terapêutico',
+        duracaoMinutos: 60,
+        preco: 200,
+        sinal: 80, // 40%
+        descricao: 'Aplicação de pressão com os dedos ao longo dos meridianos corporais.',
+      };
+
+      const criado = await cadastrarNovoServico(input, adminUser, servicosRepo);
+
+      expect(criado.sinal).toBe(80);
+      expect(criado.sinalEmCentavos).toBe(8000);
+      expect(criado.sinalPercentual).toBe(40);
+      expect(criado.preco).toBe(200);
+    });
+
+    it('cadastra serviço com percentual customizado de sinal', async () => {
+      const input = {
+        nome: 'Reflexologia Podal',
+        duracaoMinutos: 45,
+        preco: 140,
+        sinalPercentual: 50,
+        descricao: 'Estímulo de zonas reflexas nos pés para alívio e equilíbrio.',
+      };
+
+      const criado = await cadastrarNovoServico(input, adminUser, servicosRepo);
+
+      expect(criado.sinal).toBe(70); // 50% de 140
+      expect(criado.sinalEmCentavos).toBe(7000);
+      expect(criado.sinalPercentual).toBe(50);
+    });
+
+    it('rejeita cadastro com nome duplicado (case-insensitive) com status 409', async () => {
+      const input = {
+        nome: 'massagem relaxante', // Mesmo nome do servicoInicial com casing diferente
+        duracaoMinutos: 60,
+        preco: 170,
+        descricao: 'Tentativa de duplicar serviço existente pelo nome.',
+      };
+
+      await expect(cadastrarNovoServico(input, adminUser, servicosRepo)).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Já existe um serviço cadastrado com este nome.',
+      });
+    });
+
+    it('rejeita cadastro se o usuário não estiver autenticado (401)', async () => {
+      const input = {
+        nome: 'Massagem sem login',
+        duracaoMinutos: 60,
+        preco: 150,
+        descricao: 'Descrição longa para o teste de autenticação.',
+      };
+
+      // @ts-expect-error testando ausência de autenticação
+      await expect(cadastrarNovoServico(input, null, servicosRepo)).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    });
+
+    it('gera id slugificado automaticamente quando não fornecido', async () => {
+      const input = {
+        nome: 'Ventosaterapia Integrativa',
+        duracaoMinutos: 40,
+        preco: 130,
+        descricao: 'Aplicação de ventosas para descompressão e circulação.',
+      };
+
+      const criado = await cadastrarNovoServico(input, adminUser, servicosRepo);
+
+      expect(criado.id).toBe('ventosaterapia-integrativa');
+    });
   });
 
   describe('editarServicoExistente', () => {

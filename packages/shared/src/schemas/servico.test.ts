@@ -172,4 +172,57 @@ describe('servicoInputSchema e utilitários de serviço', () => {
     const idVazio = gerenciarServicoIdSchema.safeParse({ id: '   ' });
     expect(idVazio.success).toBe(false);
   });
+
+  it('valida schema de cadastro com duração, preço, sinal, descrição e status', async () => {
+    const { criarServicoInputSchema } = await import('./servico.js');
+
+    // Cadastro válido completo com status ativo
+    const validoAtivo = criarServicoInputSchema.safeParse({
+      nome: 'Bambuterapia',
+      duracaoMinutos: 60,
+      preco: 180,
+      sinal: 54,
+      descricao: 'Massagem realizada com hastes de bambu.',
+      ativo: true,
+      categoria: 'Corporal',
+    });
+    expect(validoAtivo.success).toBe(true);
+
+    // Cadastro válido com status inativo
+    const validoInativo = criarServicoInputSchema.safeParse({
+      nome: 'Terapia Pré-Natal',
+      duracaoMinutos: 45,
+      preco: 160,
+      descricao: 'Atendimento especial para gestantes.',
+      ativo: false,
+    });
+    expect(validoInativo.success).toBe(true);
+    if (validoInativo.success) {
+      expect(validoInativo.data.ativo).toBe(false);
+    }
+
+    // Rejeição de cadastro sem duração
+    const semDuracao = criarServicoInputSchema.safeParse({
+      nome: 'Massagem Relaxante',
+      preco: 150,
+      descricao: 'Descrição longa e válida.',
+    });
+    expect(semDuracao.success).toBe(false);
+
+    // Rejeição de cadastro sem preço
+    const semPreco = criarServicoInputSchema.safeParse({
+      nome: 'Massagem Relaxante',
+      duracaoMinutos: 60,
+      descricao: 'Descrição longa e válida.',
+    });
+    expect(semPreco.success).toBe(false);
+
+    // Rejeição de cadastro sem descrição
+    const semDescricao = criarServicoInputSchema.safeParse({
+      nome: 'Massagem Relaxante',
+      duracaoMinutos: 60,
+      preco: 150,
+    });
+    expect(semDescricao.success).toBe(false);
+  });
 });

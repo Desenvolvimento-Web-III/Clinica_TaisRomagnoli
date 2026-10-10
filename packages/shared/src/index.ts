@@ -36,6 +36,7 @@ export type {
 
 export {
   servicoInputSchema,
+  criarServicoInputSchema,
   editarServicoInputSchema,
   alterarStatusServicoInputSchema,
   gerenciarServicoIdSchema,
@@ -48,6 +49,7 @@ export {
 
 export type {
   ServicoInput,
+  CriarServicoInput,
   EditarServicoInput,
   AlterarStatusServicoInput,
   GerenciarServicoIdInput,

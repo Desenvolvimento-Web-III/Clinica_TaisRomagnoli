@@ -91,6 +91,13 @@ export const servicoInputSchema = z
 export type ServicoInput = z.infer<typeof servicoInputSchema>;
 
 /**
+ * Schema Zod para cadastro de um novo serviço no painel administrativo.
+ * Valida duração em minutos, preço, sinal, descrição e status de ativação.
+ */
+export const criarServicoInputSchema = servicoInputSchema;
+export type CriarServicoInput = z.infer<typeof criarServicoInputSchema>;
+
+/**
  * Schema Zod para edição de um serviço existente (exige identificador).
  */
 export const editarServicoInputSchema = servicoInputSchema.and(
