@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { demoAdministrativeClientProfile } from '@/features/admin-client-profile/demo-profile';
 import { getRecurrenceSummary } from '@/features/admin-client-profile/recurrence';
@@ -90,11 +91,50 @@ export function AdminClientProfilePage({
       title={profile.fullName}
       description="Visão consolidada do cadastro, histórico, recorrência, pagamentos e anamnese."
       headerAside={
-        <span className="w-fit rounded-full border border-white/40 bg-white/15 px-4 py-2 text-sm font-semibold">
-          Cadastro {profile.status}
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to="/admin?tab=clientes"
+            data-testid="voltar-clientes-header-link"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/15 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            Voltar para Clientes
+          </Link>
+          <span className="w-fit rounded-full border border-white/40 bg-white/15 px-4 py-1.5 text-xs font-semibold text-white">
+            Cadastro {profile.status}
+          </span>
+        </div>
       }
     >
+      <div className="mb-6 flex items-center justify-between">
+        <Link
+          to="/admin?tab=clientes"
+          data-testid="voltar-clientes-link"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2 text-sm font-medium text-[var(--color-text-secondary)] shadow-xs transition hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-primary)]"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          Voltar para Clientes
+        </Link>
+
+        <span className="rounded-full bg-[var(--color-brand-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-brand-deep)]">
+          Gestão de Clientes
+        </span>
+      </div>
+
       <aside
         aria-label="Aviso sobre dados demonstrativos"
         className="mb-6 rounded-xl border border-[var(--color-info-border)] bg-[var(--color-info-bg)] p-4 text-sm/5 text-[var(--color-info-text)]"

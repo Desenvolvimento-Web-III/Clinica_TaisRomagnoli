@@ -93,4 +93,15 @@ describe('AdminClientProfilePage', () => {
       screen.getByText('O cliente ainda não preencheu a ficha de anamnese.'),
     ).toBeInTheDocument();
   });
+
+  it('exibe links de retorno para a aba de clientes do painel administrativo', () => {
+    renderPage(profile);
+
+    const backLinks = screen.getAllByRole('link', { name: /voltar para clientes/i });
+    expect(backLinks.length).toBeGreaterThanOrEqual(1);
+
+    backLinks.forEach((link) => {
+      expect(link).toHaveAttribute('href', '/admin?tab=clientes');
+    });
+  });
 });
