@@ -46,6 +46,14 @@ service cloud.firestore {
         allow read: if isAdmin() || isOwner(uid);
         allow write: if false;
       }
+
+      match /notificacoes/{notifId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow update: if (isOwner(uid) || isAdmin())
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['lida', 'updatedAt']);
+        allow create, delete: if false;
+      }
     }
 
     // Coleção de serviços da clínica (massagens, duração, valor e imagem)

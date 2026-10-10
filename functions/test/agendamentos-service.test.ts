@@ -1,15 +1,18 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   solicitarNovoAgendamento,
+  alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
   listarAgendamentos,
   AgendamentoBusinessError,
   type UserContext,
 } from '../src/modules/agendamentos/agendamentos-service.js';
 import { InMemoryAgendamentosRepository } from '../src/modules/agendamentos/agendamentos-repository.js';
+import { InMemoryNotificacoesRepository } from '../src/modules/notificacoes/notificacoes-repository.js';
 
 describe('Agendamentos Service (Functions Backend)', () => {
   let repo: InMemoryAgendamentosRepository;
+  let notifRepo: InMemoryNotificacoesRepository;
 
   const clienteUser: UserContext = {
     uid: 'user-cliente-1',
@@ -28,6 +31,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
   beforeEach(() => {
     repo = new InMemoryAgendamentosRepository();
+    notifRepo = new InMemoryNotificacoesRepository();
   });
 
   describe('solicitarNovoAgendamento', () => {
@@ -255,6 +259,207 @@ describe('Agendamentos Service (Functions Backend)', () => {
       const lista = await listarAgendamentos(clienteUser, undefined, repo);
       expect(lista).toHaveLength(1);
       expect(lista[0]?.clienteId).toBe('user-cliente-1');
+    });
+  });
+
+  describe('Integração com Notificações Internas', () => {
+    it('gera notificação interna de confirmação ao solicitar novo agendamento', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T10:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+      );
+
+      const notifs = await notifRepo.listarPorDestinatario(clienteUser.uid);
+      expect(notifs).toHaveLength(1);
+      expect(notifs[0].evento).toBe('confirmacao');
+      expect(notifs[0].agendamentoId).toBe(agendamento.id);
+      expect(notifs[0].titulo).toContain('Sessão Confirmada');
+    });
+
+    it('gera notificação interna de cancelamento ao cancelar agendamento', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Cancelamento com 4h de antecedência
+      const dataRef = new Date('2026-10-22T10:00:00.000Z');
+      await cancelarAgendamentoExistente(
+        { agendamentoId: agendamento.id, motivo: 'Imprevisto pessoal' },
+        clienteUser,
+        repo,
+        notifRepo,
+        dataRef,
+      );
+
+      const notifs = await notifRepo.listarPorDestinatario(clienteUser.uid);
+      expect(notifs).toHaveLength(1);
+      expect(notifs[0].evento).toBe('cancelamento');
+      expect(notifs[0].mensagem).toContain('crédito para reagendamento futuro');
+    });
+  });
+
+  describe('alterarAgendamentoExistente', () => {
+    it('altera data/horário do agendamento com sucesso e dispara notificação de alteração', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'shiatsu',
+          servicoNome: 'Shiatsu Express',
+          duracaoMinutos: 45,
+          valorTotalEmCentavos: 15000,
+          dataHoraInicio: '2026-10-22T09:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Reagenda 24h antes do horário original
+      const dataRef = new Date('2026-10-21T09:00:00.000Z');
+      const alterado = await alterarAgendamentoExistente(
+        {
+          agendamentoId: agendamento.id,
+          novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
+          motivo: 'Ajuste de agenda de trabalho',
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        dataRef,
+      );
+
+      expect(alterado.dataHoraInicio).toBe('2026-10-22T15:00:00.000Z');
+      expect(alterado.dataHoraFim).toBe('2026-10-22T15:45:00.000Z');
+
+      const notifs = await notifRepo.listarPorDestinatario(clienteUser.uid);
+      expect(notifs).toHaveLength(1);
+      expect(notifs[0].evento).toBe('alteracao');
+      expect(notifs[0].titulo).toContain('Agendamento Alterado');
+      expect(notifs[0].mensagem).toContain('anteriormente em');
+    });
+
+    it('bloqueia tentativa de alteração com menos de 3 horas de antecedência pelo cliente', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'shiatsu',
+          servicoNome: 'Shiatsu Express',
+          duracaoMinutos: 45,
+          valorTotalEmCentavos: 15000,
+          dataHoraInicio: '2026-10-22T09:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Tentativa 1 hora antes do agendamento
+      const dataRef = new Date('2026-10-22T08:00:00.000Z');
+
+      await expect(
+        alterarAgendamentoExistente(
+          {
+            agendamentoId: agendamento.id,
+            novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
+          },
+          clienteUser,
+          repo,
+          notifRepo,
+          dataRef,
+        ),
+      ).rejects.toThrow(
+        'Reagendamentos devem ser solicitados com pelo menos 3 horas de antecedência',
+      );
+    });
+
+    it('permite que a administradora altere o agendamento mesmo com menos de 3 horas', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'shiatsu',
+          servicoNome: 'Shiatsu Express',
+          duracaoMinutos: 45,
+          valorTotalEmCentavos: 15000,
+          dataHoraInicio: '2026-10-22T09:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      const dataRef = new Date('2026-10-22T08:30:00.000Z'); // 30 minutos antes
+      const alterado = await alterarAgendamentoExistente(
+        {
+          agendamentoId: agendamento.id,
+          novaDataHoraInicio: '2026-10-22T16:00:00.000Z',
+        },
+        adminUser,
+        repo,
+        notifRepo,
+        dataRef,
+      );
+
+      expect(alterado.dataHoraInicio).toBe('2026-10-22T16:00:00.000Z');
+    });
+
+    it('impede alteração para horário conflitante com outro agendamento existente', async () => {
+      // Agendamento 1: 10:00 às 11:00 (mais intervalo até 11:30)
+      await solicitarNovoAgendamento(
+        {
+          servicoId: 'drenagem',
+          servicoNome: 'Drenagem',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 18000,
+          dataHoraInicio: '2026-10-22T10:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Agendamento 2: 14:00 às 15:00
+      const agendamento2 = await solicitarNovoAgendamento(
+        {
+          servicoId: 'shiatsu',
+          servicoNome: 'Shiatsu',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 16000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      // Tenta reagendar Agendamento 2 para 10:45 (colidindo com o Agendamento 1 + intervalo)
+      const dataRef = new Date('2026-10-21T10:00:00.000Z');
+      await expect(
+        alterarAgendamentoExistente(
+          {
+            agendamentoId: agendamento2.id,
+            novaDataHoraInicio: '2026-10-22T10:45:00.000Z',
+          },
+          clienteUser,
+          repo,
+          notifRepo,
+          dataRef,
+        ),
+      ).rejects.toThrow(AgendamentoBusinessError);
     });
   });
 });

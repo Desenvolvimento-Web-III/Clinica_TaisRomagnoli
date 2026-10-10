@@ -67,6 +67,18 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
         queixaPrincipal: 'Dores lombares',
         contraindicacoes: [],
       });
+
+      await adminDb.doc('clientes/cliente-joao/notificacoes/notif-1').set({
+        id: 'notif-1',
+        destinatarioId: 'cliente-joao',
+        destinatarioTipo: 'cliente',
+        evento: 'confirmacao',
+        tipo: 'agendamento',
+        titulo: 'Sessão Confirmada: Massagem Relaxante',
+        mensagem: 'Seu agendamento foi confirmado para 10/10/2026.',
+        lida: false,
+        createdAt: '2026-09-01T10:00:00Z',
+      });
     });
   });
 
@@ -337,6 +349,113 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
       await assertFails(
         adminDb.doc('clientes/cliente-joao/anamneses/anam-novo').set({ dor: false }),
       );
+    });
+  });
+
+  describe('Subcoleção de Notificações Internas', () => {
+    it('permite leitura de notificações para o titular da conta e administradora', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+
+      await assertSucceeds(ownerDb.doc('clientes/cliente-joao/notificacoes/notif-1').get());
+      await assertSucceeds(adminDb.doc('clientes/cliente-joao/notificacoes/notif-1').get());
+    });
+
+    it('bloqueia leitura de notificações para terceiros e visitantes não autenticados', async () => {
+      const otherClientDb = testEnvironment
+        .authenticatedContext('cliente-maria', { role: 'cliente' })
+        .firestore();
+      const unauthDb = testEnvironment.unauthenticatedContext().firestore();
+
+      await assertFails(otherClientDb.doc('clientes/cliente-joao/notificacoes/notif-1').get());
+      await assertFails(unauthDb.doc('clientes/cliente-joao/notificacoes/notif-1').get());
+    });
+
+    it('permite que o titular atualize apenas os campos lida e updatedAt', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      await assertSucceeds(
+        ownerDb.doc('clientes/cliente-joao/notificacoes/notif-1').update({
+          lida: true,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+    });
+
+    it('bloqueia atualização quando se tenta alterar outros campos como mensagem ou título', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      await assertFails(
+        ownerDb.doc('clientes/cliente-joao/notificacoes/notif-1').update({
+          titulo: 'Título Alterado',
+        }),
+      );
+
+      await assertFails(
+        ownerDb.doc('clientes/cliente-joao/notificacoes/notif-1').update({
+          mensagem: 'Mensagem Alterada',
+        }),
+      );
+
+      await assertFails(
+        ownerDb.doc('clientes/cliente-joao/notificacoes/notif-1').update({
+          lida: true,
+          mensagem: 'Tentativa de adulteração de mensagem',
+        }),
+      );
+    });
+
+    it('bloqueia criação e exclusão direta client-side incondicionalmente', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+
+      // Bloqueia criação direta pelo cliente
+      await assertFails(
+        ownerDb.doc('clientes/cliente-joao/notificacoes/notif-2').set({
+          id: 'notif-2',
+          destinatarioId: 'cliente-joao',
+          destinatarioTipo: 'cliente',
+          evento: 'lembrete',
+          tipo: 'lembrete',
+          titulo: 'Novo lembrete client-side',
+          mensagem: 'Tentativa não autorizada',
+          lida: false,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      // Bloqueia criação direta pela administradora
+      await assertFails(
+        adminDb.doc('clientes/cliente-joao/notificacoes/notif-2').set({
+          id: 'notif-2',
+          destinatarioId: 'cliente-joao',
+          destinatarioTipo: 'cliente',
+          evento: 'lembrete',
+          tipo: 'lembrete',
+          titulo: 'Novo lembrete client-side admin',
+          mensagem: 'Tentativa não autorizada',
+          lida: false,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      // Bloqueia exclusão direta pelo cliente
+      await assertFails(ownerDb.doc('clientes/cliente-joao/notificacoes/notif-1').delete());
+
+      // Bloqueia exclusão direta pela administradora
+      await assertFails(adminDb.doc('clientes/cliente-joao/notificacoes/notif-1').delete());
     });
   });
 });

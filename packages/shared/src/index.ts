@@ -44,3 +44,5 @@ export {
 } from './schemas/servico.js';
 
 export type { ServicoInput, ServicoModel } from './schemas/servico.js';
+
+export * from './schemas/notificacao.js';

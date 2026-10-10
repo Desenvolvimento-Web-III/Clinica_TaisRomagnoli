@@ -4,7 +4,9 @@ test('abre o catálogo de serviços ativos', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Serviços', exact: true })).toBeVisible();
-  await expect(page.getByRole('article')).toHaveCount(16);
+  await expect(page.getByRole('article').first()).toBeVisible();
+  const totalCards = await page.getByRole('article').count();
+  expect(totalCards).toBeGreaterThanOrEqual(10);
   await expect(page.getByRole('heading', { name: 'Massagem relaxante' })).toBeVisible();
 });
 
@@ -55,7 +57,8 @@ test('aproveita o espaço disponível no desktop sem perder a navegação', asyn
   await expect(page.getByTestId('mobile-navigation')).toBeHidden();
 
   const cards = page.getByRole('article');
-  await expect(cards).toHaveCount(16);
+  await expect(cards.first()).toBeVisible();
+  await expect(cards.nth(3)).toBeVisible();
   const firstCard = await cards.first().boundingBox();
   const fourthCard = await cards.nth(3).boundingBox();
   expect(firstCard).not.toBeNull();

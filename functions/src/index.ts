@@ -2,21 +2,31 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
+import { marcarNotificacaoLidaInputSchema, type Agendamento } from '@clinica/shared';
 import { getHealthStatus } from './core/health-status.js';
 import { obterHorarios, salvarHorarios } from './modules/horarios/horarios-service.js';
 import {
   solicitarNovoAgendamento,
+  alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
   listarAgendamentos,
   AgendamentoBusinessError,
 } from './modules/agendamentos/agendamentos-service.js';
 import { FirestoreAgendamentosRepository } from './modules/agendamentos/agendamentos-repository.js';
+import { FirestoreNotificacoesRepository } from './modules/notificacoes/notificacoes-repository.js';
+import {
+  processarLembretesAgendamentos,
+  listarNotificacoesDoCliente,
+  marcarNotificacaoComoLida,
+  NotificacaoBusinessError,
+} from './modules/notificacoes/notificacoes-service.js';
 
 initializeApp();
 
 export { obterHorarios, salvarHorarios } from './modules/horarios/horarios-service.js';
 export {
   solicitarNovoAgendamento,
+  alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
   listarAgendamentos,
 } from './modules/agendamentos/agendamentos-service.js';
@@ -24,6 +34,19 @@ export {
   FirestoreAgendamentosRepository,
   InMemoryAgendamentosRepository,
 } from './modules/agendamentos/agendamentos-repository.js';
+export {
+  FirestoreNotificacoesRepository,
+  InMemoryNotificacoesRepository,
+} from './modules/notificacoes/notificacoes-repository.js';
+export {
+  criarNotificacaoConfirmacao,
+  criarNotificacaoAlteracao,
+  criarNotificacaoCancelamento,
+  criarNotificacaoLembrete,
+  processarLembretesAgendamentos,
+  listarNotificacoesDoCliente,
+  marcarNotificacaoComoLida,
+} from './modules/notificacoes/notificacoes-service.js';
 
 export const healthCheck = onRequest({ cors: false }, (_request, response) => {
   response.status(200).json(getHealthStatus());
@@ -123,6 +146,7 @@ export const atualizarHorariosFuncionamento = onRequest(
 
 /**
  * Endpoint para solicitar um novo agendamento com validação de regras de negócio e cálculo de sinal
+ * gerando automaticamente notificação interna de confirmação
  */
 export const solicitarAgendamento = onRequest({ cors: true }, async (request, response) => {
   if (request.method !== 'POST') {
@@ -134,8 +158,9 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
     const firestore = getFirestore();
     const repo = new FirestoreAgendamentosRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
 
-    const agendamento = await solicitarNovoAgendamento(request.body, user, repo);
+    const agendamento = await solicitarNovoAgendamento(request.body, user, repo, notifRepo);
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
       dados: agendamento,
@@ -155,7 +180,43 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
 });
 
 /**
+ * Endpoint para alterar ou reagendar um agendamento existente
+ * gerando automaticamente notificação interna de alteração
+ */
+export const alterarAgendamento = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreAgendamentosRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+
+    const agendamento = await alterarAgendamentoExistente(request.body, user, repo, notifRepo);
+    response.status(200).json({
+      mensagem: 'Agendamento alterado com sucesso.',
+      dados: agendamento,
+    });
+  } catch (error: unknown) {
+    if (error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados da requisição inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao alterar agendamento:', error);
+    response.status(500).json({ error: 'Erro interno ao alterar agendamento.' });
+  }
+});
+
+/**
  * Endpoint para cancelar um agendamento aplicando a regra de antecedência mínima
+ * gerando automaticamente notificação interna de cancelamento com status do sinal
  */
 export const cancelarAgendamento = onRequest({ cors: true }, async (request, response) => {
   if (request.method !== 'POST') {
@@ -167,8 +228,9 @@ export const cancelarAgendamento = onRequest({ cors: true }, async (request, res
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
     const firestore = getFirestore();
     const repo = new FirestoreAgendamentosRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
 
-    const agendamento = await cancelarAgendamentoExistente(request.body, user, repo);
+    const agendamento = await cancelarAgendamentoExistente(request.body, user, repo, notifRepo);
     response.status(200).json({
       mensagem: 'Agendamento cancelado com sucesso.',
       dados: agendamento,
@@ -213,5 +275,115 @@ export const listarMeusAgendamentos = onRequest({ cors: true }, async (request, 
     }
     console.error('Erro ao listar agendamentos:', error);
     response.status(500).json({ error: 'Erro interno ao listar agendamentos.' });
+  }
+});
+
+/**
+ * Endpoint para consultar as notificações internas do cliente autenticado
+ */
+export const listarMinhasNotificacoes = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const apenasNaoLidas = request.query['apenasNaoLidas'] === 'true';
+    const limite =
+      typeof request.query['limite'] === 'string'
+        ? parseInt(request.query['limite'], 10) || undefined
+        : undefined;
+
+    const firestore = getFirestore();
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+
+    const notificacoes = await listarNotificacoesDoCliente(
+      user.uid,
+      { apenasNaoLidas, limite },
+      notifRepo,
+    );
+    response.status(200).json({ dados: notificacoes });
+  } catch (error: unknown) {
+    if (error instanceof AgendamentoBusinessError || error instanceof NotificacaoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao listar notificações:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar notificações.' });
+  }
+});
+
+/**
+ * Endpoint para marcar uma notificação como lida
+ */
+export const marcarNotificacaoLida = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const parsed = marcarNotificacaoLidaInputSchema.parse(request.body);
+
+    const firestore = getFirestore();
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+
+    const atualizada = await marcarNotificacaoComoLida(parsed.notificacaoId, user.uid, notifRepo);
+    response.status(200).json({
+      mensagem: 'Notificação marcada como lida.',
+      dados: atualizada,
+    });
+  } catch (error: unknown) {
+    if (error instanceof AgendamentoBusinessError || error instanceof NotificacaoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados da requisição inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao marcar notificação como lida:', error);
+    response.status(500).json({ error: 'Erro interno ao marcar notificação como lida.' });
+  }
+});
+
+/**
+ * Endpoint administrativo para processar lembretes de sessões próximas
+ */
+export const processarLembretes = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    if (!user.isAdmin) {
+      response.status(403).json({
+        error: 'Acesso negado. Apenas a administração pode disparar o processamento de lembretes.',
+      });
+      return;
+    }
+
+    const firestore = getFirestore();
+    const agendamentosSnapshot = await firestore.collection('agendamentos').get();
+    const agendamentos = agendamentosSnapshot.docs.map((doc) => doc.data() as Agendamento);
+
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const geradas = await processarLembretesAgendamentos(agendamentos, notifRepo, 24);
+
+    response.status(200).json({
+      mensagem: `Processamento de lembretes concluído com sucesso. ${geradas.length} lembrete(s) gerado(s).`,
+      dados: geradas,
+    });
+  } catch (error: unknown) {
+    if (error instanceof AgendamentoBusinessError || error instanceof NotificacaoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao processar lembretes:', error);
+    response.status(500).json({ error: 'Erro interno ao processar lembretes.' });
   }
 });
