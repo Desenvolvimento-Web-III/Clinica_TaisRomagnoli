@@ -36,6 +36,9 @@ export type {
 
 export {
   servicoInputSchema,
+  editarServicoInputSchema,
+  alterarStatusServicoInputSchema,
+  gerenciarServicoIdSchema,
   PERCENTUAL_SINAL_PADRAO,
   calcularSinal,
   calcularPercentualSinal,
@@ -43,4 +46,12 @@ export {
   centavosParaReais,
 } from './schemas/servico.js';
 
-export type { ServicoInput, ServicoModel } from './schemas/servico.js';
+export type {
+  ServicoInput,
+  EditarServicoInput,
+  AlterarStatusServicoInput,
+  GerenciarServicoIdInput,
+  ServicoModel,
+} from './schemas/servico.js';
+
+export * from './schemas/notificacao.js';

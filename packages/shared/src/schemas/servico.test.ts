@@ -128,4 +128,48 @@ describe('servicoInputSchema e utilitários de serviço', () => {
     expect(centavosParaReais(15000)).toBe(150);
     expect(centavosParaReais(4550)).toBe(45.5);
   });
+
+  it('valida schema de edição exigindo identificador id', async () => {
+    const { editarServicoInputSchema } = await import('./servico.js');
+    const valido = editarServicoInputSchema.safeParse({
+      id: 'srv-123',
+      nome: 'Massagem Craniana',
+      duracaoMinutos: 45,
+      preco: 130,
+      descricao: 'Alívio para tensões na região da cabeça e pescoço.',
+      ativo: true,
+    });
+    expect(valido.success).toBe(true);
+
+    const invalidoSemId = editarServicoInputSchema.safeParse({
+      nome: 'Massagem Craniana',
+      duracaoMinutos: 45,
+      preco: 130,
+      descricao: 'Alívio para tensões na região da cabeça e pescoço.',
+    });
+    expect(invalidoSemId.success).toBe(false);
+  });
+
+  it('valida schema de alteração de status ativo/inativo e gerenciarServicoId', async () => {
+    const { alterarStatusServicoInputSchema, gerenciarServicoIdSchema } =
+      await import('./servico.js');
+
+    const statusValido = alterarStatusServicoInputSchema.safeParse({
+      id: 'srv-123',
+      ativo: false,
+    });
+    expect(statusValido.success).toBe(true);
+
+    const statusInvalido = alterarStatusServicoInputSchema.safeParse({
+      id: '',
+      ativo: false,
+    });
+    expect(statusInvalido.success).toBe(false);
+
+    const idValido = gerenciarServicoIdSchema.safeParse({ id: 'srv-123' });
+    expect(idValido.success).toBe(true);
+
+    const idVazio = gerenciarServicoIdSchema.safeParse({ id: '   ' });
+    expect(idVazio.success).toBe(false);
+  });
 });

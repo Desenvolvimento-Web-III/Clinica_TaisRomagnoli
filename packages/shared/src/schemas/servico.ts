@@ -91,6 +91,36 @@ export const servicoInputSchema = z
 export type ServicoInput = z.infer<typeof servicoInputSchema>;
 
 /**
+ * Schema Zod para edição de um serviço existente (exige identificador).
+ */
+export const editarServicoInputSchema = servicoInputSchema.and(
+  z.object({
+    id: z.string().trim().min(1, 'O identificador do serviço é obrigatório'),
+  }),
+);
+
+export type EditarServicoInput = z.infer<typeof editarServicoInputSchema>;
+
+/**
+ * Schema para alteração de status ativo/inativo de um serviço.
+ */
+export const alterarStatusServicoInputSchema = z.object({
+  id: z.string().trim().min(1, 'O identificador do serviço é obrigatório'),
+  ativo: z.boolean(),
+});
+
+export type AlterarStatusServicoInput = z.infer<typeof alterarStatusServicoInputSchema>;
+
+/**
+ * Schema para operações que demandam apenas o identificador do serviço.
+ */
+export const gerenciarServicoIdSchema = z.object({
+  id: z.string().trim().min(1, 'O identificador do serviço é obrigatório'),
+});
+
+export type GerenciarServicoIdInput = z.infer<typeof gerenciarServicoIdSchema>;
+
+/**
  * Modelo completo do serviço representando a entidade no sistema.
  */
 export interface ServicoModel {
