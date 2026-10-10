@@ -7,6 +7,7 @@ import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
   maskCardNumber,
   maskCardExpiry,
@@ -143,6 +144,12 @@ export function AgendamentoFlowPage() {
     };
 
     addAgendamentoStorage(novo, currentUser?.uid);
+    addClientNotification(currentUser?.uid, {
+      tipo: 'agendamento',
+      titulo: 'Agendamento Solicitado',
+      mensagem: `Seu agendamento de ${servicoAtual.name} para ${novo.dataFormatada} (${novo.horarioFormatado}) foi registrado com sucesso.`,
+      link: '/agendamentos',
+    });
     setNovoAgendamentoCriado(novo);
     setStep('concluido');
   };

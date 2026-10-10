@@ -2,51 +2,18 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NotificationsPage } from './NotificationsPage';
-import type { ClientNotification } from '@clinica/shared';
+import { initializeProfileNotifications } from '@/features/notifications/notifications-store';
 
 const mockUseOptionalAuth = vi.fn();
-const mockMarkAsRead = vi.fn();
-const mockMarkAllAsRead = vi.fn();
-const mockClearNotification = vi.fn();
-
-const sampleNotifications: ClientNotification[] = [
-  {
-    id: 'notif-1',
-    tipo: 'agendamento',
-    titulo: 'Sessão Confirmada',
-    mensagem: 'Sua massagem está confirmada para sábado.',
-    lida: false,
-    createdAt: '2026-09-26T10:00:00.000Z',
-    link: '/agendamentos',
-  },
-  {
-    id: 'notif-2',
-    tipo: 'lembrete',
-    titulo: 'Beba Água',
-    mensagem: 'Lembrete de hidratação após a sessão.',
-    lida: true,
-    createdAt: '2026-09-25T10:00:00.000Z',
-    link: '/servicos',
-  },
-];
 
 vi.mock('@/features/auth/auth-context', () => ({
   useOptionalAuth: () => mockUseOptionalAuth(),
   useAuth: () => mockUseOptionalAuth(),
 }));
 
-vi.mock('@/features/notifications/notifications-store', () => ({
-  useClientNotifications: () => ({
-    notifications: sampleNotifications,
-    unreadCount: 1,
-    markAsRead: mockMarkAsRead,
-    markAllAsRead: mockMarkAllAsRead,
-    clearNotification: mockClearNotification,
-  }),
-}));
-
 describe('NotificationsPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -69,12 +36,14 @@ describe('NotificationsPage', () => {
     expect(await screen.findByText('Página de Login')).toBeInTheDocument();
   });
 
-  it('exibe titulo, filtros e a lista de notificacoes quando autenticado', async () => {
+  it('exibe para um novo perfil apenas as notificacoes iniciais de boas-vindas e ficha de anamnese', async () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
       isAuthReady: true,
       logout: vi.fn(),
     });
+
+    initializeProfileNotifications('user-123', 'Lucas Lima');
 
     render(
       <MemoryRouter initialEntries={['/notificacoes']}>
@@ -83,10 +52,11 @@ describe('NotificationsPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Minhas Notificações' })).toBeInTheDocument();
-    expect(screen.getByText('Sessão Confirmada')).toBeInTheDocument();
-    expect(screen.getByText('Beba Água')).toBeInTheDocument();
+    expect(screen.getByText('Preencha sua Ficha de Anamnese')).toBeInTheDocument();
+    expect(screen.getByText('Bem-vindo(a) à Clínica!')).toBeInTheDocument();
+    expect(screen.queryByText('Sessão Confirmada')).not.toBeInTheDocument();
     expect(screen.getByText('Todas (2)')).toBeInTheDocument();
-    expect(screen.getByText('Não lidas (1)')).toBeInTheDocument();
+    expect(screen.getByText('Não lidas (2)')).toBeInTheDocument();
   });
 
   it('filtra apenas notificacoes nao lidas ao selecionar a aba correspondente', async () => {
@@ -102,33 +72,18 @@ describe('NotificationsPage', () => {
       </MemoryRouter>,
     );
 
+    // Marca a primeira como lida
+    const markReadBtns = screen.getAllByRole('button', { name: 'Marcar como lida' });
+    fireEvent.click(markReadBtns[0]!);
+
     const tabNaoLidas = screen.getByRole('button', { name: 'Não lidas (1)' });
     fireEvent.click(tabNaoLidas);
 
-    expect(screen.getByText('Sessão Confirmada')).toBeInTheDocument();
-    expect(screen.queryByText('Beba Água')).not.toBeInTheDocument();
+    expect(screen.queryByText('Preencha sua Ficha de Anamnese')).not.toBeInTheDocument();
+    expect(screen.getByText('Bem-vindo(a) à Clínica!')).toBeInTheDocument();
   });
 
-  it('chama markAsRead ao clicar em Marcar como lida', async () => {
-    mockUseOptionalAuth.mockReturnValue({
-      currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
-      isAuthReady: true,
-      logout: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/notificacoes']}>
-        <NotificationsPage />
-      </MemoryRouter>,
-    );
-
-    const markReadBtn = screen.getByRole('button', { name: 'Marcar como lida' });
-    fireEvent.click(markReadBtn);
-
-    expect(mockMarkAsRead).toHaveBeenCalledWith('notif-1');
-  });
-
-  it('chama markAllAsRead ao clicar no botao de marcar todas', async () => {
+  it('marca todas as notificacoes como lidas ao clicar no botao correspondente', async () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
       isAuthReady: true,
@@ -147,6 +102,29 @@ describe('NotificationsPage', () => {
       fireEvent.click(markAllBtn);
     }
 
-    expect(mockMarkAllAsRead).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Não lidas (0)' })).toBeInTheDocument();
+  });
+
+  it('permite remover as notificacoes e mantém o estado vazio', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/notificacoes']}>
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remover notificação: Preencha sua Ficha de Anamnese' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remover notificação: Bem-vindo(a) à Clínica!' }),
+    );
+
+    expect(screen.getByText('Nenhuma notificação no momento')).toBeInTheDocument();
   });
 });

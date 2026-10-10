@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { AuthLayout } from '@/components/ui/AuthLayout';
 import { auth, db } from '@/lib/firebase';
 import { getFirebaseErrorCode } from '@/lib/firebase-error';
+import { initializeProfileNotifications } from '@/features/notifications/notifications-store';
 
 const registerSchema = z
   .object({
@@ -104,6 +105,7 @@ export function RegisterPage() {
         status: 'ativo',
         createdAt: new Date().toISOString(),
       });
+      initializeProfileNotifications(userCredential.user.uid, formData.nome.trim());
       navigate('/agendamentos', { replace: true });
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
