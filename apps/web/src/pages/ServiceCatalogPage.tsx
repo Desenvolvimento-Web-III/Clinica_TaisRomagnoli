@@ -140,7 +140,7 @@ export function ServiceCatalogPage({ services }: ServiceCatalogPageProps) {
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="mt-4 inline-flex items-center rounded-full bg-[var(--color-brand-soft)] px-4 py-2 text-xs font-semibold text-[var(--color-brand-deep)] transition hover:bg-[var(--color-brand-primary)] hover:text-white"
+              className="mt-4 inline-flex items-center rounded-full bg-[var(--color-brand-soft)] px-4 py-2 text-xs font-semibold text-[var(--color-brand-deep)] transition hover:bg-[var(--color-brand-deep)] hover:text-white"
             >
               Limpar busca
             </button>

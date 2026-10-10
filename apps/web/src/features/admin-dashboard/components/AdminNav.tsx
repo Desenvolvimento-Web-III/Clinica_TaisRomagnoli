@@ -146,8 +146,8 @@ export function AdminNav({ activeSection, onSelectSection }: Readonly<AdminNavPr
                 onClick={() => onSelectSection(item.id)}
                 className={`group flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-all sm:text-sm ${
                   isActive
-                    ? 'bg-[var(--color-brand-deep)] text-white shadow-sm'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)]'
+                    ? 'bg-[var(--color-brand-deep)] text-white shadow-sm hover:bg-[var(--color-brand-dark)]'
+                    : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950'
                 }`}
               >
                 {item.icon(

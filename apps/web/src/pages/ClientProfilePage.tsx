@@ -489,7 +489,7 @@ export function ClientProfilePage() {
                   </div>
                   <Link
                     to="/anamnese"
-                    className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-brand-primary)] bg-[var(--color-brand-soft)] px-4 py-2.5 text-xs font-semibold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-primary)] hover:text-white"
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-brand-primary)] bg-[var(--color-brand-soft)] px-4 py-2.5 text-xs font-semibold text-[var(--color-brand-deep)] transition-colors hover:border-[var(--color-brand-deep)] hover:bg-[var(--color-brand-deep)] hover:text-white"
                   >
                     Preencher / Consultar Ficha
                   </Link>

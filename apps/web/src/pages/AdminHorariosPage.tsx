@@ -286,8 +286,9 @@ export function AdminHorariosPage() {
         {/* Navegação de Retorno */}
         <div className="flex items-center justify-between">
           <Link
-            to="/status"
-            className="inline-flex items-center text-sm font-medium text-[#6C53A6] transition hover:text-[#7A60B8]"
+            to="/admin?tab=configuracoes"
+            data-testid="voltar-painel-link"
+            className="inline-flex items-center text-sm font-medium text-[#6C53A6] transition hover:text-[#58418b] hover:underline"
           >
             <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -306,7 +307,7 @@ export function AdminHorariosPage() {
         </div>
 
         {/* Cabeçalho Principal */}
-        <header className="rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
+        <header className="rounded-2xl sm:rounded-[2rem] bg-white p-4 sm:p-6 lg:p-8 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-[#000000] sm:text-3xl">
@@ -367,7 +368,7 @@ export function AdminHorariosPage() {
         {/* Formulário Principal */}
         <form onSubmit={handleSalvar} className="space-y-6">
           {/* Card: Intervalo Padrão da Clínica */}
-          <section className="rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
+          <section className="rounded-2xl sm:rounded-[2rem] bg-white p-4 sm:p-6 lg:p-8 shadow-sm">
             <h2 className="text-lg font-bold text-[#000000]">Intervalo Padrão da Clínica</h2>
             <p className="mt-1 text-xs text-[#334155]">
               Tempo de intervalo padrão entre cada atendimento dedicado à higienização das macas,
@@ -411,7 +412,7 @@ export function AdminHorariosPage() {
               return (
                 <article
                   key={diaItem.dia}
-                  className={`rounded-[2rem] bg-white p-6 shadow-sm transition-all sm:p-8 ${
+                  className={`rounded-2xl sm:rounded-[2rem] bg-white p-4 sm:p-6 lg:p-8 shadow-sm transition-all ${
                     !estaAtivo ? 'opacity-80 border border-dashed border-[#E2E8F0]' : ''
                   }`}
                 >
@@ -439,8 +440,8 @@ export function AdminHorariosPage() {
                       onClick={() => handleToggleDiaAtivo(diaItem.dia)}
                       className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold transition ${
                         estaAtivo
-                          ? 'border border-[#E2E8F0] bg-[#F8FAFC] text-[#334155] hover:bg-[#F1F5F9]'
-                          : 'bg-[#7A60B8] text-white hover:bg-[#6C53A6]'
+                          ? 'border border-[#E2E8F0] bg-[#F8FAFC] text-[#334155] hover:bg-zinc-200 hover:text-zinc-950'
+                          : 'bg-[#7A60B8] text-white hover:bg-[var(--color-brand-dark)]'
                       }`}
                     >
                       {estaAtivo ? 'Marcar como Folga' : 'Ativar Atendimento'}
@@ -472,7 +473,7 @@ export function AdminHorariosPage() {
                           <button
                             type="button"
                             onClick={() => handleAddTurno(diaItem.dia)}
-                            className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#7A60B8]"
+                            className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#58418b] hover:underline"
                           >
                             + Adicionar turno
                           </button>
@@ -529,7 +530,7 @@ export function AdminHorariosPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveTurno(diaItem.dia, tIdx)}
-                                  className="ml-auto text-xs text-[#EF4444] transition hover:underline"
+                                  className="ml-auto text-xs text-[#EF4444] transition hover:text-red-700 hover:underline"
                                   title="Remover este turno"
                                 >
                                   Remover
@@ -555,7 +556,7 @@ export function AdminHorariosPage() {
                           <button
                             type="button"
                             onClick={() => handleAddManutencao(diaItem.dia)}
-                            className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#7A60B8]"
+                            className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#58418b] hover:underline"
                           >
                             + Adicionar manutenção
                           </button>
@@ -626,7 +627,7 @@ export function AdminHorariosPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveManutencao(diaItem.dia, mIdx)}
-                                  className="text-xs text-[#EF4444] transition hover:underline sm:self-center"
+                                  className="text-xs text-[#EF4444] transition hover:text-red-700 hover:underline sm:self-center"
                                   title="Remover esta manutenção"
                                 >
                                   Remover
@@ -677,7 +678,7 @@ export function AdminHorariosPage() {
               type="button"
               onClick={handleRestaurarPadrao}
               disabled={saving}
-              className="rounded-xl border border-[#E2E8F0] px-5 py-2.5 text-xs font-semibold text-[#334155] transition hover:bg-[#F8FAFC] disabled:opacity-50"
+              className="w-full sm:w-auto rounded-xl border border-[#E2E8F0] px-5 py-2.5 text-xs font-semibold text-[#334155] transition hover:bg-zinc-100 hover:text-zinc-950 hover:border-zinc-300 disabled:opacity-50"
             >
               Restaurar Padrão da Clínica
             </button>
@@ -685,7 +686,7 @@ export function AdminHorariosPage() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-xl bg-[#7A60B8] px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#6C53A6] disabled:opacity-50"
+              className="inline-flex w-full sm:w-auto items-center justify-center rounded-xl bg-[#7A60B8] px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)] disabled:opacity-50"
             >
               {saving ? (
                 <>
