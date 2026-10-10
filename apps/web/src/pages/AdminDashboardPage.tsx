@@ -6,9 +6,11 @@ import { getUserDisplayName } from '@/features/auth/user-display';
 import { AdminNav } from '@/features/admin-dashboard/components/AdminNav';
 import type { AdminSection } from '@/features/admin-dashboard/types';
 import { AdminServiceFormModal } from '@/features/services/components/AdminServiceFormModal';
+import { AdminServicesList } from '@/features/services/components/AdminServicesList';
 import {
   saveServiceToFirestore,
   subscribeToServicesFromFirestore,
+  toggleServiceStatus,
   type UpsertServiceInput,
 } from '@/features/services/service-firestore-repository';
 import type { Service } from '@/features/services/types';
@@ -217,7 +219,7 @@ const SERVICOS_INICIAIS: Service[] = [
     sinalPercentual: 30,
     sinalInCents: 3900,
     category: 'Energética',
-    active: true,
+    active: false,
     imageSrc: '',
     imageAlt: 'Reiki & Terapia Energética',
   },
@@ -278,6 +280,31 @@ export function AdminDashboardPage() {
   const handleAbrirModalEdicao = (servico: Service) => {
     setServicoParaEdicao(servico);
     setModalServicoAberto(true);
+  };
+
+  const handleAlternarStatusServico = async (servico: Service) => {
+    try {
+      const novoStatus = !servico.active;
+      const servicoAtualizado = await toggleServiceStatus(servico);
+      setServicos((prev) => {
+        const idx = prev.findIndex((s) => s.id === servicoAtualizado.id);
+        if (idx >= 0) {
+          const atualizados = [...prev];
+          atualizados[idx] = servicoAtualizado;
+          return atualizados;
+        }
+        return [servicoAtualizado, ...prev];
+      });
+      setFeedbackServico({
+        tipo: 'sucesso',
+        texto: `Serviço "${servico.name}" foi ${novoStatus ? 'ativado' : 'desativado'} com sucesso!`,
+      });
+    } catch {
+      setFeedbackServico({
+        tipo: 'erro',
+        texto: `Não foi possível alterar o status do serviço "${servico.name}".`,
+      });
+    }
   };
 
   const handleSalvarServico = async (input: UpsertServiceInput) => {
@@ -345,7 +372,7 @@ export function AdminDashboardPage() {
 
             <Link
               to="/servicos"
-              className="hidden rounded-xl border border-[var(--color-border-default)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)] sm:inline-block"
+              className="hidden rounded-xl border border-[var(--color-border-default)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-zinc-100 hover:text-zinc-950 hover:border-zinc-300 sm:inline-block"
             >
               Ver Catálogo Público
             </Link>
@@ -353,7 +380,7 @@ export function AdminDashboardPage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 hover:text-red-900 hover:border-red-300"
             >
               <svg
                 aria-hidden="true"
@@ -397,7 +424,7 @@ export function AdminDashboardPage() {
               <button
                 type="button"
                 onClick={() => setModalPresencialAberto(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-95"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
               >
                 <svg
                   aria-hidden="true"
@@ -554,7 +581,7 @@ export function AdminDashboardPage() {
 
                     <Link
                       to={`/admin/clientes/${cliente.id}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--color-brand-deep)] bg-white px-4 py-2 text-xs font-bold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-soft)]"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--color-brand-deep)] bg-white px-4 py-2 text-xs font-bold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-deep)] hover:text-white"
                     >
                       <span>Ver Ficha Completa</span>
                       <svg
@@ -603,141 +630,12 @@ export function AdminDashboardPage() {
               </div>
             )}
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-2xl">
-                  Serviços e Procedimentos
-                </h1>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  Catálogo administrativo dos procedimentos com valores, durações, sinal de reserva
-                  e edição completa.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleAbrirModalCadastro}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-brand-dark)]"
-                >
-                  <svg
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  <span>Novo Serviço</span>
-                </button>
-
-                <Link
-                  to="/servicos"
-                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-2 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)]"
-                >
-                  <span>Visualizar como Cliente</span>
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {servicos.map((servico) => {
-                const precoEmReais = servico.priceInCents / 100;
-                const sinalEmReais =
-                  (servico.sinalInCents ?? Math.round(servico.priceInCents * 0.3)) / 100;
-                const percentualSinal =
-                  servico.sinalPercentual ??
-                  (precoEmReais > 0 ? Math.round((sinalEmReais / precoEmReais) * 100) : 30);
-
-                return (
-                  <div
-                    key={servico.id}
-                    className="flex flex-col justify-between rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="rounded-md bg-[var(--color-brand-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-brand-deep)]">
-                          {servico.category || 'Corporal'}
-                        </span>
-                        {servico.active ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            Ativo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">
-                            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-                            Inativo
-                          </span>
-                        )}
-                      </div>
-
-                      <h3 className="mt-3 font-bold text-[var(--color-text-primary)]">
-                        {servico.name}
-                      </h3>
-
-                      {servico.description && (
-                        <p className="mt-1.5 text-xs text-[var(--color-text-secondary)] line-clamp-2">
-                          {servico.description}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="mt-4 border-t border-[var(--color-border-default)] pt-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-[var(--color-text-secondary)]">
-                          {servico.durationMinutes} min
-                        </span>
-                        <strong className="text-base text-[var(--color-brand-deep)]">
-                          R$ {precoEmReais.toFixed(2).replace('.', ',')}
-                        </strong>
-                      </div>
-
-                      {/* Sinal de Reserva */}
-                      <div className="mt-2 flex items-center justify-between rounded-lg bg-[var(--color-canvas-neutral)] px-2.5 py-1.5 text-xs">
-                        <span className="text-[var(--color-text-secondary)]">
-                          Sinal de reserva:
-                        </span>
-                        <span className="font-semibold text-[var(--color-brand-deep)]">
-                          R$ {sinalEmReais.toFixed(2).replace('.', ',')} ({percentualSinal}%)
-                        </span>
-                      </div>
-
-                      {/* Ações */}
-                      <div className="mt-3 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirModalEdicao(servico)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-default)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)]"
-                        >
-                          <svg
-                            aria-hidden="true"
-                            className="h-3.5 w-3.5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            />
-                          </svg>
-                          <span>Editar</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <AdminServicesList
+              services={servicos}
+              onEditService={handleAbrirModalEdicao}
+              onToggleStatus={handleAlternarStatusServico}
+              onNewService={handleAbrirModalCadastro}
+            />
           </section>
         )}
 
@@ -898,7 +796,7 @@ export function AdminDashboardPage() {
                 <div className="mt-6">
                   <Link
                     to="/admin/horarios"
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-95"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
                   >
                     <span>Abrir Gestor de Horários</span>
                     <svg
@@ -971,60 +869,64 @@ export function AdminDashboardPage() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-              Novo Agendamento Presencial
-            </h3>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              Cadastre um atendimento feito no balcão da clínica. Não há exigência de sinal de 30%
-              nesta modalidade.
-            </p>
+          <div className="relative flex flex-col w-full max-w-md max-h-[92dvh] sm:max-h-[88vh] rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="shrink-0 p-4 sm:p-6 pb-3 sm:pb-4 border-b border-[var(--color-border-default)]">
+              <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
+                Novo Agendamento Presencial
+              </h3>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)] sm:text-sm">
+                Cadastre um atendimento feito no balcão da clínica. Não há exigência de sinal de 30%
+                nesta modalidade.
+              </p>
+            </div>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 setModalPresencialAberto(false);
               }}
-              className="mt-4 space-y-3"
+              className="flex flex-col flex-1 min-h-0 overflow-hidden"
             >
-              <div>
-                <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
-                  Nome do Cliente
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Nome do cliente"
-                  className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] px-3 py-2 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
-                />
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Nome do Cliente
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nome do cliente"
+                    className="mt-1.5 w-full rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                    Procedimento
+                  </label>
+                  <select className="mt-1.5 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden">
+                    {servicos.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} — R$ {(s.priceInCents / 100).toFixed(2).replace('.', ',')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
-                  Procedimento
-                </label>
-                <select className="mt-1 w-full rounded-xl border border-[var(--color-border-default)] px-3 py-2 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden">
-                  {servicos.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} — R$ {(s.priceInCents / 100).toFixed(2).replace('.', ',')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3">
+              <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 p-4 sm:p-6 pt-3 sm:pt-4 border-t border-[var(--color-border-default)] bg-gray-50/70 sm:bg-white">
                 <button
                   type="button"
                   onClick={() => setModalPresencialAberto(false)}
-                  className="rounded-xl border border-[var(--color-border-default)] px-4 py-2 text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-neutral)]"
+                  className="w-full sm:w-auto rounded-xl border border-[var(--color-border-default)] px-4 py-2.5 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-zinc-100 hover:text-zinc-950 hover:border-zinc-300"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-[var(--color-brand-deep)] px-4 py-2 text-xs font-semibold text-white hover:opacity-95"
+                  className="w-full sm:w-auto rounded-xl bg-[var(--color-brand-deep)] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
                 >
                   Confirmar Agendamento
                 </button>

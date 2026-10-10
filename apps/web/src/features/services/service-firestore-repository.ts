@@ -395,3 +395,27 @@ export async function saveServiceToFirestore(
 
   return mapFirestoreDocToService(serviceId, firestoreData);
 }
+
+/**
+ * Alterna rapidamente o status ativo/inativo de um serviço.
+ */
+export async function toggleServiceStatus(
+  service: Service,
+  customDb: Firestore | null = db,
+): Promise<Service> {
+  const newActive = !service.active;
+  return saveServiceToFirestore(
+    {
+      id: service.id,
+      nome: service.name,
+      descricao: service.description,
+      duracaoMinutos: service.durationMinutes,
+      preco: service.priceInCents / 100,
+      sinal: (service.sinalInCents ?? Math.round(service.priceInCents * 0.3)) / 100,
+      sinalPercentual: service.sinalPercentual ?? 30,
+      ativo: newActive,
+      categoria: service.category || 'Corporal',
+    },
+    customDb,
+  );
+}

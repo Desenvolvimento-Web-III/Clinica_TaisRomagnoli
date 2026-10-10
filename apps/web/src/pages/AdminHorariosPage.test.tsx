@@ -100,4 +100,14 @@ describe('AdminHorariosPage', () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it('exibe o link para voltar ao painel administrativo apontando para /admin?tab=configuracoes', async () => {
+    renderWithRouter(<AdminHorariosPage />);
+
+    await screen.findByRole('heading', { name: /Horários de Funcionamento e Manutenção/i });
+
+    const linkVoltar = screen.getByRole('link', { name: /Voltar ao painel/i });
+    expect(linkVoltar).toBeInTheDocument();
+    expect(linkVoltar).toHaveAttribute('href', '/admin?tab=configuracoes');
+  });
 });
