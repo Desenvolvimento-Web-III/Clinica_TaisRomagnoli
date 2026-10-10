@@ -11,9 +11,20 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.role == 'admin';
+      return isSignedIn() && (
+        ('role' in request.auth.token && request.auth.token.role == 'admin') ||
+        ('admin' in request.auth.token && request.auth.token.admin == true)
+      );
     }
 
+    function isDocOwner(data) {
+      return isSignedIn() && (
+        ('clienteId' in data && data.clienteId == request.auth.uid) ||
+        ('uid' in data && data.uid == request.auth.uid)
+      );
+    }
+
+    // Coleção de clientes cadastrados
     match /clientes/{uid} {
       allow get: if isOwner(uid) || isAdmin();
       allow list: if isAdmin();
@@ -42,18 +53,57 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Ficha de avaliação (Anamnese) vinculada ao cliente
       match /anamneses/{anamnesisId} {
         allow read: if isAdmin() || isOwner(uid);
         allow write: if false;
       }
 
-      match /notificacoes/{notifId} {
+      // Agendamentos na subcoleção do cliente
+      match /agendamentos/{agendamentoId} {
         allow read: if isOwner(uid) || isAdmin();
-        allow update: if (isOwner(uid) || isAdmin())
-                      && request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['lida', 'updatedAt']);
-        allow create, delete: if false;
+        allow create: if isOwner(uid) || isAdmin();
+        allow update: if isOwner(uid) || isAdmin();
+        allow delete: if isAdmin();
       }
+    match /notificacoes/{notifId} {
+  allow read: if isOwner(uid) || isAdmin();
+  allow update: if (isOwner(uid) || isAdmin())
+                && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['lida', 'updatedAt']);
+  allow create, delete: if false;
+  }
+}
+    // Coleção raiz de agendamentos
+    match /agendamentos/{agendamentoId} {
+      allow get: if isAdmin() || isDocOwner(resource.data);
+      allow list: if isAdmin() || (isSignedIn() && (
+        resource.data.clienteId == request.auth.uid ||
+        resource.data.uid == request.auth.uid
+      ));
+      }
+
+    // Coleções raiz de anamneses e fichas de avaliação
+    match /anamneses/{anamnesisId} {
+      allow get: if isAdmin() || isDocOwner(resource.data);
+      allow list: if isAdmin() || (isSignedIn() && (
+        resource.data.clienteId == request.auth.uid ||
+        resource.data.uid == request.auth.uid
+      ));
+      allow create: if isAdmin() || isDocOwner(request.resource.data);
+      allow update: if isAdmin() || isDocOwner(resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /fichas/{fichaId} {
+      allow get: if isAdmin() || isDocOwner(resource.data);
+      allow list: if isAdmin() || (isSignedIn() && (
+        resource.data.clienteId == request.auth.uid ||
+        resource.data.uid == request.auth.uid
+      ));
+      allow create: if isAdmin() || isDocOwner(request.resource.data);
+      allow update: if isAdmin() || isDocOwner(resource.data);
+      allow delete: if isAdmin();
     }
 
     // Coleção de serviços da clínica (massagens, duração, valor e imagem)
@@ -61,7 +111,7 @@ service cloud.firestore {
       // Leitura pública liberada para visualização do catálogo e agendamento
       allow read: if true;
       // Criação, atualização e exclusão restritas à administração autenticada
-      allow write: if isSignedIn();
+    allow write: if isSignedIn();
     }
 
     // Configurações da clínica (intervalo, folgas, percentual do sinal)
@@ -91,8 +141,7 @@ service cloud.firestore {
     // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
     // Escrita direta client-side bloqueada: criação, reagendamento e cancelamento são processados por Cloud Functions
     match /agendamentos/{agendamentoId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.clienteId == request.auth.uid);
-      allow write: if false;
+    allow read: if isAdmin() || isDocOwner(resource.data);      allow write: if false;
     }
 
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado
