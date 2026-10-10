@@ -4,6 +4,7 @@ import type { ServicoModel } from '@clinica/shared';
 export interface ServicosRepository {
   salvar(servico: ServicoModel): Promise<ServicoModel>;
   buscarPorId(id: string): Promise<ServicoModel | null>;
+  buscarPorNome(nome: string): Promise<ServicoModel | null>;
   listar(apenasAtivos?: boolean): Promise<ServicoModel[]>;
   atualizar(servico: ServicoModel): Promise<ServicoModel>;
   excluir(id: string): Promise<void>;
@@ -23,6 +24,16 @@ export class InMemoryServicosRepository implements ServicosRepository {
   async buscarPorId(id: string): Promise<ServicoModel | null> {
     const item = this.servicos.get(id);
     return item ? { ...item } : null;
+  }
+
+  async buscarPorNome(nome: string): Promise<ServicoModel | null> {
+    const normalizado = nome.trim().toLowerCase();
+    for (const item of this.servicos.values()) {
+      if (item.nome.trim().toLowerCase() === normalizado) {
+        return { ...item };
+      }
+    }
+    return null;
   }
 
   async listar(apenasAtivos: boolean = false): Promise<ServicoModel[]> {
@@ -143,6 +154,31 @@ export class FirestoreServicosRepository implements ServicosRepository {
     const doc = await this.collection.doc(id).get();
     if (!doc.exists) return null;
     return mapFirestoreDocToServico(doc.id, doc.data() as Record<string, unknown>);
+  }
+
+  async buscarPorNome(nome: string): Promise<ServicoModel | null> {
+    const nomeTrim = nome.trim();
+    if (!nomeTrim) return null;
+
+    // Busca exata pelo atributo 'nome'
+    const snapshotNome = await this.collection.where('nome', '==', nomeTrim).get();
+    const docNome = snapshotNome.docs?.[0];
+    if (docNome) {
+      return mapFirestoreDocToServico(docNome.id, docNome.data() as Record<string, unknown>);
+    }
+
+    // Fallback para documentos legados gravados como 'name'
+    const snapshotName = await this.collection.where('name', '==', nomeTrim).get();
+    const docName = snapshotName.docs?.[0];
+    if (docName) {
+      return mapFirestoreDocToServico(docName.id, docName.data() as Record<string, unknown>);
+    }
+
+    // Busca comparativa insensível a maiúsculas/minúsculas para prevenção de duplicidade
+    const todos = await this.listar(false);
+    const lowercase = nomeTrim.toLowerCase();
+    const encontrado = todos.find((s) => s.nome.trim().toLowerCase() === lowercase);
+    return encontrado || null;
   }
 
   async listar(apenasAtivos: boolean = false): Promise<ServicoModel[]> {

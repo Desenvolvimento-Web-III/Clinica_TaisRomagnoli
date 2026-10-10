@@ -154,4 +154,64 @@ describe('FirestoreServicosRepository', () => {
     await repo.excluir('massagem-relaxante');
     expect(mockDocDelete).toHaveBeenCalled();
   });
+
+  describe('buscarPorNome', () => {
+    it('recupera serviço pelo atributo nome', async () => {
+      mockCollectionGet.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'massagem-relaxante',
+            data: () => ({
+              nome: 'Massagem Relaxante',
+              duracaoMinutos: 60,
+              precoEmCentavos: 15000,
+              sinalEmCentavos: 4500,
+              descricao: 'Desc',
+              ativo: true,
+            }),
+          },
+        ],
+      });
+
+      const encontrado = await repo.buscarPorNome('Massagem Relaxante');
+
+      expect(mockCollectionWhere).toHaveBeenCalledWith('nome', '==', 'Massagem Relaxante');
+      expect(encontrado?.id).toBe('massagem-relaxante');
+      expect(encontrado?.nome).toBe('Massagem Relaxante');
+    });
+
+    it('recupera serviço via fallback para atributo name legado', async () => {
+      // Primeira busca por 'nome' vazia
+      mockCollectionGet.mockResolvedValueOnce({ docs: [] });
+      // Segunda busca por 'name' encontra
+      mockCollectionGet.mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'drenagem-linfatica',
+            data: () => ({
+              name: 'Drenagem Linfática',
+              durationMinutes: 60,
+              priceInCents: 16000,
+              active: true,
+            }),
+          },
+        ],
+      });
+
+      const encontrado = await repo.buscarPorNome('Drenagem Linfática');
+
+      expect(mockCollectionWhere).toHaveBeenCalledWith('name', '==', 'Drenagem Linfática');
+      expect(encontrado?.id).toBe('drenagem-linfatica');
+      expect(encontrado?.nome).toBe('Drenagem Linfática');
+    });
+
+    it('retorna null se não encontrar por nome nem por name', async () => {
+      mockCollectionGet.mockResolvedValueOnce({ docs: [] });
+      mockCollectionGet.mockResolvedValueOnce({ docs: [] });
+      mockCollectionGet.mockResolvedValueOnce({ docs: [] }); // listar
+
+      const resultado = await repo.buscarPorNome('Serviço Inexistente');
+      expect(resultado).toBeNull();
+    });
+  });
 });

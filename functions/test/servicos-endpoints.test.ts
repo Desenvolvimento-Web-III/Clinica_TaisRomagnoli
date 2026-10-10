@@ -156,6 +156,153 @@ describe('Serviços HTTP Endpoints (functions/src/index.ts)', () => {
       expect(res.statusCode).toBe(403);
       expect(res.body?.error).toContain('Apenas a administradora');
     });
+
+    it('cadastra com sucesso novo serviço com duração, preço, sinal, descrição e status (201)', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-tais',
+        role: 'admin',
+        admin: true,
+      });
+
+      const mockDocSet = vi.fn().mockResolvedValue(undefined);
+      const mockDocGet = vi.fn().mockResolvedValue({ exists: false });
+      const mockWhereGet = vi.fn().mockResolvedValue({ docs: [] });
+
+      mockFirestore.collection.mockReturnValue({
+        where: vi.fn().mockReturnValue({ get: mockWhereGet }),
+        doc: vi.fn().mockReturnValue({ get: mockDocGet, set: mockDocSet }),
+        get: mockWhereGet,
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: {
+          nome: 'Massagem Desportiva',
+          duracaoMinutos: 60,
+          preco: 170,
+          descricao: 'Massagem profunda para recuperação muscular pré e pós-treino.',
+          ativo: true,
+        },
+      });
+      const res = createMockResponse();
+
+      await (cadastrarServico as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body?.mensagem).toBe('Serviço cadastrado com sucesso.');
+      const dados = res.body?.dados as Record<string, unknown>;
+      expect(dados.nome).toBe('Massagem Desportiva');
+      expect(dados.duracaoMinutos).toBe(60);
+      expect(dados.preco).toBe(170);
+      expect(dados.sinal).toBe(51); // 30% padrão
+      expect(dados.sinalPercentual).toBe(30);
+      expect(dados.ativo).toBe(true);
+      expect(dados.id).toBe('massagem-desportiva');
+    });
+
+    it('permite cadastrar serviço inativo com status ativo: false (201)', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-tais',
+        role: 'admin',
+        admin: true,
+      });
+
+      const mockDocSet = vi.fn().mockResolvedValue(undefined);
+      const mockDocGet = vi.fn().mockResolvedValue({ exists: false });
+      const mockWhereGet = vi.fn().mockResolvedValue({ docs: [] });
+
+      mockFirestore.collection.mockReturnValue({
+        where: vi.fn().mockReturnValue({ get: mockWhereGet }),
+        doc: vi.fn().mockReturnValue({ get: mockDocGet, set: mockDocSet }),
+        get: mockWhereGet,
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: {
+          nome: 'Procedimento Piloto',
+          duracaoMinutos: 45,
+          preco: 130,
+          descricao: 'Serviço em fase de homologação.',
+          ativo: false,
+        },
+      });
+      const res = createMockResponse();
+
+      await (cadastrarServico as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(201);
+      const dados = res.body?.dados as Record<string, unknown>;
+      expect(dados.ativo).toBe(false);
+    });
+
+    it('retorna 400 se payload for inválido', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-tais',
+        role: 'admin',
+        admin: true,
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: {
+          nome: 'Nome',
+          // sem duracaoMinutos, preco, descricao
+        },
+      });
+      const res = createMockResponse();
+
+      await (cadastrarServico as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body?.error).toContain('Dados do serviço inválidos');
+    });
+
+    it('retorna 409 se serviço com mesmo nome já existir no catálogo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-tais',
+        role: 'admin',
+        admin: true,
+      });
+
+      mockFirestore.collection.mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValueOnce({
+            docs: [
+              {
+                id: 'srv-existente',
+                data: () => ({
+                  nome: 'Massagem Relaxante',
+                  duracaoMinutos: 60,
+                  preco: 150,
+                  ativo: true,
+                }),
+              },
+            ],
+          }),
+        }),
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: {
+          nome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          preco: 150,
+          descricao: 'Tentativa de duplicação de nome.',
+        },
+      });
+      const res = createMockResponse();
+
+      await (cadastrarServico as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(409);
+      expect(res.body?.error).toContain('Já existe um serviço cadastrado com este nome');
+    });
   });
 
   describe('editarServico endpoint', () => {

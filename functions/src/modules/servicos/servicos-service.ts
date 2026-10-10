@@ -1,6 +1,6 @@
 import {
+  criarServicoInputSchema,
   editarServicoInputSchema,
-  servicoInputSchema,
   calcularSinal,
   calcularPercentualSinal,
   reaisParaCentavos,
@@ -22,6 +22,18 @@ export class ServicoBusinessError extends Error {
 }
 
 /**
+ * Converte um texto para formato slug seguro para identificadores de URLs e documentos
+ */
+function slugificar(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+}
+
+/**
  * Valida se o usuário autenticado possui perfil de administradora
  */
 function validarPermissaoAdministradora(
@@ -40,6 +52,8 @@ function validarPermissaoAdministradora(
 
 /**
  * Cadastra um novo serviço no catálogo da clínica (restrito à administradora).
+ * Valida duração, preço, sinal, descrição e status ativo/inativo.
+ * Previne duplicidade de nome e identificador.
  */
 export async function cadastrarNovoServico(
   input: unknown,
@@ -48,15 +62,28 @@ export async function cadastrarNovoServico(
 ): Promise<ServicoModel> {
   validarPermissaoAdministradora(user);
 
-  const parsed = servicoInputSchema.parse(input);
-  const id =
-    parsed.id && parsed.id.trim().length > 0
-      ? parsed.id.trim()
-      : `srv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const parsed = criarServicoInputSchema.parse(input);
 
-  const existente = await repo.buscarPorId(id);
-  if (existente) {
-    throw new ServicoBusinessError('Já existe um serviço cadastrado com este identificador.', 409);
+  // Prevenção de duplicidade por nome
+  const existentePorNome = await repo.buscarPorNome(parsed.nome);
+  if (existentePorNome) {
+    throw new ServicoBusinessError('Já existe um serviço cadastrado com este nome.', 409);
+  }
+
+  let id: string;
+  if (parsed.id && parsed.id.trim().length > 0) {
+    id = parsed.id.trim();
+    const existentePorId = await repo.buscarPorId(id);
+    if (existentePorId) {
+      throw new ServicoBusinessError(
+        'Já existe um serviço cadastrado com este identificador.',
+        409,
+      );
+    }
+  } else {
+    const slugBase = slugificar(parsed.nome) || 'servico';
+    const slugExistente = await repo.buscarPorId(slugBase);
+    id = slugExistente ? `${slugBase}-${Date.now().toString(36)}` : slugBase;
   }
 
   const precoEmCentavos = reaisParaCentavos(parsed.preco);
