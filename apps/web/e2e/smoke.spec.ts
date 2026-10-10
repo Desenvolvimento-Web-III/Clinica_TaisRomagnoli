@@ -59,11 +59,15 @@ test('aproveita o espaço disponível no desktop sem perder a navegação', asyn
   const cards = page.getByRole('article');
   await expect(cards.first()).toBeVisible();
   await expect(cards.nth(3)).toBeVisible();
-  const firstCard = await cards.first().boundingBox();
-  const fourthCard = await cards.nth(3).boundingBox();
-  expect(firstCard).not.toBeNull();
-  expect(fourthCard).not.toBeNull();
-  expect(fourthCard!.y).toBe(firstCard!.y);
+
+  await expect
+    .poll(async () => {
+      const first = await cards.first().boundingBox();
+      const fourth = await cards.nth(3).boundingBox();
+      if (!first || !fourth) return false;
+      return fourth.y === first.y;
+    })
+    .toBe(true);
 });
 
 test('mantém os formulários de acesso sem rolagem horizontal no mobile e no desktop', async ({

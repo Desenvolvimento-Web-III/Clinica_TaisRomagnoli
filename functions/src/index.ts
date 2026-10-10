@@ -20,6 +20,17 @@ import {
   marcarNotificacaoComoLida,
   NotificacaoBusinessError,
 } from './modules/notificacoes/notificacoes-service.js';
+import { FirestoreServicosRepository } from './modules/servicos/servicos-repository.js';
+import {
+  cadastrarNovoServico,
+  editarServicoExistente,
+  desativarServicoExistente,
+  reativarServicoExistente,
+  excluirServicoComProtecaoHistorico,
+  listarServicosCatalog,
+  obterDetalhesServico,
+  ServicoBusinessError,
+} from './modules/servicos/servicos-service.js';
 
 initializeApp();
 
@@ -47,6 +58,20 @@ export {
   listarNotificacoesDoCliente,
   marcarNotificacaoComoLida,
 } from './modules/notificacoes/notificacoes-service.js';
+export {
+  FirestoreServicosRepository,
+  InMemoryServicosRepository,
+} from './modules/servicos/servicos-repository.js';
+export {
+  cadastrarNovoServico,
+  editarServicoExistente,
+  desativarServicoExistente,
+  reativarServicoExistente,
+  excluirServicoComProtecaoHistorico,
+  listarServicosCatalog,
+  obterDetalhesServico,
+  ServicoBusinessError,
+} from './modules/servicos/servicos-service.js';
 
 export const healthCheck = onRequest({ cors: false }, (_request, response) => {
   response.status(200).json(getHealthStatus());
@@ -159,8 +184,15 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const firestore = getFirestore();
     const repo = new FirestoreAgendamentosRepository(firestore);
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const servicosRepo = new FirestoreServicosRepository(firestore);
 
-    const agendamento = await solicitarNovoAgendamento(request.body, user, repo, notifRepo);
+    const agendamento = await solicitarNovoAgendamento(
+      request.body,
+      user,
+      repo,
+      notifRepo,
+      servicosRepo,
+    );
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
       dados: agendamento,
@@ -385,5 +417,248 @@ export const processarLembretes = onRequest({ cors: true }, async (request, resp
     }
     console.error('Erro ao processar lembretes:', error);
     response.status(500).json({ error: 'Erro interno ao processar lembretes.' });
+  }
+});
+
+/**
+ * Helper para extrair usuário opcionalmente (para rotas com visualização diferenciada de catálogo)
+ */
+async function extrairUsuarioOpcional(authorizationHeader?: string) {
+  if (!authorizationHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+  try {
+    return await extrairUsuarioAutenticado(authorizationHeader);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cadastra um novo serviço no catálogo da clínica (restrito à administradora)
+ */
+export const cadastrarServico = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+
+    const novo = await cadastrarNovoServico(request.body, user, repo);
+    response.status(201).json({
+      mensagem: 'Serviço cadastrado com sucesso.',
+      dados: novo,
+    });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados do serviço inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao cadastrar serviço:', error);
+    response.status(500).json({ error: 'Erro interno ao cadastrar serviço.' });
+  }
+});
+
+/**
+ * Edita dados de um serviço existente preservando agendamentos passados (restrito à administradora)
+ */
+export const editarServico = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PUT') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PUT.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+
+    const atualizado = await editarServicoExistente(request.body, user, repo);
+    response.status(200).json({
+      mensagem: 'Serviço atualizado com sucesso.',
+      dados: atualizado,
+    });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados do serviço inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao editar serviço:', error);
+    response.status(500).json({ error: 'Erro interno ao editar serviço.' });
+  }
+});
+
+/**
+ * Desativa um serviço (soft delete) mantendo dados históricos de agendamentos (restrito à administradora)
+ */
+export const desativarServico = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+
+    const id = (request.body?.id ||
+      request.body?.servicoId ||
+      request.query['id'] ||
+      request.query['servicoId']) as string;
+
+    const desativado = await desativarServicoExistente(id, user, repo);
+    response.status(200).json({
+      mensagem: 'Serviço desativado com sucesso.',
+      dados: desativado,
+    });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao desativar serviço:', error);
+    response.status(500).json({ error: 'Erro interno ao desativar serviço.' });
+  }
+});
+
+/**
+ * Reativa um serviço previamente desativado (restrito à administradora)
+ */
+export const reativarServico = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+
+    const id = (request.body?.id ||
+      request.body?.servicoId ||
+      request.query['id'] ||
+      request.query['servicoId']) as string;
+
+    const reativado = await reativarServicoExistente(id, user, repo);
+    response.status(200).json({
+      mensagem: 'Serviço reativado com sucesso.',
+      dados: reativado,
+    });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao reativar serviço:', error);
+    response.status(500).json({ error: 'Erro interno ao reativar serviço.' });
+  }
+});
+
+/**
+ * Exclui fisicamente um serviço se e somente se NÃO houver agendamentos associados
+ */
+export const excluirServico = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'DELETE') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou DELETE.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+
+    const id = (request.body?.id ||
+      request.body?.servicoId ||
+      request.query['id'] ||
+      request.query['servicoId']) as string;
+
+    await excluirServicoComProtecaoHistorico(id, user, repo, agendamentosRepo);
+    response.status(200).json({
+      mensagem: 'Serviço excluído com sucesso.',
+    });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao excluir serviço:', error);
+    response.status(500).json({ error: 'Erro interno ao excluir serviço.' });
+  }
+});
+
+/**
+ * Consulta catálogo de serviços.
+ * Clientes e visitantes visualizam apenas serviços ativos.
+ * Administradora pode consultar todos através do parâmetro `todos=true`.
+ */
+export const obterServicos = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioOpcional(request.headers.authorization);
+    const apenasAtivos = request.query['todos'] !== 'true';
+
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+
+    const servicos = await listarServicosCatalog(user, apenasAtivos, repo);
+    response.status(200).json({ dados: servicos });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao obter serviços:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar catálogo de serviços.' });
+  }
+});
+
+/**
+ * Consulta detalhes de um serviço específico
+ */
+export const obterServico = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const id = (request.query['id'] || request.query['servicoId']) as string;
+    if (!id) {
+      response.status(400).json({ error: 'O identificador do serviço (id) é obrigatório.' });
+      return;
+    }
+
+    const firestore = getFirestore();
+    const repo = new FirestoreServicosRepository(firestore);
+
+    const servico = await obterDetalhesServico(id, repo);
+    response.status(200).json({ dados: servico });
+  } catch (error: unknown) {
+    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao obter serviço:', error);
+    response.status(500).json({ error: 'Erro interno ao obter serviço.' });
   }
 });

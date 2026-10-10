@@ -11,6 +11,7 @@ import {
 } from '@clinica/shared';
 import type { AgendamentosRepository } from './agendamentos-repository.js';
 import type { NotificacoesRepository } from '../notificacoes/notificacoes-repository.js';
+import type { ServicosRepository } from '../servicos/servicos-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
@@ -44,8 +45,20 @@ export async function solicitarNovoAgendamento(
   user: UserContext,
   repo: AgendamentosRepository,
   notificacoesRepo?: NotificacoesRepository,
+  servicosRepo?: ServicosRepository,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
+
+  // 0. Validação de Serviço Ativo (se repositório fornecido)
+  if (servicosRepo) {
+    const servico = await servicosRepo.buscarPorId(parsed.servicoId);
+    if (servico && !servico.ativo) {
+      throw new AgendamentoBusinessError(
+        'O procedimento selecionado está desativado e não aceita novos agendamentos.',
+        422,
+      );
+    }
+  }
 
   // 1. Validação de Folga da Clínica
   const inicioDate = new Date(parsed.dataHoraInicio);

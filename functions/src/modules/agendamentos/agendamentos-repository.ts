@@ -6,6 +6,7 @@ export interface AgendamentosRepository {
   buscarPorId(id: string): Promise<Agendamento | null>;
   listarPorCliente(clienteId: string): Promise<Agendamento[]>;
   listarPorProfissionalEData(profissionalId: string, dataYmd: string): Promise<Agendamento[]>;
+  listarPorServico(servicoId: string): Promise<Agendamento[]>;
   atualizar(agendamento: Agendamento): Promise<Agendamento>;
 }
 
@@ -41,6 +42,10 @@ export class InMemoryAgendamentosRepository implements AgendamentosRepository {
       const isAtivo = a.status !== 'cancelado';
       return isProf && isData && isAtivo;
     });
+  }
+
+  async listarPorServico(servicoId: string): Promise<Agendamento[]> {
+    return Array.from(this.agendamentos.values()).filter((a) => a.servicoId === servicoId);
   }
 
   async atualizar(agendamento: Agendamento): Promise<Agendamento> {
@@ -99,6 +104,11 @@ export class FirestoreAgendamentosRepository implements AgendamentosRepository {
     return snapshot.docs
       .map((doc) => doc.data() as Agendamento)
       .filter((a) => a.status !== 'cancelado');
+  }
+
+  async listarPorServico(servicoId: string): Promise<Agendamento[]> {
+    const snapshot = await this.collection.where('servicoId', '==', servicoId).get();
+    return snapshot.docs.map((doc) => doc.data() as Agendamento);
   }
 
   async atualizar(agendamento: Agendamento): Promise<Agendamento> {
