@@ -38,7 +38,7 @@ são rejeitados por Zod.
 npm run emulators
 ```
 
-Portas padrão: UI `4000`, Hosting `5000`, Functions `5001`, Firestore `8080`, Auth `9099` e Storage
+Portas padrão: UI `4000`, Hosting `5005`, Functions `5001`, Firestore `8080`, Auth `9099` e Storage
 `9199`. Não execute `firebase use --add` nem associe um projeto real sem autorização.
 
 Para frontend e Firebase juntos:

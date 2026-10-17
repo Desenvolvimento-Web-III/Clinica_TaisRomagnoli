@@ -7,6 +7,7 @@ import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import { solicitarAgendamentoBackend } from '@/services/agendamentos-service';
 import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
   maskCardNumber,
@@ -107,7 +108,7 @@ export function AgendamentoFlowPage() {
 
   const cardBrand = useMemo(() => detectCardBrand(cartaoNumero), [cartaoNumero]);
 
-  // Finalizar agendamento com validação de pagamento
+  // Finalizar agendamento com validação de pagamento e sincronização com backend/Firestore
   const handleFinalizar = () => {
     if (metodoPagamento === 'cartao') {
       const validation = validateCreditCardForm({
@@ -124,6 +125,7 @@ export function AgendamentoFlowPage() {
       setCardErrors({});
     }
 
+    const dataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
     const novo: Agendamento = {
       id: generateAppointmentId(),
       clienteId: currentUser?.uid,
@@ -150,6 +152,24 @@ export function AgendamentoFlowPage() {
       mensagem: `Seu agendamento de ${servicoAtual.name} para ${novo.dataFormatada} (${novo.horarioFormatado}) foi registrado com sucesso.`,
       link: '/agendamentos',
     });
+
+    // Se o cliente estiver autenticado, persiste no Firestore via Cloud Function
+    if (currentUser?.uid) {
+      solicitarAgendamentoBackend({
+        servicoId: servicoAtual.id,
+        servicoNome: servicoAtual.name,
+        duracaoMinutos: servicoAtual.durationMinutes,
+        valorTotalEmCentavos: servicoAtual.priceInCents,
+        dataHoraInicio: dataHoraInicioIso,
+        metodoPagamento,
+        profissionalId: 'prof-tais-romagnoli',
+        profissionalNome: 'Tais Romagnoli',
+        observacoes: novo.observacao,
+      }).catch((e) => {
+        console.warn('Sincronização em background do agendamento:', e);
+      });
+    }
+
     setNovoAgendamentoCriado(novo);
     setStep('concluido');
   };
