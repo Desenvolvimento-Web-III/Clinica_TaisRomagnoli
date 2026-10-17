@@ -34,7 +34,8 @@ export const solicitarAgendamentoInputSchema = z.object({
   isencaoSinalAdmin: z.boolean().optional().default(false),
 });
 
-export type SolicitarAgendamentoInput = z.infer<typeof solicitarAgendamentoInputSchema>;
+export type SolicitarAgendamentoInput = z.input<typeof solicitarAgendamentoInputSchema>;
+export type SolicitarAgendamentoParsed = z.output<typeof solicitarAgendamentoInputSchema>;
 
 export const cancelarAgendamentoInputSchema = z.object({
   agendamentoId: z.string().min(1, 'ID do agendamento é obrigatório.'),

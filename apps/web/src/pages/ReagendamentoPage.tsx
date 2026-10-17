@@ -6,6 +6,7 @@ import {
   getAgendamentosStorage,
   saveAgendamentosStorage,
 } from '@/features/agendamentos/data/agendamentos-storage';
+import { alterarAgendamentoBackend } from '@/services/agendamentos-service';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
 
 interface DiaDisponivel {
@@ -159,7 +160,18 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const diaObjeto = DATAS_OPCOES_EXEMPLO.find((d) => d.isoDate === dataSelecionada);
 
   const handleConfirmarReagendamento = () => {
+    if (!agendamentoAtual) return;
     setSubmitting(true);
+
+    const novaDataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
+    alterarAgendamentoBackend({
+      agendamentoId: agendamentoAtual.id,
+      novaDataHoraInicio: novaDataHoraInicioIso,
+      motivo: motivo || undefined,
+    }).catch(() => {
+      // Fallback silencioso para garantir funcionamento offline/demonstrativo
+    });
+
     setTimeout(() => {
       const dataFormatadaNova = diaObjeto
         ? `${diaObjeto.diaSemanaFormatado.slice(0, 3)}, ${diaObjeto.dataCurta} de Outubro`

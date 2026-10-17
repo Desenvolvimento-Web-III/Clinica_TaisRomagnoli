@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
@@ -9,6 +9,7 @@ import {
   getAgendamentosStorage,
   saveAgendamentosStorage,
 } from '@/features/agendamentos/data/agendamentos-storage';
+import { carregarAgendamentos, cancelarAgendamentoBackend } from '@/services/agendamentos-service';
 import type { Agendamento, StatusAgendamento } from '@/features/agendamentos/types/agendamento';
 
 type FiltroTab = 'todos' | StatusAgendamento;
@@ -44,12 +45,24 @@ function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
   const [detalhesModalOpen, setDetalhesModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    let ativo = true;
+    carregarAgendamentos(userId).then((res) => {
+      if (ativo && res.agendamentos.length > 0) {
+        setAgendamentos(res.agendamentos);
+      }
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [userId]);
+
   const mostrarToast = (mensagem: string) => {
     setToastMessage(mensagem);
     window.setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handleConfirmarCancelamento = (agendamentoId: string) => {
+  const handleConfirmarCancelamento = (agendamentoId: string, motivo?: string) => {
     setAgendamentos((current) => {
       const updated = current.map((item) =>
         item.id === agendamentoId ? { ...item, status: 'cancelado' as const } : item,
@@ -58,6 +71,19 @@ function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
       return updated;
     });
     mostrarToast('Agendamento cancelado com sucesso.');
+
+    // Sincroniza com backend de forma assíncrona
+    cancelarAgendamentoBackend({ agendamentoId, motivo })
+      .then((res) => {
+        if (res.sucesso && res.dados?.sinalRetido) {
+          mostrarToast(
+            'Agendamento cancelado. Atenção: cancelamentos com menos de 3 horas de antecedência retêm o sinal conforme as regras da clínica.',
+          );
+        }
+      })
+      .catch(() => {
+        // Fallback silencioso em offline
+      });
   };
 
   const agendamentosFiltrados = agendamentos.filter(
