@@ -84,6 +84,40 @@ const STATUS_DETAILS_CONFIG: Record<
       </svg>
     ),
   },
+  em_andamento: {
+    label: 'Em Andamento',
+    badgeBg: 'bg-[var(--color-brand-soft)]',
+    badgeText: 'text-[var(--color-brand-deep)]',
+    badgeBorder: 'border-[var(--color-brand-primary)]',
+    descricao: 'O atendimento está em andamento neste momento na clínica.',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M13 10V3L4 14h7v7l9-11h-7z"
+        />
+      </svg>
+    ),
+  },
+  falta: {
+    label: 'Não Compareceu',
+    badgeBg: 'bg-[var(--color-error-bg)]',
+    badgeText: 'text-[var(--color-error-text)]',
+    badgeBorder: 'border-[var(--color-error-border)]',
+    descricao: 'O cliente não compareceu ao horário agendado.',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+        />
+      </svg>
+    ),
+  },
 };
 
 export const AgendamentoDetalhesModal: React.FC<AgendamentoDetalhesModalProps> = ({

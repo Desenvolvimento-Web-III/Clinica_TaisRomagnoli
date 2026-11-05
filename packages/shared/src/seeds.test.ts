@@ -3,11 +3,14 @@ import {
   DEFAULT_CLINIC_SETTINGS,
   DEFAULT_INITIAL_ADMIN,
   DEFAULT_INITIAL_PROFESSIONAL,
+  DEFAULT_INITIAL_AGENDAMENTOS,
   getInitialClinicData,
   seedClinicData,
   validateClinicSettings,
   validateProfessional,
   validateUserProfile,
+  validateAgendamento,
+  validateCentralizedClinicSettings,
 } from './index.js';
 
 describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () => {
@@ -28,6 +31,11 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
     expect(DEFAULT_CLINIC_SETTINGS.criterioClienteRecorrenteAtendimentosMes).toBe(2);
 
     expect(validateClinicSettings(DEFAULT_CLINIC_SETTINGS)).toBe(true);
+    expect(validateCentralizedClinicSettings(DEFAULT_CLINIC_SETTINGS)).toBe(true);
+    expect(DEFAULT_CLINIC_SETTINGS.contatos).toBeDefined();
+    expect(DEFAULT_CLINIC_SETTINGS.politicas).toBeDefined();
+    expect(DEFAULT_CLINIC_SETTINGS.lembretes).toBeDefined();
+    expect(DEFAULT_CLINIC_SETTINGS.prazos).toBeDefined();
   });
 
   it('garante que a profissional inicial está cadastrada como Tais Romagnoli e ativa', () => {
@@ -48,7 +56,47 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
     expect(validateUserProfile(DEFAULT_INITIAL_ADMIN)).toBe(true);
   });
 
-  it('estrutura o seed com as coleções configuracoes, profissionais e usuarios', () => {
+  it('garante que os agendamentos iniciais respeitam a modelagem completa (cliente, profissional, serviço, horário, status e valores)', () => {
+    expect(DEFAULT_INITIAL_AGENDAMENTOS.length).toBeGreaterThan(0);
+
+    for (const ag of DEFAULT_INITIAL_AGENDAMENTOS) {
+      expect(validateAgendamento(ag)).toBe(true);
+
+      // 1. Cliente
+      expect(ag.clienteId).toBeDefined();
+      expect(ag.clienteNome).toBeDefined();
+
+      // 2. Profissional
+      expect(ag.profissionalId).toBeDefined();
+      expect(ag.profissionalNome).toBeDefined();
+
+      // 3. Serviço
+      expect(ag.servicoId).toBeDefined();
+      expect(ag.servicoNome).toBeDefined();
+      expect(ag.duracaoMinutos).toBeGreaterThan(0);
+
+      // 4. Horário
+      expect(new Date(ag.dataHoraInicio).getTime()).not.toBeNaN();
+      expect(new Date(ag.dataHoraFim).getTime()).not.toBeNaN();
+      expect(ag.intervaloAposMinutos).toBe(30);
+
+      // 5. Status
+      expect([
+        'pendente',
+        'confirmado',
+        'em_andamento',
+        'concluido',
+        'cancelado',
+        'falta',
+      ]).toContain(ag.status);
+
+      // 6. Valores
+      expect(ag.valorTotalEmCentavos).toBeGreaterThan(0);
+      expect(ag.valorSinalEmCentavos + ag.saldoRestanteEmCentavos).toBe(ag.valorTotalEmCentavos);
+    }
+  });
+
+  it('estrutura o seed com as coleções configuracoes, profissionais, usuarios e agendamentos', () => {
     const seed = getInitialClinicData();
 
     expect(seed.settings.collection).toBe('configuracoes');
@@ -60,6 +108,9 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
 
     expect(seed.admin.collection).toBe('usuarios');
     expect(seed.admin.id).toBe('admin-tais-romagnoli');
+
+    expect(seed.agendamentos.length).toBe(DEFAULT_INITIAL_AGENDAMENTOS.length);
+    expect(seed.agendamentos[0].collection).toBe('agendamentos');
   });
 
   it('executa a persistência de seed através do adapter', async () => {
@@ -69,12 +120,14 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
 
     const result = await seedClinicData(mockWriter);
 
-    expect(result.count).toBe(3);
+    const expectedCount = 3 + DEFAULT_INITIAL_AGENDAMENTOS.length;
+    expect(result.count).toBe(expectedCount);
     expect(result.collections).toContain('configuracoes');
     expect(result.collections).toContain('profissionais');
     expect(result.collections).toContain('usuarios');
+    expect(result.collections).toContain('agendamentos');
 
-    expect(mockWriter.set).toHaveBeenCalledTimes(3);
+    expect(mockWriter.set).toHaveBeenCalledTimes(expectedCount);
     expect(mockWriter.set).toHaveBeenCalledWith(
       'configuracoes',
       'geral',
@@ -89,6 +142,11 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
       'usuarios',
       'admin-tais-romagnoli',
       expect.objectContaining({ role: 'admin' }),
+    );
+    expect(mockWriter.set).toHaveBeenCalledWith(
+      'agendamentos',
+      'agendamento-seed-confirmado',
+      expect.objectContaining({ status: 'confirmado' }),
     );
   });
 });

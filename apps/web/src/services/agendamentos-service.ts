@@ -43,6 +43,8 @@ export function mapBackendAgendamentoToUi(item: SharedAgendamento): UiAgendament
   if (item.status === 'confirmado') statusUi = 'confirmado';
   else if (item.status === 'cancelado') statusUi = 'cancelado';
   else if (item.status === 'concluido') statusUi = 'concluido';
+  else if (item.status === 'em_andamento') statusUi = 'em_andamento';
+  else if (item.status === 'falta') statusUi = 'falta';
   else statusUi = 'pendente';
 
   return {

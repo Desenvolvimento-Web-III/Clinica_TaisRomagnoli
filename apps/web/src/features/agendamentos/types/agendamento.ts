@@ -1,4 +1,5 @@
-export type StatusAgendamento = 'confirmado' | 'pendente' | 'concluido' | 'cancelado';
+export type StatusAgendamento =
+  'pendente' | 'confirmado' | 'em_andamento' | 'concluido' | 'cancelado' | 'falta';
 
 export interface Agendamento {
   id: string;

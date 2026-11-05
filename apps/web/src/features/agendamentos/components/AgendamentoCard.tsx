@@ -71,6 +71,38 @@ const STATUS_CONFIG: Record<
       </svg>
     ),
   },
+  em_andamento: {
+    label: 'Em Andamento',
+    bgClass: 'bg-[var(--color-brand-soft)]',
+    textClass: 'text-[var(--color-brand-deep)]',
+    borderClass: 'border-[var(--color-brand-primary)]',
+    icon: (
+      <svg className="mr-1 h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M13 10V3L4 14h7v7l9-11h-7z"
+        />
+      </svg>
+    ),
+  },
+  falta: {
+    label: 'Não Compareceu',
+    bgClass: 'bg-[var(--color-error-bg)]',
+    textClass: 'text-[var(--color-error-text)]',
+    borderClass: 'border-[var(--color-error-border)]',
+    icon: (
+      <svg className="mr-1 h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+        />
+      </svg>
+    ),
+  },
 };
 
 export const AgendamentoCard: React.FC<AgendamentoCardProps> = ({

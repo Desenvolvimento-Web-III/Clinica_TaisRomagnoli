@@ -2,7 +2,9 @@ import {
   DEFAULT_CLINIC_SETTINGS,
   DEFAULT_INITIAL_ADMIN,
   DEFAULT_INITIAL_PROFESSIONAL,
+  DEFAULT_INITIAL_AGENDAMENTOS,
 } from './constants/default-seeds.js';
+import type { Agendamento } from './types/agendamento.js';
 import type { ClinicSettings } from './types/clinic-settings.js';
 import type { Professional } from './types/professional.js';
 import type { UserProfile } from './types/user-profile.js';
@@ -17,6 +19,7 @@ export interface InitialClinicData {
   settings: SeedDocument<ClinicSettings>;
   professional: SeedDocument<Professional>;
   admin: SeedDocument<UserProfile>;
+  agendamentos: SeedDocument<Agendamento>[];
 }
 
 /**
@@ -39,6 +42,11 @@ export function getInitialClinicData(): InitialClinicData {
       id: DEFAULT_INITIAL_ADMIN.uid,
       data: { ...DEFAULT_INITIAL_ADMIN },
     },
+    agendamentos: DEFAULT_INITIAL_AGENDAMENTOS.map((ag) => ({
+      collection: 'agendamentos',
+      id: ag.id,
+      data: { ...ag },
+    })),
   };
 }
 
@@ -54,7 +62,12 @@ export async function seedClinicData(writer: {
   set(collection: string, id: string, data: Record<string, unknown>): Promise<void>;
 }): Promise<{ count: number; collections: string[] }> {
   const initialData = getInitialClinicData();
-  const docs = [initialData.settings, initialData.professional, initialData.admin];
+  const docs: SeedDocument<unknown>[] = [
+    initialData.settings,
+    initialData.professional,
+    initialData.admin,
+    ...initialData.agendamentos,
+  ];
 
   for (const item of docs) {
     await writer.set(item.collection, item.id, item.data as unknown as Record<string, unknown>);

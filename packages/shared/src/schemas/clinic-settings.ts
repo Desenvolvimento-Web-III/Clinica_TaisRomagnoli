@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import type { ClinicSettings, DayOfWeek } from '../types/clinic-settings.js';
+import type {
+  ClinicSettings,
+  CentralizedClinicSettings,
+  ClinicContactsSettings,
+  ClinicPoliciesSettings,
+  ClinicRemindersSettings,
+  ClinicDeadlinesSettings,
+  DayOfWeek,
+  ModelarConfiguracoesParams,
+} from '../types/clinic-settings.js';
 import type { Professional } from '../types/professional.js';
 import type { UserProfile } from '../types/user-profile.js';
 
@@ -68,6 +77,16 @@ export const clinicDeadlinesSchema = z.object({
     .min(1, 'Critério de recorrência deve ser no mínimo 1 atendimento'),
 });
 
+/**
+ * Validação do sinal financeiro obrigatório para agendamentos
+ */
+export const clinicSignalSchema = z.object({
+  percentualSinal: z
+    .number()
+    .min(0, 'Percentual do sinal deve ser no mínimo 0%')
+    .max(100, 'Percentual do sinal não pode exceder 100%'),
+});
+
 export const clinicSettingsSchema = z.object({
   percentualSinal: z
     .number()
@@ -84,10 +103,125 @@ export const clinicSettingsSchema = z.object({
   prazos: clinicDeadlinesSchema.optional(),
 });
 
+/**
+ * Schema estrito que valida o documento completo e centralizado de configurações
+ * no Firestore (/configuracoes/geral), exigindo os cinco módulos principais:
+ * 1. Contatos
+ * 2. Sinal
+ * 3. Prazos
+ * 4. Lembretes
+ * 5. Políticas
+ */
+export const centralizedClinicSettingsSchema = z.object({
+  percentualSinal: z
+    .number()
+    .min(0, 'Percentual do sinal deve ser no mínimo 0%')
+    .max(100, 'Percentual do sinal não pode exceder 100%'),
+  intervaloMinutos: z.number().int().min(0, 'Intervalo não pode ser negativo'),
+  diasFolga: z.array(dayOfWeekSchema),
+  antecedenciaMinimaCancelamentoHoras: z.number().min(0),
+  criterioClienteRecorrenteAtendimentosMes: z.number().int().min(1),
+  updatedAt: z.string(),
+  contatos: clinicContactsSchema,
+  politicas: clinicPoliciesSchema,
+  lembretes: clinicRemindersSchema,
+  prazos: clinicDeadlinesSchema,
+});
+
+/**
+ * Factory padronizada para modelar as configurações centralizadas da clínica no Firestore,
+ * aplicando valores padrão oficiais para contatos, sinal, prazos, lembretes e políticas.
+ */
+export function modelarConfiguracoesClinica(
+  params?: ModelarConfiguracoesParams,
+): CentralizedClinicSettings {
+  const agoraIso = new Date().toISOString();
+
+  const contatos: ClinicContactsSettings = {
+    telefone: params?.contatos?.telefone ?? '(11) 98765-4321',
+    whatsapp: params?.contatos?.whatsapp ?? '(11) 98765-4321',
+    email: params?.contatos?.email ?? 'contato@clinicataisromagnoli.com.br',
+    endereco: params?.contatos?.endereco ?? 'Rua das Palmeiras, 450 - Sala 302, São Paulo - SP',
+  };
+
+  const politicas: ClinicPoliciesSettings = {
+    politicaCancelamento:
+      params?.politicas?.politicaCancelamento ??
+      'Cancelamentos devem ser solicitados com pelo menos 3 horas de antecedência do horário agendado. Não realizamos estorno em dinheiro; o valor do sinal poderá ser reaproveitado em um novo agendamento quando o cancelamento for solicitado no prazo.',
+    politicaReagendamento:
+      params?.politicas?.politicaReagendamento ??
+      'Reagendamentos devem ser solicitados com no mínimo 3 horas de antecedência em relação ao horário original.',
+    toleranciaAtrasoMinutos: params?.politicas?.toleranciaAtrasoMinutos ?? 15,
+  };
+
+  const lembretes: ClinicRemindersSettings = {
+    lembreteAtivo: params?.lembretes?.lembreteAtivo ?? true,
+    antecedenciaHoras: params?.lembretes?.antecedenciaHoras ?? 24,
+    canais: {
+      whatsapp: params?.lembretes?.canais?.whatsapp ?? true,
+      email: params?.lembretes?.canais?.email ?? true,
+      notificacaoApp: params?.lembretes?.canais?.notificacaoApp ?? true,
+    },
+  };
+
+  const prazos: ClinicDeadlinesSettings = {
+    antecedenciaMinimaAgendamentoHoras: params?.prazos?.antecedenciaMinimaAgendamentoHoras ?? 2,
+    antecedenciaMinimaCancelamentoHoras: params?.prazos?.antecedenciaMinimaCancelamentoHoras ?? 3,
+    intervaloMinutos: params?.prazos?.intervaloMinutos ?? 30,
+    criterioClienteRecorrenteAtendimentosMes:
+      params?.prazos?.criterioClienteRecorrenteAtendimentosMes ?? 2,
+  };
+
+  const configuracoes: CentralizedClinicSettings = {
+    percentualSinal: params?.percentualSinal ?? 30,
+    intervaloMinutos: params?.intervaloMinutos ?? prazos.intervaloMinutos,
+    diasFolga: params?.diasFolga ?? [0, 2],
+    antecedenciaMinimaCancelamentoHoras:
+      params?.antecedenciaMinimaCancelamentoHoras ?? prazos.antecedenciaMinimaCancelamentoHoras,
+    criterioClienteRecorrenteAtendimentosMes:
+      params?.criterioClienteRecorrenteAtendimentosMes ??
+      prazos.criterioClienteRecorrenteAtendimentosMes,
+    updatedAt: params?.updatedAt ?? agoraIso,
+    contatos,
+    politicas,
+    lembretes,
+    prazos,
+  };
+
+  return centralizedClinicSettingsSchema.parse(configuracoes);
+}
+
 export function validateClinicSettings(data: unknown): data is ClinicSettings {
   if (!data || typeof data !== 'object') return false;
   const result = clinicSettingsSchema.safeParse(data);
   return result.success;
+}
+
+export function validateClinicContacts(data: unknown): data is ClinicContactsSettings {
+  if (!data || typeof data !== 'object') return false;
+  return clinicContactsSchema.safeParse(data).success;
+}
+
+export function validateClinicPolicies(data: unknown): data is ClinicPoliciesSettings {
+  if (!data || typeof data !== 'object') return false;
+  return clinicPoliciesSchema.safeParse(data).success;
+}
+
+export function validateClinicReminders(data: unknown): data is ClinicRemindersSettings {
+  if (!data || typeof data !== 'object') return false;
+  return clinicRemindersSchema.safeParse(data).success;
+}
+
+export function validateClinicDeadlines(data: unknown): data is ClinicDeadlinesSettings {
+  if (!data || typeof data !== 'object') return false;
+  return clinicDeadlinesSchema.safeParse(data).success;
+}
+
+export function validateCentralizedClinicSettings(
+  data: unknown,
+): data is CentralizedClinicSettings {
+  if (!data || typeof data !== 'object') return false;
+  return centralizedClinicSettingsSchema.safeParse(data).success;
 }
 
 export function validateProfessional(data: unknown): data is Professional {
