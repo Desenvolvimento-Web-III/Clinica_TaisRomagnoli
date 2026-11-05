@@ -87,6 +87,19 @@ export {
   obterPerfilCliente,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
+import {
+  atribuirFuncaoAdministrativa as atribuirFuncaoAdministrativaService,
+  definirAdministradoraInicial,
+  consultarClaimsUsuario,
+  CustomClaimsBusinessError,
+} from './modules/admin/custom-claims-service.js';
+
+export {
+  atribuirFuncaoAdministrativaService,
+  definirAdministradoraInicial,
+  consultarClaimsUsuario,
+  CustomClaimsBusinessError,
+};
 
 export const healthCheck = onRequest({ cors: false }, (_request, response) => {
   response.status(200).json(getHealthStatus());
@@ -741,3 +754,118 @@ export const obterPerfil = onRequest({ cors: true }, async (request, response) =
     response.status(500).json({ error: 'Erro interno ao consultar perfil do cliente.' });
   }
 });
+
+/**
+ * Atribui a função administrativa a uma conta de usuário via Custom Claims no Firebase Admin SDK.
+ * Bloqueia estritamente autoatribuição por clientes comuns (HTTP 403).
+ */
+export const atribuirFuncaoAdministrativa = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const auth = getAuth();
+    const firestore = getFirestore();
+
+    const resultado = await atribuirFuncaoAdministrativaService(
+      request.body,
+      caller,
+      auth,
+      firestore,
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: resultado.mensagem,
+      dados: resultado,
+    });
+  } catch (error: unknown) {
+    if (
+      error instanceof CustomClaimsBusinessError ||
+      error instanceof AgendamentoBusinessError ||
+      error instanceof ClienteBusinessError
+    ) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response
+        .status(400)
+        .json({ error: 'Dados inválidos para atribuição de claims.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao atribuir função administrativa:', error);
+    response
+      .status(500)
+      .json({ error: 'Erro interno ao processar atribuição de função administrativa.' });
+  }
+});
+
+/**
+ * Consulta as Custom Claims de um usuário pelo Firebase Admin SDK.
+ */
+export const consultarCustomClaims = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const targetUid = (request.query['uid'] as string) || caller.uid;
+    const auth = getAuth();
+
+    const claims = await consultarClaimsUsuario(targetUid, caller, auth);
+    response.status(200).json({ dados: claims });
+  } catch (error: unknown) {
+    if (error instanceof CustomClaimsBusinessError || error instanceof AgendamentoBusinessError) {
+      response.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Erro ao consultar custom claims:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar custom claims.' });
+  }
+});
+
+/**
+ * Endpoint de bootstrap para inicializar as Custom Claims da administradora da clínica via Firebase Admin SDK.
+ */
+export const inicializarContaAdministradora = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== 'POST') {
+      response.status(405).json({ error: 'Método não permitido. Use POST.' });
+      return;
+    }
+
+    try {
+      const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+      if (!caller.isAdmin && caller.email !== 'admin@clinicataisromagnoli.com.br') {
+        response.status(403).json({
+          error: 'Acesso negado. Apenas a administradora autorizada pode inicializar a conta.',
+        });
+        return;
+      }
+
+      const auth = getAuth();
+      const firestore = getFirestore();
+      const resultado = await definirAdministradoraInicial(auth, firestore);
+
+      response.status(200).json({
+        sucesso: true,
+        mensagem: resultado.mensagem,
+        dados: resultado,
+      });
+    } catch (error: unknown) {
+      if (error instanceof CustomClaimsBusinessError || error instanceof AgendamentoBusinessError) {
+        response.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      console.error('Erro ao inicializar conta administradora:', error);
+      response.status(500).json({ error: 'Erro interno ao inicializar conta da administradora.' });
+    }
+  },
+);
