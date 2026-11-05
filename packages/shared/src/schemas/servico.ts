@@ -128,7 +128,7 @@ export const gerenciarServicoIdSchema = z.object({
 export type GerenciarServicoIdInput = z.infer<typeof gerenciarServicoIdSchema>;
 
 /**
- * Modelo completo do serviço representando a entidade no sistema.
+ * Modelo completo do serviço representando a entidade no sistema e no banco de dados.
  */
 export interface ServicoModel {
   id: string;
@@ -147,3 +147,78 @@ export interface ServicoModel {
   createdAt?: string;
   updatedAt?: string;
 }
+
+/**
+ * Schema Zod para validação rigorosa de serviços persistidos no banco de dados (Firestore).
+ * Garante a presença dos campos de sinal de pagamento conforme as regras de negócio.
+ */
+export const servicoDatabaseSchema = z
+  .object({
+    id: z.string().trim().min(1, 'Identificador obrigatório'),
+    nome: z.string().trim().min(3, 'Nome deve ter no mínimo 3 caracteres'),
+    duracaoMinutos: z.number().int().min(15).max(360),
+    preco: z.number().positive('Preço deve ser positivo'),
+    precoEmCentavos: z.number().int().positive('Preço em centavos deve ser positivo'),
+    sinal: z.number().min(0, 'Sinal não pode ser negativo'),
+    sinalEmCentavos: z.number().int().min(0, 'Sinal em centavos não pode ser negativo'),
+    sinalPercentual: z
+      .number()
+      .min(0, 'Percentual de sinal não pode ser negativo')
+      .max(100, 'Percentual não pode exceder 100%'),
+    descricao: z.string().trim().min(5, 'Descrição deve ter no mínimo 5 caracteres'),
+    ativo: z.boolean(),
+    categoria: z.string().trim().optional(),
+    imageSrc: z.string().optional(),
+    imageAlt: z.string().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+  })
+  .refine((data) => data.sinal <= data.preco, {
+    message: 'O valor do sinal não pode ser superior ao preço total do serviço',
+    path: ['sinal'],
+  })
+  .refine((data) => data.sinalEmCentavos <= data.precoEmCentavos, {
+    message: 'O valor do sinal em centavos não pode ser superior ao preço em centavos',
+    path: ['sinalEmCentavos'],
+  });
+
+export type ServicoDatabase = z.infer<typeof servicoDatabaseSchema>;
+
+/**
+ * Type guard que valida se um objeto desconhecido atende a estrutura do ServicoModel com sinal de pagamento.
+ */
+export function validateServico(data: unknown): data is ServicoModel {
+  if (!data || typeof data !== 'object') return false;
+  const result = servicoDatabaseSchema.safeParse(data);
+  return result.success;
+}
+
+/**
+ * Schema Zod flexível para leitura de documentos da coleção 'servicos' do Firestore,
+ * aceitando tanto convenções em português quanto em inglês / legado.
+ */
+export const servicoFirestoreDocumentSchema = z.object({
+  id: z.string().optional(),
+  nome: z.string().optional(),
+  name: z.string().optional(),
+  descricao: z.string().optional(),
+  description: z.string().optional(),
+  duracao: z.number().optional(),
+  duracaoMinutos: z.number().optional(),
+  durationMinutes: z.number().optional(),
+  preco: z.union([z.number(), z.string()]).optional(),
+  precoCentavos: z.union([z.number(), z.string()]).optional(),
+  priceInCents: z.union([z.number(), z.string()]).optional(),
+  sinal: z.union([z.number(), z.string()]).optional(),
+  sinalCentavos: z.union([z.number(), z.string()]).optional(),
+  sinalInCents: z.union([z.number(), z.string()]).optional(),
+  sinalPercentual: z.union([z.number(), z.string()]).optional(),
+  ativo: z.boolean().optional(),
+  active: z.boolean().optional(),
+  categoria: z.string().optional(),
+  category: z.string().optional(),
+  imageSrc: z.string().optional(),
+  imageAlt: z.string().optional(),
+  createdAt: z.unknown().optional(),
+  updatedAt: z.unknown().optional(),
+});
