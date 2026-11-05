@@ -5,7 +5,10 @@ import {
   centavosParaReais,
   PERCENTUAL_SINAL_PADRAO,
   reaisParaCentavos,
+  servicoDatabaseSchema,
+  servicoFirestoreDocumentSchema,
   servicoInputSchema,
+  validateServico,
 } from './servico.js';
 
 describe('servicoInputSchema e utilitários de serviço', () => {
@@ -224,5 +227,82 @@ describe('servicoInputSchema e utilitários de serviço', () => {
       preco: 150,
     });
     expect(semDescricao.success).toBe(false);
+  });
+
+  describe('servicoDatabaseSchema e validateServico (Banco de Dados)', () => {
+    it('valida registro de serviço no banco de dados com todos os campos de sinal', () => {
+      const servicoDb = {
+        id: 'massagem-relaxante',
+        nome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        preco: 170,
+        precoEmCentavos: 17000,
+        sinal: 51,
+        sinalEmCentavos: 5100,
+        sinalPercentual: 30,
+        descricao: 'Massagem realizada com movimentos suaves para diminuir tensões musculares.',
+        ativo: true,
+        categoria: 'Corporal',
+        createdAt: '2026-09-05T00:00:00.000Z',
+      };
+
+      const resultado = servicoDatabaseSchema.safeParse(servicoDb);
+      expect(resultado.success).toBe(true);
+      expect(validateServico(servicoDb)).toBe(true);
+    });
+
+    it('rejeita serviço no banco de dados se o sinal for maior que o preço total', () => {
+      const servicoInvalido = {
+        id: 'servico-erro',
+        nome: 'Massagem Inválida',
+        duracaoMinutos: 60,
+        preco: 100,
+        precoEmCentavos: 10000,
+        sinal: 110, // Maior que 100
+        sinalEmCentavos: 11000,
+        sinalPercentual: 110,
+        descricao: 'Descrição válida de massagem com erro de sinal.',
+        ativo: true,
+      };
+
+      const resultado = servicoDatabaseSchema.safeParse(servicoInvalido);
+      expect(resultado.success).toBe(false);
+      expect(validateServico(servicoInvalido)).toBe(false);
+    });
+
+    it('rejeita serviço com sinal negativo ou percentual maior que 100', () => {
+      const sinalNegativo = {
+        id: 'servico-negativo',
+        nome: 'Massagem Inválida',
+        duracaoMinutos: 60,
+        preco: 100,
+        precoEmCentavos: 10000,
+        sinal: -10,
+        sinalEmCentavos: -1000,
+        sinalPercentual: -10,
+        descricao: 'Descrição válida de massagem com erro de sinal.',
+        ativo: true,
+      };
+
+      expect(servicoDatabaseSchema.safeParse(sinalNegativo).success).toBe(false);
+      expect(validateServico(sinalNegativo)).toBe(false);
+    });
+
+    it('valida campos de documento flexíveis do Firestore com servicoFirestoreDocumentSchema', () => {
+      const docFirestore = {
+        id: 'srv-1',
+        name: 'Massagem Terapêutica',
+        description: 'Atendimento personalizado.',
+        durationMinutes: 60,
+        priceInCents: 19000,
+        sinalInCents: 5700,
+        sinalPercentual: 30,
+        active: true,
+        categoria: 'Corporal',
+      };
+
+      const parsed = servicoFirestoreDocumentSchema.safeParse(docFirestore);
+      expect(parsed.success).toBe(true);
+    });
   });
 });

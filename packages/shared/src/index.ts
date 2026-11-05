@@ -40,6 +40,9 @@ export {
   editarServicoInputSchema,
   alterarStatusServicoInputSchema,
   gerenciarServicoIdSchema,
+  servicoDatabaseSchema,
+  servicoFirestoreDocumentSchema,
+  validateServico,
   PERCENTUAL_SINAL_PADRAO,
   calcularSinal,
   calcularPercentualSinal,
@@ -54,6 +57,7 @@ export type {
   AlterarStatusServicoInput,
   GerenciarServicoIdInput,
   ServicoModel,
+  ServicoDatabase,
 } from './schemas/servico.js';
 
 export * from './schemas/notificacao.js';

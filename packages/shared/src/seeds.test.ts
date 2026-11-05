@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   DEFAULT_CLINIC_SETTINGS,
   DEFAULT_INITIAL_ADMIN,
   DEFAULT_INITIAL_PROFESSIONAL,
+  DEFAULT_INITIAL_SERVICES,
   getInitialClinicData,
+  getInitialServicesData,
   seedClinicData,
+  seedServicesData,
   validateClinicSettings,
   validateProfessional,
+  validateServico,
   validateUserProfile,
 } from './index.js';
 
@@ -90,5 +96,82 @@ describe('Dados Iniciais e Configurações Padrão (docs/PRODUCT_RULES.md)', () 
       'admin-tais-romagnoli',
       expect.objectContaining({ role: 'admin' }),
     );
+  });
+
+  describe('Seed de Serviços e Sinal de Pagamento no Banco de Dados', () => {
+    it('garante que todos os serviços iniciais possuem sinal de 30% configurado', () => {
+      expect(DEFAULT_INITIAL_SERVICES.length).toBe(18);
+
+      const servicesData = getInitialServicesData();
+      expect(servicesData.length).toBe(18);
+      expect(servicesData[0]?.collection).toBe('servicos');
+      expect(servicesData[0]?.data.sinalPercentual).toBe(30);
+
+      for (const servico of DEFAULT_INITIAL_SERVICES) {
+        expect(servico.sinalPercentual).toBe(30);
+        expect(servico.sinal).toBe(Math.round(servico.preco * 0.3 * 100) / 100);
+        expect(servico.sinalEmCentavos).toBe(Math.round(servico.precoEmCentavos * 0.3));
+        expect(servico.sinal).toBeLessThanOrEqual(servico.preco);
+        expect(validateServico(servico)).toBe(true);
+      }
+    });
+
+    it('persiste os serviços no Firestore com campos de sinal via seedServicesData', async () => {
+      const mockWriter = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await seedServicesData(mockWriter);
+
+      expect(result.count).toBe(18);
+      expect(result.collections).toEqual(['servicos']);
+      expect(mockWriter.set).toHaveBeenCalledTimes(18);
+
+      // Valida o primeiro serviço (Massagem Relaxante: R$ 170 / Sinal: R$ 51 / 5100 centavos)
+      expect(mockWriter.set).toHaveBeenCalledWith(
+        'servicos',
+        'massagem-relaxante',
+        expect.objectContaining({
+          sinal: 51,
+          sinalPercentual: 30,
+          sinalEmCentavos: 5100,
+          sinalInCents: 5100,
+        }),
+      );
+    });
+
+    it('executa seed completo incluindo serviços quando includeServices for true', async () => {
+      const mockWriter = {
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await seedClinicData(mockWriter, { includeServices: true });
+
+      expect(result.count).toBe(21); // 3 configurações/base + 18 serviços
+      expect(result.collections).toContain('servicos');
+      expect(result.collections).toContain('configuracoes');
+      expect(result.collections).toContain('profissionais');
+      expect(result.collections).toContain('usuarios');
+      expect(mockWriter.set).toHaveBeenCalledTimes(21);
+    });
+
+    it('valida que o arquivo seed-data.json possui a coleção servicos com sinal em cada procedimento', () => {
+      const jsonPath = resolve(__dirname, './seed-data.json');
+      const rawData = readFileSync(jsonPath, 'utf-8');
+      const seedJson = JSON.parse(rawData);
+
+      expect(seedJson.servicos).toBeDefined();
+      const servicoKeys = Object.keys(seedJson.servicos);
+      expect(servicoKeys.length).toBe(18);
+
+      for (const key of servicoKeys) {
+        const item = seedJson.servicos[key];
+        expect(item.sinalPercentual).toBe(30);
+        expect(item.sinal).toBeDefined();
+        expect(item.sinalEmCentavos).toBeDefined();
+        expect(item.sinalInCents).toBeDefined();
+        expect(item.sinal).toBe(Math.round(item.preco * 0.3 * 100) / 100);
+      }
+    });
   });
 });
