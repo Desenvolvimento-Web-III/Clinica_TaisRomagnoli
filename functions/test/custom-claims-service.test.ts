@@ -3,6 +3,8 @@ import {
   atribuirFuncaoAdministrativa,
   definirAdministradoraInicial,
   consultarClaimsUsuario,
+  aplicarClaimsPerfil,
+  definirClaimsCliente,
   CustomClaimsBusinessError,
 } from '../src/modules/admin/custom-claims-service.js';
 import type { UserContext } from '../src/modules/agendamentos/agendamentos-service.js';
@@ -264,6 +266,81 @@ describe('Custom Claims Service (Firebase Admin SDK)', () => {
         consultarClaimsUsuario('outro-usuario', clientCaller, mockAuth),
       ).rejects.toMatchObject({
         statusCode: 403,
+      });
+    });
+  });
+
+  describe('definirClaimsCliente', () => {
+    it('aplica custom claims de cliente no Firebase Auth', async () => {
+      const res = await definirClaimsCliente('cliente-teste-uid', mockAuth);
+      expect(res.uid).toBe('cliente-teste-uid');
+      expect(res.role).toBe('cliente');
+      expect(res.admin).toBe(false);
+      expect(res.client).toBe(true);
+      expect(mockAuth.setCustomUserClaims).toHaveBeenCalledWith('cliente-teste-uid', {
+        role: 'cliente',
+        admin: false,
+        client: true,
+      });
+    });
+  });
+
+  describe('aplicarClaimsPerfil', () => {
+    it('aplica claims de admin e sincroniza no Firestore', async () => {
+      const res = await aplicarClaimsPerfil('admin-novo', 'admin', mockAuth, mockFirestore);
+      expect(res.admin).toBe(true);
+      expect(res.client).toBe(false);
+      expect(mockAuth.setCustomUserClaims).toHaveBeenCalledWith('admin-novo', {
+        role: 'admin',
+        admin: true,
+        client: false,
+      });
+      expect(mockUserDocSet).toHaveBeenCalledWith(expect.objectContaining({ role: 'admin' }), {
+        merge: true,
+      });
+    });
+
+    it('aplica claims de client e sincroniza no Firestore', async () => {
+      const res = await aplicarClaimsPerfil('client-novo', 'client', mockAuth, mockFirestore);
+      expect(res.admin).toBe(false);
+      expect(res.client).toBe(true);
+      expect(mockAuth.setCustomUserClaims).toHaveBeenCalledWith('client-novo', {
+        role: 'client',
+        admin: false,
+        client: true,
+      });
+    });
+  });
+
+  describe('Regras de atribuição para perfil client', () => {
+    it('permite que usuário comum autoatribua seu próprio papel de client', async () => {
+      const res = await atribuirFuncaoAdministrativa(
+        { targetUid: clientCaller.uid, role: 'client' },
+        clientCaller,
+        mockAuth,
+        mockFirestore,
+      );
+
+      expect(res.role).toBe('client');
+      expect(res.admin).toBe(false);
+      expect(mockAuth.setCustomUserClaims).toHaveBeenCalledWith(clientCaller.uid, {
+        role: 'client',
+        admin: false,
+        client: true,
+      });
+    });
+
+    it('impede que usuário comum atribua papel de client para outro usuário (403)', async () => {
+      await expect(
+        atribuirFuncaoAdministrativa(
+          { targetUid: 'outro-cliente', role: 'client' },
+          clientCaller,
+          mockAuth,
+          mockFirestore,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 403,
+        message: expect.stringContaining('Apenas a administradora possui permissão'),
       });
     });
   });

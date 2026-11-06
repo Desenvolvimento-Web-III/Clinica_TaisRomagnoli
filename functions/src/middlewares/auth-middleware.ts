@@ -7,7 +7,9 @@ export interface UserContext {
   nome: string;
   email?: string;
   telefone?: string;
+  role?: 'admin' | 'client' | 'cliente';
   isAdmin: boolean;
+  isClient?: boolean;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -88,13 +90,19 @@ export async function validarIdToken(
   }
 
   const isAdmin = decoded['admin'] === true || decoded['role'] === 'admin';
+  const rawRole = (decoded['role'] as string) || (isAdmin ? 'admin' : 'cliente');
+  const role: 'admin' | 'client' | 'cliente' =
+    rawRole === 'client' ? 'client' : isAdmin ? 'admin' : 'cliente';
+  const isClient = decoded['client'] === true || !isAdmin;
 
   return {
     uid: decoded.uid,
     nome: (decoded['name'] as string) || (decoded['email'] as string) || 'Cliente',
     email: decoded.email,
     telefone: (decoded['phone_number'] as string) || undefined,
+    role,
     isAdmin,
+    isClient,
   };
 }
 
@@ -167,9 +175,29 @@ export function exigirAdministrador(
   }
 }
 
+/**
+ * Garante que o usuário autenticado possua a função de cliente da clínica.
+ */
+export function exigirCliente(
+  user: UserContext | null | undefined,
+  mensagemPersonalizada?: string,
+): asserts user is UserContext {
+  if (!user || !user.uid) {
+    throw new AuthError('Acesso não autenticado. Forneça o token Bearer.', 401);
+  }
+  if (!user.isClient && user.role !== 'cliente' && user.role !== 'client') {
+    throw new AuthError(
+      mensagemPersonalizada ||
+        'Acesso restrito ao perfil de cliente. Usuário não possui permissão de cliente.',
+      403,
+    );
+  }
+}
+
 export interface MiddlewareAuthOptions {
   obrigatorio?: boolean;
   apenasAdmin?: boolean;
+  apenasCliente?: boolean;
 }
 
 /**
@@ -177,11 +205,12 @@ export interface MiddlewareAuthOptions {
  * Insere `req.user` na requisição em caso de sucesso ou responde com HTTP 401/403 em caso de falha.
  */
 export function autenticarMiddleware(
-  options: MiddlewareAuthOptions = { obrigatorio: true, apenasAdmin: false },
+  options: MiddlewareAuthOptions = { obrigatorio: true, apenasAdmin: false, apenasCliente: false },
   authVerifier: AuthTokenVerifier = getAuth(),
 ) {
   const obrigatorio = options.obrigatorio ?? true;
   const apenasAdmin = options.apenasAdmin ?? false;
+  const apenasCliente = options.apenasCliente ?? false;
 
   return async (req: Request, res: Response, next: () => void | Promise<void>): Promise<void> => {
     try {
@@ -195,6 +224,9 @@ export function autenticarMiddleware(
       const user = await extrairUsuarioAutenticado(req, authVerifier);
       if (apenasAdmin) {
         exigirAdministrador(user);
+      }
+      if (apenasCliente) {
+        exigirCliente(user);
       }
 
       (req as AuthenticatedRequest).user = user;
@@ -214,7 +246,7 @@ export function autenticarMiddleware(
  */
 export function comAutenticacao(
   handler: (req: Request, res: Response, user: UserContext) => Promise<void> | void,
-  options: { apenasAdmin?: boolean } = {},
+  options: { apenasAdmin?: boolean; apenasCliente?: boolean } = {},
   authVerifier: AuthTokenVerifier = getAuth(),
 ) {
   return async (req: Request, res: Response): Promise<void> => {
@@ -222,6 +254,9 @@ export function comAutenticacao(
       const user = await extrairUsuarioAutenticado(req, authVerifier);
       if (options.apenasAdmin) {
         exigirAdministrador(user);
+      }
+      if (options.apenasCliente) {
+        exigirCliente(user);
       }
       await handler(req, res, user);
     } catch (error: unknown) {

@@ -8,6 +8,7 @@ import {
   extrairUsuarioAutenticado,
   extrairUsuarioOpcional,
   exigirAdministrador,
+  exigirCliente,
   autenticarMiddleware,
   comAutenticacao,
   type AuthTokenVerifier,
@@ -78,7 +79,9 @@ describe('Auth Middleware reutilizável de autenticação', () => {
         nome: 'Tais Romagnoli',
         email: 'admin@clinicataisromagnoli.com.br',
         telefone: '+5511999998888',
+        role: 'admin',
         isAdmin: true,
+        isClient: false,
       });
       expect(mockVerifyIdToken).toHaveBeenCalledWith('token-valido');
     });
@@ -94,6 +97,20 @@ describe('Auth Middleware reutilizável de autenticação', () => {
       expect(user.isAdmin).toBe(true);
       expect(user.nome).toBe('gestora@clinica.com.br');
       expect(user.telefone).toBeUndefined();
+    });
+
+    it('decodifica com sucesso token com claim role="client" e client=true', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'user-client-1',
+        email: 'cliente@clinica.com.br',
+        role: 'client',
+        client: true,
+      });
+
+      const user = await validarIdToken('token-valido', mockVerifier);
+      expect(user.isAdmin).toBe(false);
+      expect(user.isClient).toBe(true);
+      expect(user.role).toBe('client');
     });
 
     it('define fallback do nome para "Cliente" se name e email estiverem ausentes', async () => {
@@ -258,6 +275,36 @@ describe('Auth Middleware reutilizável de autenticação', () => {
         expect((err as AuthError).statusCode).toBe(403);
         expect((err as AuthError).message).toContain('Apenas a administradora possui permissão');
       }
+    });
+  });
+
+  describe('exigirCliente', () => {
+    it('não lança erro para usuário cliente com isClient: true', () => {
+      expect(() =>
+        exigirCliente({
+          uid: 'cliente-1',
+          nome: 'Mariana',
+          isAdmin: false,
+          isClient: true,
+          role: 'cliente',
+        }),
+      ).not.toThrow();
+    });
+
+    it('lança AuthError 401 se usuário for nulo ou indefinido', () => {
+      expect(() => exigirCliente(null)).toThrowError(AuthError);
+    });
+
+    it('lança AuthError 403 se usuário não for cliente', () => {
+      expect(() =>
+        exigirCliente({
+          uid: 'admin-1',
+          nome: 'Tais',
+          isAdmin: true,
+          isClient: false,
+          role: 'admin',
+        }),
+      ).toThrowError(AuthError);
     });
   });
 

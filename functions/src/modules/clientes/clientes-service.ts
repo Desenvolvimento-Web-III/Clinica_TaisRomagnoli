@@ -1,3 +1,4 @@
+import type { Auth } from 'firebase-admin/auth';
 import {
   criarPerfilClienteInputSchema,
   PREFERENCIAS_CONTATO_PADRAO,
@@ -20,13 +21,14 @@ export class ClienteBusinessError extends Error {
 
 /**
  * Registra o perfil básico do cliente após a criação da conta no Firebase Auth.
- * Garante validação de dados, integridade de papéis e geração opcional de boas-vindas.
+ * Garante validação de dados, integridade de papéis, aplicação de custom claims e geração de boas-vindas.
  */
 export async function registrarPerfilCliente(
   input: unknown,
   user: UserContext,
   repo: ClientesRepository,
   notifRepo?: NotificacoesRepository,
+  auth?: Pick<Auth, 'setCustomUserClaims'>,
 ): Promise<UserProfile> {
   if (!user || !user.uid) {
     throw new ClienteBusinessError('Acesso não autenticado. Forneça o token Bearer.', 401);
@@ -79,6 +81,19 @@ export async function registrarPerfilCliente(
   };
 
   const salvo = await repo.salvar(novoPerfil);
+
+  // Aplica Custom Claims de cliente no Firebase Auth para diferenciar perfil sem depender do frontend
+  if (auth) {
+    try {
+      await auth.setCustomUserClaims(uidFinal, {
+        role: 'cliente',
+        admin: false,
+        client: true,
+      });
+    } catch (err) {
+      console.warn('Aviso: Não foi possível definir custom claims no Firebase Auth:', err);
+    }
+  }
 
   // Gera notificação inicial de boas-vindas caso o repositório de notificações seja fornecido
   if (notifRepo) {

@@ -23,8 +23,9 @@ export type ClaimsFirestoreAdapter = Pick<Firestore, 'collection'>;
 export interface AtribuirClaimsResult {
   uid: string;
   email?: string;
-  role: 'admin' | 'cliente';
+  role: 'admin' | 'client' | 'cliente';
   admin: boolean;
+  client?: boolean;
   mensagem: string;
 }
 
@@ -54,17 +55,26 @@ export async function atribuirFuncaoAdministrativa(
       (parsed.targetUid && parsed.targetUid === caller.uid) ||
       (parsed.email && caller.email && parsed.email.toLowerCase() === caller.email.toLowerCase());
 
-    if (isSelfAssignment) {
+    if (parsed.role === 'admin') {
+      if (isSelfAssignment) {
+        throw new CustomClaimsBusinessError(
+          'Autoatribuição de função administrativa não é permitida.',
+          403,
+        );
+      }
+
       throw new CustomClaimsBusinessError(
-        'Autoatribuição de função administrativa não é permitida.',
+        'Acesso negado. Apenas a administradora possui permissão para atribuir funções administrativas.',
         403,
       );
     }
 
-    throw new CustomClaimsBusinessError(
-      'Acesso negado. Apenas a administradora possui permissão para atribuir funções administrativas.',
-      403,
-    );
+    if (!isSelfAssignment) {
+      throw new CustomClaimsBusinessError(
+        'Acesso negado. Apenas a administradora possui permissão para gerenciar funções de outros usuários.',
+        403,
+      );
+    }
   }
 
   // 3. Localização do usuário alvo no Firebase Authentication
@@ -95,10 +105,13 @@ export async function atribuirFuncaoAdministrativa(
   }
 
   const isAdminRole = parsed.role === 'admin';
-  const customClaims = {
+  const customClaims: Record<string, unknown> = {
     role: parsed.role,
     admin: isAdminRole,
   };
+  if (parsed.role === 'client') {
+    customClaims['client'] = true;
+  }
 
   // 4. Definição segura das Custom Claims via Firebase Admin SDK
   await auth.setCustomUserClaims(targetUid, customClaims);
@@ -223,4 +236,69 @@ export async function consultarClaimsUsuario(
 
   const userRecord = await auth.getUser(targetUid);
   return userRecord.customClaims || {};
+}
+
+/**
+ * Aplica as Custom Claims de cliente no Firebase Auth (role: 'cliente', admin: false, client: true).
+ */
+export async function definirClaimsCliente(
+  targetUid: string,
+  auth: Pick<Auth, 'setCustomUserClaims'>,
+  role: 'client' | 'cliente' = 'cliente',
+): Promise<AtribuirClaimsResult> {
+  const customClaims = {
+    role,
+    admin: false,
+    client: true,
+  };
+  await auth.setCustomUserClaims(targetUid, customClaims);
+
+  return {
+    uid: targetUid,
+    role,
+    admin: false,
+    client: true,
+    mensagem: 'Claims de cliente aplicadas com sucesso pelo Firebase Admin SDK.',
+  };
+}
+
+/**
+ * Aplica claims de função (admin ou client/cliente) diretamente pelo Firebase Admin SDK.
+ * Diferencia administradora e cliente sem confiar em dados enviados pelo frontend.
+ */
+export async function aplicarClaimsPerfil(
+  targetUid: string,
+  role: 'admin' | 'client' | 'cliente',
+  auth: ClaimsAuthAdapter,
+  firestore?: ClaimsFirestoreAdapter,
+): Promise<AtribuirClaimsResult> {
+  const isAdmin = role === 'admin';
+  const customClaims = {
+    role,
+    admin: isAdmin,
+    client: !isAdmin,
+  };
+
+  await auth.setCustomUserClaims(targetUid, customClaims);
+
+  if (firestore) {
+    const agoraIso = new Date().toISOString();
+    await firestore.collection('usuarios').doc(targetUid).set(
+      {
+        uid: targetUid,
+        role,
+        status: 'ativo',
+        updatedAt: agoraIso,
+      },
+      { merge: true },
+    );
+  }
+
+  return {
+    uid: targetUid,
+    role,
+    admin: isAdmin,
+    client: !isAdmin,
+    mensagem: `Função ${role} atribuída com sucesso via Custom Claims no Firebase Admin SDK.`,
+  };
 }
