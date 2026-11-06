@@ -5,9 +5,11 @@ vi.mock('firebase-admin/app', () => ({
 }));
 
 const mockVerifyIdToken = vi.fn();
+const mockSetCustomUserClaims = vi.fn().mockResolvedValue(undefined);
 vi.mock('firebase-admin/auth', () => ({
   getAuth: () => ({
     verifyIdToken: mockVerifyIdToken,
+    setCustomUserClaims: mockSetCustomUserClaims,
   }),
 }));
 
@@ -246,6 +248,11 @@ describe('Endpoints HTTP de Clientes (Functions)', () => {
       expect((res.body?.dados as Record<string, unknown>)?.['uid']).toBe('cliente-novo-1');
       expect((res.body?.dados as Record<string, unknown>)?.['role']).toBe('cliente');
       expect((res.body?.dados as Record<string, unknown>)?.['status']).toBe('ativo');
+      expect(mockSetCustomUserClaims).toHaveBeenCalledWith('cliente-novo-1', {
+        role: 'cliente',
+        admin: false,
+        client: true,
+      });
     });
 
     it('retorna 409 se outro usuário já possui cadastro com o mesmo email', async () => {

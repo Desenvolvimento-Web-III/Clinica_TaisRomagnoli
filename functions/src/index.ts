@@ -92,12 +92,15 @@ import {
   definirAdministradoraInicial,
   consultarClaimsUsuario,
   CustomClaimsBusinessError,
+  aplicarClaimsPerfil,
+  definirClaimsCliente,
 } from './modules/admin/custom-claims-service.js';
 import {
   AuthError,
   extrairUsuarioAutenticado,
   extrairUsuarioOpcional,
   exigirAdministrador,
+  exigirCliente,
   autenticarMiddleware,
   comAutenticacao,
   validarIdToken,
@@ -113,10 +116,13 @@ export {
   definirAdministradoraInicial,
   consultarClaimsUsuario,
   CustomClaimsBusinessError,
+  aplicarClaimsPerfil,
+  definirClaimsCliente,
   AuthError,
   extrairUsuarioAutenticado,
   extrairUsuarioOpcional,
   exigirAdministrador,
+  exigirCliente,
   autenticarMiddleware,
   comAutenticacao,
   validarIdToken,
@@ -697,10 +703,11 @@ export const criarPerfil = onRequest({ cors: true }, async (request, response) =
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
     const firestore = getFirestore();
+    const auth = getAuth();
     const repo = new FirestoreClientesRepository(firestore);
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
 
-    const perfil = await registrarPerfilCliente(request.body, user, repo, notifRepo);
+    const perfil = await registrarPerfilCliente(request.body, user, repo, notifRepo, auth);
     response.status(201).json({
       mensagem: 'Perfil do cliente registrado com sucesso.',
       dados: perfil,

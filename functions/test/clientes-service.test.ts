@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   registrarPerfilCliente,
   obterPerfilCliente,
@@ -63,6 +63,31 @@ describe('Serviço de Perfil de Clientes (Backend)', () => {
       const notificacoes = await notifRepo.listarPorDestinatario('cliente-123');
       expect(notificacoes).toHaveLength(1);
       expect(notificacoes[0].titulo).toContain('Bem-vindo(a)');
+    });
+
+    it('aplica Custom Claims de cliente no Firebase Auth ao registrar perfil quando auth é fornecido', async () => {
+      const mockSetCustomUserClaims = vi.fn().mockResolvedValue(undefined);
+      const mockAuth = { setCustomUserClaims: mockSetCustomUserClaims };
+
+      const input = {
+        nome: 'Mariana Lima',
+        email: 'mariana.auth@exemplo.com',
+        telefone: '(11) 98765-4321',
+      };
+
+      await registrarPerfilCliente(
+        input,
+        { ...clienteUser, uid: 'cliente-auth-1' },
+        clientesRepo,
+        notifRepo,
+        mockAuth,
+      );
+
+      expect(mockSetCustomUserClaims).toHaveBeenCalledWith('cliente-auth-1', {
+        role: 'cliente',
+        admin: false,
+        client: true,
+      });
     });
 
     it('preserva preferências de contato customizadas informadas pelo cliente', async () => {
