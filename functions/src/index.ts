@@ -93,12 +93,38 @@ import {
   consultarClaimsUsuario,
   CustomClaimsBusinessError,
 } from './modules/admin/custom-claims-service.js';
+import {
+  AuthError,
+  extrairUsuarioAutenticado,
+  extrairUsuarioOpcional,
+  exigirAdministrador,
+  autenticarMiddleware,
+  comAutenticacao,
+  validarIdToken,
+  extrairBearerToken,
+  type UserContext,
+  type AuthenticatedRequest,
+  type OptionalAuthenticatedRequest,
+  type AuthTokenVerifier,
+} from './middlewares/auth-middleware.js';
 
 export {
   atribuirFuncaoAdministrativaService,
   definirAdministradoraInicial,
   consultarClaimsUsuario,
   CustomClaimsBusinessError,
+  AuthError,
+  extrairUsuarioAutenticado,
+  extrairUsuarioOpcional,
+  exigirAdministrador,
+  autenticarMiddleware,
+  comAutenticacao,
+  validarIdToken,
+  extrairBearerToken,
+  type UserContext,
+  type AuthenticatedRequest,
+  type OptionalAuthenticatedRequest,
+  type AuthTokenVerifier,
 };
 
 export const healthCheck = onRequest({ cors: false }, (_request, response) => {
@@ -106,28 +132,24 @@ export const healthCheck = onRequest({ cors: false }, (_request, response) => {
 });
 
 /**
- * Helper para extrair e validar token de autenticação
+ * Responde erros de regras de negócio ou de autenticação padronizados com o código HTTP adequado.
  */
-async function extrairUsuarioAutenticado(authorizationHeader?: string) {
-  if (!authorizationHeader?.startsWith('Bearer ')) {
-    throw new AgendamentoBusinessError('Acesso não autenticado. Forneça o token Bearer.', 401);
+function responderErroNegocio(
+  response: { status: (code: number) => { json: (data: unknown) => void } },
+  error: unknown,
+): boolean {
+  if (
+    error instanceof AuthError ||
+    error instanceof AgendamentoBusinessError ||
+    error instanceof NotificacaoBusinessError ||
+    error instanceof ServicoBusinessError ||
+    error instanceof ClienteBusinessError ||
+    error instanceof CustomClaimsBusinessError
+  ) {
+    response.status(error.statusCode).json({ error: error.message });
+    return true;
   }
-
-  const idToken = authorizationHeader.split('Bearer ')[1];
-  if (!idToken) {
-    throw new AgendamentoBusinessError('Token de autenticação ausente.', 401);
-  }
-
-  const decoded = await getAuth().verifyIdToken(idToken);
-  const isAdmin = decoded['admin'] === true || decoded['role'] === 'admin';
-
-  return {
-    uid: decoded.uid,
-    nome: (decoded['name'] as string) || (decoded['email'] as string) || 'Cliente',
-    email: decoded.email,
-    telefone: (decoded['phone_number'] as string) || undefined,
-    isAdmin,
-  };
+  return false;
 }
 
 /**
@@ -183,8 +205,7 @@ export const atualizarHorariosFuncionamento = onRequest(
         dados: resultado,
       });
     } catch (error: unknown) {
-      if (error instanceof AgendamentoBusinessError) {
-        response.status(error.statusCode).json({ error: error.message });
+      if (responderErroNegocio(response, error)) {
         return;
       }
       if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -226,8 +247,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       dados: agendamento,
     });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -261,8 +281,7 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
       dados: agendamento,
     });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -296,8 +315,7 @@ export const cancelarAgendamento = onRequest({ cors: true }, async (request, res
       dados: agendamento,
     });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -329,8 +347,7 @@ export const listarMeusAgendamentos = onRequest({ cors: true }, async (request, 
     const lista = await listarAgendamentos(user, clienteIdFiltro, repo);
     response.status(200).json({ dados: lista });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao listar agendamentos:', error);
@@ -365,8 +382,7 @@ export const listarMinhasNotificacoes = onRequest({ cors: true }, async (request
     );
     response.status(200).json({ dados: notificacoes });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError || error instanceof NotificacaoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao listar notificações:', error);
@@ -396,8 +412,7 @@ export const marcarNotificacaoLida = onRequest({ cors: true }, async (request, r
       dados: atualizada,
     });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError || error instanceof NotificacaoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -439,28 +454,13 @@ export const processarLembretes = onRequest({ cors: true }, async (request, resp
       dados: geradas,
     });
   } catch (error: unknown) {
-    if (error instanceof AgendamentoBusinessError || error instanceof NotificacaoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao processar lembretes:', error);
     response.status(500).json({ error: 'Erro interno ao processar lembretes.' });
   }
 });
-
-/**
- * Helper para extrair usuário opcionalmente (para rotas com visualização diferenciada de catálogo)
- */
-async function extrairUsuarioOpcional(authorizationHeader?: string) {
-  if (!authorizationHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-  try {
-    return await extrairUsuarioAutenticado(authorizationHeader);
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Cadastra um novo serviço no catálogo da clínica (restrito à administradora)
@@ -482,8 +482,7 @@ export const cadastrarServico = onRequest({ cors: true }, async (request, respon
       dados: novo,
     });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -515,8 +514,7 @@ export const editarServico = onRequest({ cors: true }, async (request, response)
       dados: atualizado,
     });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -553,8 +551,7 @@ export const desativarServico = onRequest({ cors: true }, async (request, respon
       dados: desativado,
     });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao desativar serviço:', error);
@@ -587,8 +584,7 @@ export const reativarServico = onRequest({ cors: true }, async (request, respons
       dados: reativado,
     });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao reativar serviço:', error);
@@ -621,8 +617,7 @@ export const excluirServico = onRequest({ cors: true }, async (request, response
       mensagem: 'Serviço excluído com sucesso.',
     });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao excluir serviço:', error);
@@ -651,8 +646,7 @@ export const obterServicos = onRequest({ cors: true }, async (request, response)
     const servicos = await listarServicosCatalog(user, apenasAtivos, repo);
     response.status(200).json({ dados: servicos });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao obter serviços:', error);
@@ -682,8 +676,7 @@ export const obterServico = onRequest({ cors: true }, async (request, response) 
     const servico = await obterDetalhesServico(id, repo);
     response.status(200).json({ dados: servico });
   } catch (error: unknown) {
-    if (error instanceof ServicoBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao obter serviço:', error);
@@ -713,8 +706,7 @@ export const criarPerfil = onRequest({ cors: true }, async (request, response) =
       dados: perfil,
     });
   } catch (error: unknown) {
-    if (error instanceof ClienteBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -746,8 +738,7 @@ export const obterPerfil = onRequest({ cors: true }, async (request, response) =
     const perfil = await obterPerfilCliente(targetUid, user, repo);
     response.status(200).json({ dados: perfil });
   } catch (error: unknown) {
-    if (error instanceof ClienteBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao consultar perfil do cliente:', error);
@@ -783,12 +774,7 @@ export const atribuirFuncaoAdministrativa = onRequest({ cors: true }, async (req
       dados: resultado,
     });
   } catch (error: unknown) {
-    if (
-      error instanceof CustomClaimsBusinessError ||
-      error instanceof AgendamentoBusinessError ||
-      error instanceof ClienteBusinessError
-    ) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
@@ -821,8 +807,7 @@ export const consultarCustomClaims = onRequest({ cors: true }, async (request, r
     const claims = await consultarClaimsUsuario(targetUid, caller, auth);
     response.status(200).json({ dados: claims });
   } catch (error: unknown) {
-    if (error instanceof CustomClaimsBusinessError || error instanceof AgendamentoBusinessError) {
-      response.status(error.statusCode).json({ error: error.message });
+    if (responderErroNegocio(response, error)) {
       return;
     }
     console.error('Erro ao consultar custom claims:', error);
@@ -860,8 +845,7 @@ export const inicializarContaAdministradora = onRequest(
         dados: resultado,
       });
     } catch (error: unknown) {
-      if (error instanceof CustomClaimsBusinessError || error instanceof AgendamentoBusinessError) {
-        response.status(error.statusCode).json({ error: error.message });
+      if (responderErroNegocio(response, error)) {
         return;
       }
       console.error('Erro ao inicializar conta administradora:', error);
