@@ -9,7 +9,10 @@ indicadores previstos.
 ## Implementação em andamento
 
 A branch `feature/catalogo-servicos` apresenta um catálogo frontend, mobile-first e somente para
-leitura. A tela filtra serviços ativos e mostra nome, descrição, duração, preço e imagem.
+leitura. A tela filtra serviços ativos e mostra nome, descrição, duração, preço e imagem. A visualização
+de detalhes do serviço (modal no catálogo e rota `/servicos/:serviceId`) exibe a descrição completa do
+atendimento, duração, valor total, sinal de reserva de 30% (com saldo a acertar no dia) e botão de ação
+para iniciar o agendamento.
 
 Os nomes, as durações e os valores atuais são demonstrativos, porque o catálogo comercial oficial e
 o modelo de dados ainda não foram fornecidos. Eles devem ser validados antes de qualquer publicação

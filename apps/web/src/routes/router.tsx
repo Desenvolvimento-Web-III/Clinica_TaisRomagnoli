@@ -3,6 +3,7 @@ import { AgendamentosPage } from '@/pages/AgendamentosPage';
 import { AgendamentoFlowPage } from '@/pages/AgendamentoFlowPage';
 import { ReagendamentoPage } from '@/pages/ReagendamentoPage';
 import { ServiceCatalogPage } from '@/pages/ServiceCatalogPage';
+import { ServiceDetailPage } from '@/pages/ServiceDetailPage';
 import { TechnicalStatusPage } from '@/pages/TechnicalStatusPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -44,6 +45,10 @@ export const router = createBrowserRouter([
   {
     path: '/servicos',
     element: <ServiceCatalogPage />,
+  },
+  {
+    path: '/servicos/:serviceId',
+    element: <ServiceDetailPage />,
   },
   {
     path: '/status',
