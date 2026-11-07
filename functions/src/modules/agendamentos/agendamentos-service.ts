@@ -9,6 +9,7 @@ import {
   verificarAntecedenciaCancelamento,
   validarEncaixeHorariosFuncionamento,
   CONFIGURACAO_HORARIOS_PADRAO,
+  verificarProfissionalHabilitadoParaServico,
   type HorariosFuncionamento,
   type Agendamento,
 } from '@clinica/shared';
@@ -17,6 +18,7 @@ import type { NotificacoesRepository } from '../notificacoes/notificacoes-reposi
 import type { ServicosRepository } from '../servicos/servicos-repository.js';
 import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
 import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
+import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
@@ -54,10 +56,40 @@ export async function solicitarNovoAgendamento(
   bloqueiosRepo?: BloqueiosRepository,
   horariosFixosRepo?: HorariosFixosRepository,
   configuracaoHorarios?: HorariosFuncionamento,
+  profissionaisRepo?: ProfissionaisRepository,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
 
-  // 0. Validação de Serviço Ativo e Duração (se repositório fornecido)
+  let profissionalNomeFinal = parsed.profissionalNome;
+
+  // 0. Validação de Profissional Ativo e Habilitado (se repositório fornecido)
+  if (profissionaisRepo) {
+    const profissional = await profissionaisRepo.buscarPorId(parsed.profissionalId);
+    if (!profissional) {
+      throw new AgendamentoBusinessError('Profissional selecionado não encontrado.', 404);
+    }
+    if (!profissional.ativo) {
+      throw new AgendamentoBusinessError(
+        'O profissional selecionado não está ativo para agendamentos.',
+        422,
+      );
+    }
+    profissionalNomeFinal = profissional.nome;
+
+    const inicioDate = new Date(parsed.dataHoraInicio);
+    const diaSemana = inicioDate.getDay();
+    if (
+      profissional.diasFolga &&
+      profissional.diasFolga.includes(diaSemana as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+    ) {
+      throw new AgendamentoBusinessError(
+        'O profissional selecionado não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
+        422,
+      );
+    }
+  }
+
+  // 1. Validação de Serviço Ativo, Duração e Habilitação do Profissional (se repositório fornecido)
   if (servicosRepo) {
     const servico = await servicosRepo.buscarPorId(parsed.servicoId);
     if (!servico) {
@@ -72,6 +104,12 @@ export async function solicitarNovoAgendamento(
     if (servico.duracaoMinutos !== parsed.duracaoMinutos) {
       throw new AgendamentoBusinessError(
         `A duração informada (${parsed.duracaoMinutos} min) não corresponde à duração cadastrada para o serviço (${servico.duracaoMinutos} min).`,
+        422,
+      );
+    }
+    if (!verificarProfissionalHabilitadoParaServico(servico, parsed.profissionalId)) {
+      throw new AgendamentoBusinessError(
+        'O profissional selecionado não realiza o procedimento solicitado.',
         422,
       );
     }
@@ -169,7 +207,7 @@ export async function solicitarNovoAgendamento(
     dataHoraFim,
     intervaloAposMinutos: 30,
     profissionalId: parsed.profissionalId,
-    profissionalNome: parsed.profissionalNome,
+    profissionalNome: profissionalNomeFinal,
     status: isencaoSinal ? 'confirmado' : 'pendente',
     metodoPagamento: parsed.metodoPagamento,
     origem: user.isAdmin ? 'presencial_admin' : 'app_cliente',
@@ -201,6 +239,8 @@ export async function alterarAgendamentoExistente(
   bloqueiosRepo?: BloqueiosRepository,
   horariosFixosRepo?: HorariosFixosRepository,
   configuracaoHorarios?: HorariosFuncionamento,
+  profissionaisRepo?: ProfissionaisRepository,
+  servicosRepo?: ServicosRepository,
 ): Promise<Agendamento> {
   const notificacoesRepo =
     notificacoesRepoOuDataRef instanceof Date ? undefined : notificacoesRepoOuDataRef;
@@ -277,7 +317,45 @@ export async function alterarAgendamentoExistente(
   );
 
   const profissionalId = parsed.novoProfissionalId || agendamento.profissionalId;
-  const profissionalNome = parsed.novoProfissionalNome || agendamento.profissionalNome;
+  let profissionalNome = parsed.novoProfissionalNome || agendamento.profissionalNome;
+
+  // Validação de Profissional Ativo e Folga (se repositório fornecido)
+  if (profissionaisRepo) {
+    const profissional = await profissionaisRepo.buscarPorId(profissionalId);
+    if (!profissional) {
+      throw new AgendamentoBusinessError('Profissional selecionado não encontrado.', 404);
+    }
+    if (!profissional.ativo) {
+      throw new AgendamentoBusinessError(
+        'O profissional selecionado não está ativo para agendamentos.',
+        422,
+      );
+    }
+    profissionalNome = profissional.nome;
+
+    const novaInicioDate = new Date(parsed.novaDataHoraInicio);
+    const diaSemana = novaInicioDate.getDay();
+    if (
+      profissional.diasFolga &&
+      profissional.diasFolga.includes(diaSemana as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+    ) {
+      throw new AgendamentoBusinessError(
+        'O profissional selecionado não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
+        422,
+      );
+    }
+  }
+
+  // Validação se o profissional realiza o serviço (se repositório fornecido)
+  if (servicosRepo) {
+    const servico = await servicosRepo.buscarPorId(agendamento.servicoId);
+    if (servico && !verificarProfissionalHabilitadoParaServico(servico, profissionalId)) {
+      throw new AgendamentoBusinessError(
+        'O profissional selecionado não realiza o procedimento solicitado.',
+        422,
+      );
+    }
+  }
 
   // 3. Verificação de conflitos com Bloqueios Únicos, Recorrentes ou Horários Fixos
   if (bloqueiosRepo || horariosFixosRepo) {

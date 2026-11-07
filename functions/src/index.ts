@@ -42,6 +42,20 @@ import {
   obterPerfilCliente,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
+import {
+  FirestoreProfissionaisRepository,
+  InMemoryProfissionaisRepository,
+  type ProfissionaisRepository,
+} from './modules/profissionais/profissionais-repository.js';
+import {
+  ProfissionalBusinessError,
+  listarProfissionais,
+  obterProfissionalPorId,
+  cadastrarProfissional as cadastrarProfissionalService,
+  atualizarProfissional as atualizarProfissionalService,
+  vincularProfissionalAoServico as vincularProfissionalAoServicoService,
+} from './modules/profissionais/profissionais-service.js';
+import { listarServicosCatalogPorProfissional } from './modules/servicos/servicos-service.js';
 
 initializeApp();
 
@@ -181,6 +195,16 @@ export {
   type AuthenticatedRequest,
   type OptionalAuthenticatedRequest,
   type AuthTokenVerifier,
+  FirestoreProfissionaisRepository,
+  InMemoryProfissionaisRepository,
+  type ProfissionaisRepository,
+  ProfissionalBusinessError,
+  listarProfissionais,
+  obterProfissionalPorId,
+  cadastrarProfissionalService,
+  atualizarProfissionalService,
+  vincularProfissionalAoServicoService,
+  listarServicosCatalogPorProfissional,
 };
 
 export const healthCheck = onRequest({ cors: false }, (_request, response) => {
@@ -203,7 +227,8 @@ function responderErroNegocio(
     error instanceof CustomClaimsBusinessError ||
     error instanceof SessaoBusinessError ||
     error instanceof AgendaBloqueiosBusinessError ||
-    error instanceof HorariosBusinessError
+    error instanceof HorariosBusinessError ||
+    error instanceof ProfissionalBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
@@ -295,6 +320,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const servicosRepo = new FirestoreServicosRepository(firestore);
     const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
+    const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
 
     const agendamento = await solicitarNovoAgendamento(
       request.body,
@@ -304,6 +330,8 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       servicosRepo,
       bloqueiosRepo,
       horariosFixosRepo,
+      undefined,
+      profissionaisRepo,
     );
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
@@ -339,6 +367,8 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
     const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
+    const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
+    const servicosRepo = new FirestoreServicosRepository(firestore);
 
     const agendamento = await alterarAgendamentoExistente(
       request.body,
@@ -348,6 +378,9 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
       undefined,
       bloqueiosRepo,
       horariosFixosRepo,
+      undefined,
+      profissionaisRepo,
+      servicosRepo,
     );
     response.status(200).json({
       mensagem: 'Agendamento alterado com sucesso.',
@@ -1379,6 +1412,7 @@ export const obterHorariosDisponiveis = onRequest({ cors: true }, async (request
     const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
     const servicosRepo = new FirestoreServicosRepository(firestore);
+    const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
 
     const params = request.method === 'GET' ? request.query : request.body;
 
@@ -1390,6 +1424,7 @@ export const obterHorariosDisponiveis = onRequest({ cors: true }, async (request
       horariosFixosRepo,
       servicosRepo,
       caller?.uid,
+      profissionaisRepo,
     );
 
     response.status(200).json({
@@ -1409,5 +1444,222 @@ export const obterHorariosDisponiveis = onRequest({ cors: true }, async (request
     }
     console.error('Erro ao consultar horários disponíveis:', error);
     response.status(500).json({ error: 'Erro interno ao consultar horários disponíveis.' });
+  }
+});
+
+/**
+ * Consulta a lista de profissionais da clínica.
+ * Endpoint com leitura liberada para clientes e visitantes selecionarem na agenda.
+ */
+export const obterProfissionais = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioOpcional(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreProfissionaisRepository(firestore);
+
+    // Administradora pode consultar inativos com ?apenasAtivos=false; clientes sempre recebem apenas ativos
+    const filtrarApenasAtivos = caller?.isAdmin ? request.query['apenasAtivos'] === 'true' : true;
+    const lista = await listarProfissionais(repo, filtrarApenasAtivos);
+
+    response.status(200).json({
+      sucesso: true,
+      dados: lista,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao obter profissionais:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar profissionais.' });
+  }
+});
+
+/**
+ * Consulta os detalhes de um profissional específico por ID.
+ */
+export const obterProfissional = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const id = (request.query['id'] as string) || (request.query['profissionalId'] as string) || '';
+    const firestore = getFirestore();
+    const repo = new FirestoreProfissionaisRepository(firestore);
+
+    const profissional = await obterProfissionalPorId(id, repo);
+
+    response.status(200).json({
+      sucesso: true,
+      dados: profissional,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao obter profissional por ID:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar profissional.' });
+  }
+});
+
+/**
+ * Cadastra um novo profissional na clínica.
+ * Operação restrita à administradora autenticada.
+ */
+export const cadastrarProfissional = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreProfissionaisRepository(firestore);
+
+    const criado = await cadastrarProfissionalService(request.body, user, repo);
+
+    response.status(201).json({
+      sucesso: true,
+      mensagem: 'Profissional cadastrado com sucesso.',
+      dados: criado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados do profissional inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao cadastrar profissional:', error);
+    response.status(500).json({ error: 'Erro interno ao cadastrar profissional.' });
+  }
+});
+
+/**
+ * Atualiza os dados de um profissional existente.
+ * Operação restrita à administradora autenticada.
+ */
+export const atualizarProfissional = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'PUT' && request.method !== 'PATCH' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use PUT, PATCH ou POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreProfissionaisRepository(firestore);
+
+    const atualizado = await atualizarProfissionalService(request.body, user, repo);
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: 'Profissional atualizado com sucesso.',
+      dados: atualizado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({
+        error: 'Dados de atualização do profissional inválidos.',
+        detalhes: error,
+      });
+      return;
+    }
+    console.error('Erro ao atualizar profissional:', error);
+    response.status(500).json({ error: 'Erro interno ao atualizar profissional.' });
+  }
+});
+
+/**
+ * Vincula ou desvincula um profissional a um procedimento/serviço da clínica.
+ * Operação restrita à administradora autenticada.
+ */
+export const vincularProfissionalAoServicoEndpoint = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== 'POST') {
+      response.status(405).json({ error: 'Método não permitido. Use POST.' });
+      return;
+    }
+
+    try {
+      const user = await extrairUsuarioAutenticado(request.headers.authorization);
+      const firestore = getFirestore();
+      const servicosRepo = new FirestoreServicosRepository(firestore);
+      const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
+
+      const servicoAtualizado = await vincularProfissionalAoServicoService(
+        request.body,
+        user,
+        servicosRepo,
+        profissionaisRepo,
+      );
+
+      response.status(200).json({
+        sucesso: true,
+        mensagem: 'Vínculo do profissional com o serviço atualizado com sucesso.',
+        dados: servicoAtualizado,
+      });
+    } catch (error: unknown) {
+      if (responderErroNegocio(response, error)) {
+        return;
+      }
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+        response.status(400).json({ error: 'Parâmetros de vínculo inválidos.', detalhes: error });
+        return;
+      }
+      console.error('Erro ao vincular profissional com serviço:', error);
+      response.status(500).json({ error: 'Erro interno ao vincular profissional com serviço.' });
+    }
+  },
+);
+
+/**
+ * Lista serviços associados a um determinado profissional.
+ * Leitura pública/autenticada.
+ */
+export const listarServicosProfissional = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioOpcional(request.headers.authorization);
+    const profissionalId =
+      (request.query['profissionalId'] as string) ||
+      (request.query['id'] as string) ||
+      'prof-tais-romagnoli';
+    const firestore = getFirestore();
+    const servicosRepo = new FirestoreServicosRepository(firestore);
+
+    const servicos = await listarServicosCatalogPorProfissional(
+      profissionalId,
+      caller,
+      request.query['apenasAtivos'] === 'true',
+      servicosRepo,
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      dados: servicos,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao listar serviços do profissional:', error);
+    response.status(500).json({ error: 'Erro interno ao listar serviços do profissional.' });
   }
 });

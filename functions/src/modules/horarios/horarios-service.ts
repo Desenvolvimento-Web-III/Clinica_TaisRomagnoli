@@ -5,6 +5,7 @@ import {
   salvarHorariosInputSchema,
   consultarHorariosDisponiveisInputSchema,
   gerarHorariosDisponiveis,
+  verificarProfissionalHabilitadoParaServico,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
   type SlotDisponivel,
@@ -13,6 +14,7 @@ import type { AgendamentosRepository } from '../agendamentos/agendamentos-reposi
 import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
 import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
 import type { ServicosRepository } from '../servicos/servicos-repository.js';
+import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
 export const HORARIOS_DOCUMENT = 'horarios_funcionamento';
@@ -100,8 +102,23 @@ export async function consultarGradeHorariosDisponiveis(
   horariosFixosRepo: HorariosFixosRepository,
   servicosRepo?: ServicosRepository,
   clienteIdSolicitante?: string,
+  profissionaisRepo?: ProfissionaisRepository,
 ): Promise<ResultadoGradeHorariosDisponiveis> {
   const parsed = consultarHorariosDisponiveisInputSchema.parse(input);
+  const profissionalId = parsed.profissionalId || 'prof-tais-romagnoli';
+
+  if (profissionaisRepo) {
+    const profissional = await profissionaisRepo.buscarPorId(profissionalId);
+    if (!profissional) {
+      throw new HorariosBusinessError('Profissional informado não encontrado.', 404);
+    }
+    if (!profissional.ativo) {
+      throw new HorariosBusinessError(
+        'O profissional informado não está ativo para agendamentos.',
+        422,
+      );
+    }
+  }
 
   let duracaoMinutos = parsed.duracaoMinutos;
 
@@ -114,6 +131,12 @@ export async function consultarGradeHorariosDisponiveis(
       if (!servico.ativo) {
         throw new HorariosBusinessError(
           'O procedimento selecionado está desativado e não aceita novos agendamentos.',
+          422,
+        );
+      }
+      if (!verificarProfissionalHabilitadoParaServico(servico, profissionalId)) {
+        throw new HorariosBusinessError(
+          'O profissional selecionado não realiza o procedimento solicitado.',
           422,
         );
       }
@@ -133,7 +156,6 @@ export async function consultarGradeHorariosDisponiveis(
     );
   }
 
-  const profissionalId = parsed.profissionalId || 'prof-tais-romagnoli';
   const config = await obterHorarios(firestore, profissionalId);
 
   const agendamentos = await agendamentosRepo.listarPorProfissionalEData(

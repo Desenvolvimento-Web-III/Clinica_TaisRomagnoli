@@ -66,3 +66,4 @@ export * from './schemas/admin-claims.js';
 export * from './schemas/session-revocation.js';
 export * from './schemas/bloqueios-e-horarios-fixos.js';
 export * from './schemas/disponibilidade-horarios.js';
+export * from './schemas/professional.js';

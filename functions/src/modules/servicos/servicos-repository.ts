@@ -6,6 +6,7 @@ export interface ServicosRepository {
   buscarPorId(id: string): Promise<ServicoModel | null>;
   buscarPorNome(nome: string): Promise<ServicoModel | null>;
   listar(apenasAtivos?: boolean): Promise<ServicoModel[]>;
+  listarPorProfissional(profissionalId: string, apenasAtivos?: boolean): Promise<ServicoModel[]>;
   atualizar(servico: ServicoModel): Promise<ServicoModel>;
   excluir(id: string): Promise<void>;
 }
@@ -42,6 +43,20 @@ export class InMemoryServicosRepository implements ServicosRepository {
       return lista.filter((s) => s.ativo);
     }
     return lista.sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
+  async listarPorProfissional(
+    profissionalId: string,
+    apenasAtivos: boolean = false,
+  ): Promise<ServicoModel[]> {
+    const lista = await this.listar(apenasAtivos);
+    return lista.filter((s) => {
+      const habilitados = s.profissionaisHabilitados;
+      if (!habilitados || habilitados.length === 0) {
+        return profissionalId === (s.profissionalPadraoId || 'prof-tais-romagnoli');
+      }
+      return habilitados.includes(profissionalId);
+    });
   }
 
   async atualizar(servico: ServicoModel): Promise<ServicoModel> {
@@ -102,6 +117,10 @@ function mapFirestoreDocToServico(id: string, data: Record<string, unknown>): Se
   const categoria = (data['categoria'] as string) || (data['category'] as string) || undefined;
   const imageSrc = (data['imageSrc'] as string) || undefined;
   const imageAlt = (data['imageAlt'] as string) || undefined;
+  const profissionaisHabilitados = Array.isArray(data['profissionaisHabilitados'])
+    ? (data['profissionaisHabilitados'] as string[])
+    : ['prof-tais-romagnoli'];
+  const profissionalPadraoId = (data['profissionalPadraoId'] as string) || 'prof-tais-romagnoli';
   const createdAt = (data['createdAt'] as string) || undefined;
   const updatedAt = (data['updatedAt'] as string) || undefined;
 
@@ -119,6 +138,8 @@ function mapFirestoreDocToServico(id: string, data: Record<string, unknown>): Se
     categoria,
     imageSrc,
     imageAlt,
+    profissionaisHabilitados,
+    profissionalPadraoId,
     createdAt,
     updatedAt,
   };
@@ -193,6 +214,20 @@ export class FirestoreServicosRepository implements ServicosRepository {
     );
 
     return servicos.sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
+  async listarPorProfissional(
+    profissionalId: string,
+    apenasAtivos: boolean = false,
+  ): Promise<ServicoModel[]> {
+    const todos = await this.listar(apenasAtivos);
+    return todos.filter((s) => {
+      const habilitados = s.profissionaisHabilitados;
+      if (!habilitados || habilitados.length === 0) {
+        return profissionalId === (s.profissionalPadraoId || 'prof-tais-romagnoli');
+      }
+      return habilitados.includes(profissionalId);
+    });
   }
 
   async atualizar(servico: ServicoModel): Promise<ServicoModel> {

@@ -12,7 +12,12 @@ import { InMemoryNotificacoesRepository } from '../src/modules/notificacoes/noti
 import { InMemoryBloqueiosRepository } from '../src/modules/agenda/bloqueios-repository.js';
 import { InMemoryHorariosFixosRepository } from '../src/modules/agenda/horarios-fixos-repository.js';
 import { InMemoryServicosRepository } from '../src/modules/servicos/servicos-repository.js';
-import { CONFIGURACAO_HORARIOS_PADRAO, type ServicoModel } from '@clinica/shared';
+import { InMemoryProfissionaisRepository } from '../src/modules/profissionais/profissionais-repository.js';
+import {
+  CONFIGURACAO_HORARIOS_PADRAO,
+  ID_PROFISSIONAL_PADRAO,
+  type ServicoModel,
+} from '@clinica/shared';
 
 describe('Agendamentos Service (Functions Backend)', () => {
   let repo: InMemoryAgendamentosRepository;
@@ -777,6 +782,245 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
       expect(ag.id).toBeDefined();
       expect(ag.status).toBe('pendente');
+    });
+  });
+
+  describe('Validações de Vínculo com Profissionais', () => {
+    let profissionaisRepo: InMemoryProfissionaisRepository;
+    let servicosRepo: InMemoryServicosRepository;
+
+    const servicoMassagem: ServicoModel = {
+      id: 'massagem-relaxante',
+      nome: 'Massagem Relaxante',
+      duracaoMinutos: 60,
+      preco: 170,
+      precoEmCentavos: 17000,
+      sinal: 51,
+      sinalEmCentavos: 5100,
+      sinalPercentual: 30,
+      descricao: 'Relaxamento muscular',
+      ativo: true,
+      profissionaisHabilitados: [ID_PROFISSIONAL_PADRAO],
+      profissionalPadraoId: ID_PROFISSIONAL_PADRAO,
+    };
+
+    beforeEach(async () => {
+      profissionaisRepo = new InMemoryProfissionaisRepository(true);
+      servicosRepo = new InMemoryServicosRepository();
+      await servicosRepo.salvar(servicoMassagem);
+    });
+
+    it('vincula com sucesso o agendamento ao profissional cadastrado e preenche o nome oficial', async () => {
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z', // Quarta-feira
+        metodoPagamento: 'pix' as const,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Nome Qualquer Submetido',
+      };
+
+      const ag = await solicitarNovoAgendamento(
+        input,
+        clienteUser,
+        repo,
+        notifRepo,
+        servicosRepo,
+        undefined,
+        undefined,
+        undefined,
+        profissionaisRepo,
+      );
+
+      expect(ag.profissionalId).toBe(ID_PROFISSIONAL_PADRAO);
+      expect(ag.profissionalNome).toBe('Tais Romagnoli'); // Nome oficial do cadastro
+    });
+
+    it('rejeita agendamento se o profissional selecionado não existir (404)', async () => {
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: 'prof-inexistente',
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('Profissional selecionado não encontrado.');
+    });
+
+    it('rejeita agendamento se o profissional estiver inativo (422)', async () => {
+      await profissionaisRepo.salvar({
+        id: 'prof-inativo',
+        nome: 'Profissional Inativo',
+        especialidade: 'Massoterapeuta',
+        ativo: false,
+        diasFolga: [0],
+        intervaloMinutos: 30,
+        createdAt: new Date().toISOString(),
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: 'prof-inativo',
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('O profissional selecionado não está ativo para agendamentos.');
+    });
+
+    it('rejeita agendamento se for em dia de folga cadastrado para o profissional (422)', async () => {
+      // Tais Romagnoli folga domingo (0) e terça (2)
+      // 2026-10-20 foi uma terça-feira
+      const inputTerca = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-20T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          inputTerca,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('folga cadastrada');
+    });
+
+    it('rejeita agendamento se o profissional selecionado não realizar o procedimento solicitado (422)', async () => {
+      await profissionaisRepo.salvar({
+        id: 'prof-acupuntura',
+        nome: 'Mariana Acupunturista',
+        especialidade: 'Acupuntura',
+        ativo: true,
+        diasFolga: [0],
+        intervaloMinutos: 30,
+        createdAt: new Date().toISOString(),
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: 'prof-acupuntura', // Não está em profissionaisHabilitados do serviço
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('O profissional selecionado não realiza o procedimento solicitado.');
+    });
+
+    it('valida o novo profissional ao alterar/reagendar um agendamento', async () => {
+      await profissionaisRepo.salvar({
+        id: 'prof-camila',
+        nome: 'Camila Massagens',
+        especialidade: 'Massoterapeuta',
+        ativo: true,
+        diasFolga: [0],
+        intervaloMinutos: 30,
+        createdAt: new Date().toISOString(),
+      });
+
+      await servicosRepo.salvar({
+        ...servicoMassagem,
+        profissionaisHabilitados: [ID_PROFISSIONAL_PADRAO, 'prof-camila'],
+      });
+
+      // Cria agendamento inicial com Tais
+      const agOriginal = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-21T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+          profissionalId: ID_PROFISSIONAL_PADRAO,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        servicosRepo,
+        undefined,
+        undefined,
+        undefined,
+        profissionaisRepo,
+      );
+
+      // Reagenda para quinta-feira trocando profissional para Camila
+      const reagendado = await alterarAgendamentoExistente(
+        {
+          agendamentoId: agOriginal.id,
+          novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
+          novoProfissionalId: 'prof-camila',
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        new Date('2026-10-20T10:00:00.000Z'),
+        undefined,
+        undefined,
+        undefined,
+        profissionaisRepo,
+        servicosRepo,
+      );
+
+      expect(reagendado.profissionalId).toBe('prof-camila');
+      expect(reagendado.profissionalNome).toBe('Camila Massagens');
     });
   });
 });

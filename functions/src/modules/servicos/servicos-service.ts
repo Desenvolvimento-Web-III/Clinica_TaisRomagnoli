@@ -114,6 +114,8 @@ export async function cadastrarNovoServico(
     descricao: parsed.descricao,
     ativo: parsed.ativo !== undefined ? parsed.ativo : true,
     categoria: parsed.categoria || 'Corporal',
+    profissionaisHabilitados: parsed.profissionaisHabilitados || ['prof-tais-romagnoli'],
+    profissionalPadraoId: parsed.profissionalPadraoId || 'prof-tais-romagnoli',
     createdAt: agora,
     updatedAt: agora,
   };
@@ -169,6 +171,14 @@ export async function editarServicoExistente(
     categoria: parsed.categoria || servicoAtual.categoria,
     imageSrc: servicoAtual.imageSrc,
     imageAlt: servicoAtual.imageAlt,
+    profissionaisHabilitados:
+      parsed.profissionaisHabilitados !== undefined
+        ? parsed.profissionaisHabilitados
+        : servicoAtual.profissionaisHabilitados || ['prof-tais-romagnoli'],
+    profissionalPadraoId:
+      parsed.profissionalPadraoId !== undefined
+        ? parsed.profissionalPadraoId
+        : servicoAtual.profissionalPadraoId || 'prof-tais-romagnoli',
     createdAt: servicoAtual.createdAt || agora,
     updatedAt: agora,
   };
@@ -300,4 +310,19 @@ export async function obterDetalhesServico(
     throw new ServicoBusinessError('Serviço não encontrado.', 404);
   }
   return servico;
+}
+
+/**
+ * Consulta a lista de serviços oferecidos por um determinado profissional.
+ * Visitantes e clientes visualizam apenas procedimentos ativos.
+ */
+export async function listarServicosCatalogPorProfissional(
+  profissionalId: string,
+  user: UserContext | null,
+  apenasAtivos: boolean = false,
+  repo: ServicosRepository,
+): Promise<ServicoModel[]> {
+  const isAdmin = user?.isAdmin === true;
+  const filtrarApenasAtivos = !isAdmin || apenasAtivos;
+  return repo.listarPorProfissional(profissionalId, filtrarApenasAtivos);
 }
