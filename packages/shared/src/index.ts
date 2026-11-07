@@ -63,3 +63,4 @@ export type {
 export * from './schemas/notificacao.js';
 export * from './schemas/cliente.js';
 export * from './schemas/admin-claims.js';
+export * from './schemas/session-revocation.js';

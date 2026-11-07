@@ -96,6 +96,15 @@ import {
   definirClaimsCliente,
 } from './modules/admin/custom-claims-service.js';
 import {
+  SessaoBusinessError,
+  revogarSessoesUsuario,
+  aplicarPoliticaSessaoUnica,
+  consultarStatusSessao,
+  type SessoesAuthAdapter,
+  type SessoesFirestoreAdapter,
+  type StatusSessaoResult,
+} from './modules/auth/sessoes-service.js';
+import {
   AuthError,
   extrairUsuarioAutenticado,
   extrairUsuarioOpcional,
@@ -118,6 +127,13 @@ export {
   CustomClaimsBusinessError,
   aplicarClaimsPerfil,
   definirClaimsCliente,
+  SessaoBusinessError,
+  revogarSessoesUsuario,
+  aplicarPoliticaSessaoUnica,
+  consultarStatusSessao,
+  type SessoesAuthAdapter,
+  type SessoesFirestoreAdapter,
+  type StatusSessaoResult,
   AuthError,
   extrairUsuarioAutenticado,
   extrairUsuarioOpcional,
@@ -150,7 +166,8 @@ function responderErroNegocio(
     error instanceof NotificacaoBusinessError ||
     error instanceof ServicoBusinessError ||
     error instanceof ClienteBusinessError ||
-    error instanceof CustomClaimsBusinessError
+    error instanceof CustomClaimsBusinessError ||
+    error instanceof SessaoBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
@@ -860,3 +877,97 @@ export const inicializarContaAdministradora = onRequest(
     }
   },
 );
+
+/**
+ * Endpoint para revogar sessões (refresh tokens) de um usuário no Firebase Authentication.
+ * Permite ao próprio usuário invalidar suas sessões antigas ou à administradora revogar sessões de terceiros.
+ */
+export const revogarSessoes = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const auth = getAuth();
+    const firestore = getFirestore();
+
+    const resultado = await revogarSessoesUsuario(request.body, caller, auth, firestore);
+    response.status(200).json({
+      sucesso: true,
+      mensagem: resultado.mensagem,
+      dados: resultado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response
+        .status(400)
+        .json({ error: 'Dados inválidos para revogação de sessão.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao revogar sessões:', error);
+    response.status(500).json({ error: 'Erro interno ao processar revogação de sessões.' });
+  }
+});
+
+/**
+ * Endpoint para aplicar política de sessão única ao iniciar nova sessão.
+ * Revoga todos os refresh tokens anteriores do usuário autenticado.
+ */
+export const iniciarSessaoUnica = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const auth = getAuth();
+    const firestore = getFirestore();
+
+    const motivo =
+      (request.body?.motivo as string) || 'Início de nova sessão sob política de sessão única';
+    const resultado = await aplicarPoliticaSessaoUnica(caller, auth, firestore, motivo);
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: resultado.mensagem,
+      dados: resultado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao aplicar política de sessão única:', error);
+    response.status(500).json({ error: 'Erro interno ao aplicar política de sessão única.' });
+  }
+});
+
+/**
+ * Consulta metadados de sessão do usuário (ex: tokensValidAfterTime).
+ */
+export const consultarSessao = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const targetUid = (request.query['uid'] as string) || caller.uid;
+    const auth = getAuth();
+
+    const resultado = await consultarStatusSessao(targetUid, caller, auth);
+    response.status(200).json({ dados: resultado });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao consultar status da sessão:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar status da sessão.' });
+  }
+});

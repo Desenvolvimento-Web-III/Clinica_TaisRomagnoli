@@ -64,6 +64,9 @@ import {
   atribuirFuncaoAdministrativa,
   consultarCustomClaims,
   inicializarContaAdministradora,
+  revogarSessoes,
+  iniciarSessaoUnica,
+  consultarSessao,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -176,6 +179,9 @@ describe('[Backend] Validação de ID Token nas Cloud Functions protegidas', () 
       handler: inicializarContaAdministradora,
       method: 'POST',
     },
+    { name: 'revogarSessoes', handler: revogarSessoes, method: 'POST' },
+    { name: 'iniciarSessaoUnica', handler: iniciarSessaoUnica, method: 'POST' },
+    { name: 'consultarSessao', handler: consultarSessao, method: 'GET' },
   ];
 
   describe('Rejeição quando o ID token não for fornecido', () => {
