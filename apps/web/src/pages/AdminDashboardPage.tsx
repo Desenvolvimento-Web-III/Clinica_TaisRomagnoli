@@ -1,4 +1,4 @@
-import { useEffect, useState, useId } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useAuth } from '@/features/auth/auth-context';
@@ -15,6 +15,9 @@ import {
 } from '@/features/services/service-firestore-repository';
 import type { Service } from '@/features/services/types';
 import { AdminConfiguracoesGerais } from '@/features/admin-dashboard/components/AdminConfiguracoesGerais';
+import { AdminClientsList } from '@/features/admin-dashboard/components/AdminClientsList';
+import { buscarClientesAdmin, CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
+import type { AdminClientListItem } from '@/features/admin-dashboard/types';
 
 interface AgendamentoDemo {
   id: string;
@@ -72,50 +75,6 @@ const AGENDAMENTOS_DEMO: AgendamentoDemo[] = [
     valor: 170,
     status: 'pendente',
     sinalPago: false,
-  },
-];
-
-interface ClienteDemo {
-  id: string;
-  nome: string;
-  email: string;
-  telefone: string;
-  totalAtendimentosMes: number;
-  ultimoAtendimento: string;
-}
-
-const CLIENTES_DEMO: ClienteDemo[] = [
-  {
-    id: 'demo-client-1',
-    nome: 'Mariana Silva',
-    email: 'mariana.silva@exemplo.com',
-    telefone: '(11) 98765-4321',
-    totalAtendimentosMes: 3,
-    ultimoAtendimento: '26/09/2026',
-  },
-  {
-    id: 'demo-client-2',
-    nome: 'Ana Carolina Santos',
-    email: 'ana.santos@exemplo.com',
-    telefone: '(11) 97654-3210',
-    totalAtendimentosMes: 2,
-    ultimoAtendimento: '25/09/2026',
-  },
-  {
-    id: 'demo-client-3',
-    nome: 'Juliana Lima',
-    email: 'juliana.lima@exemplo.com',
-    telefone: '(11) 96543-2109',
-    totalAtendimentosMes: 1,
-    ultimoAtendimento: '20/09/2026',
-  },
-  {
-    id: 'demo-client-4',
-    nome: 'Carlos Eduardo',
-    email: 'carlos.eduardo@exemplo.com',
-    telefone: '(11) 95432-1098',
-    totalAtendimentosMes: 2,
-    ultimoAtendimento: '22/09/2026',
   },
 ];
 
@@ -237,7 +196,6 @@ const VALID_SECTIONS: AdminSection[] = [
 export function AdminDashboardPage() {
   const { section } = useParams<{ section?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const searchInputId = useId();
 
   const resolvedSection: AdminSection =
     section && VALID_SECTIONS.includes(section as AdminSection)
@@ -247,8 +205,33 @@ export function AdminDashboardPage() {
         : 'agenda';
 
   const [activeSection, setActiveSection] = useState<AdminSection>(resolvedSection);
-  const [buscaCliente, setBuscaCliente] = useState('');
   const [modalPresencialAberto, setModalPresencialAberto] = useState(false);
+
+  // Estados de Gerenciamento de Clientes
+  const [clientes, setClientes] = useState<AdminClientListItem[]>(CLIENTES_DEMO_INICIAIS);
+  const [isLoadingClientes, setIsLoadingClientes] = useState(false);
+
+  const carregarClientes = async () => {
+    setIsLoadingClientes(true);
+    try {
+      const lista = await buscarClientesAdmin();
+      setClientes(lista);
+    } finally {
+      setIsLoadingClientes(false);
+    }
+  };
+
+  useEffect(() => {
+    let ativo = true;
+    void buscarClientesAdmin().then((lista) => {
+      if (ativo && lista && lista.length > 0) {
+        setClientes(lista);
+      }
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   // Estados de Gerenciamento de Serviços
   const [servicos, setServicos] = useState<Service[]>(SERVICOS_INICIAIS);
@@ -341,13 +324,6 @@ export function AdminDashboardPage() {
       navigate('/servicos', { replace: true });
     }
   };
-
-  const clientesFiltrados = CLIENTES_DEMO.filter(
-    (c) =>
-      c.nome.toLowerCase().includes(buscaCliente.toLowerCase()) ||
-      c.email.toLowerCase().includes(buscaCliente.toLowerCase()) ||
-      c.telefone.includes(buscaCliente),
-  );
 
   return (
     <div className="min-h-dvh bg-[var(--color-canvas-neutral)] text-[var(--color-text-primary)]">
@@ -503,107 +479,12 @@ export function AdminDashboardPage() {
 
         {/* SEÇÃO 2: CLIENTES */}
         {activeSection === 'clientes' && (
-          <section
-            id="admin-panel-clientes"
-            aria-labelledby="admin-tab-clientes"
-            className="space-y-6"
-          >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-2xl">
-                  Gestão de Clientes
-                </h1>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  Acesse dados cadastrais, histórico e fichas de avaliação de clientes cadastrados.
-                </p>
-              </div>
-
-              <div className="w-full max-w-xs">
-                <label htmlFor={searchInputId} className="sr-only">
-                  Buscar clientes
-                </label>
-                <div className="relative">
-                  <input
-                    id={searchInputId}
-                    type="text"
-                    placeholder="Buscar por nome ou telefone..."
-                    value={buscaCliente}
-                    onChange={(e) => setBuscaCliente(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2 pl-9 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
-                  />
-                  <svg
-                    aria-hidden="true"
-                    className="absolute left-3 top-2.5 h-4 w-4 text-[var(--color-text-secondary)]"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-                    />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              {clientesFiltrados.map((cliente) => {
-                const isRecorrente = cliente.totalAtendimentosMes >= 2;
-                return (
-                  <div
-                    key={cliente.id}
-                    className="flex flex-col gap-4 rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-[var(--color-text-primary)]">
-                          {cliente.nome}
-                        </h3>
-                        {isRecorrente && (
-                          <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800">
-                            Cliente Recorrente
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-xs text-[var(--color-text-secondary)] sm:text-sm">
-                        {cliente.email} • {cliente.telefone}
-                      </p>
-                      <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                        Atendimentos este mês:{' '}
-                        <strong className="text-[var(--color-text-primary)]">
-                          {cliente.totalAtendimentosMes}
-                        </strong>{' '}
-                        • Último atendimento: {cliente.ultimoAtendimento}
-                      </p>
-                    </div>
-
-                    <Link
-                      to={`/admin/clientes/${cliente.id}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--color-brand-deep)] bg-white px-4 py-2 text-xs font-bold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-deep)] hover:text-white"
-                    >
-                      <span>Ver Ficha Completa</span>
-                      <svg
-                        aria-hidden="true"
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
+          <section id="admin-panel-clientes" aria-labelledby="admin-tab-clientes">
+            <AdminClientsList
+              clients={clientes}
+              isLoading={isLoadingClientes}
+              onRefresh={carregarClientes}
+            />
           </section>
         )}
 

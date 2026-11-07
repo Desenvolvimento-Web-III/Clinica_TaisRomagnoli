@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   registrarPerfilCliente,
   obterPerfilCliente,
+  listarClientes,
   ClienteBusinessError,
 } from '../src/modules/clientes/clientes-service.js';
 import { InMemoryClientesRepository } from '../src/modules/clientes/clientes-repository.js';
@@ -260,6 +261,82 @@ describe('Serviço de Perfil de Clientes (Backend)', () => {
       await expect(
         obterPerfilCliente('cliente-inexistente', adminUser, clientesRepo),
       ).rejects.toThrowError(/Perfil do cliente não encontrado/);
+    });
+  });
+
+  describe('listarClientes', () => {
+    beforeEach(async () => {
+      await clientesRepo.salvar({
+        uid: 'cliente-1',
+        nome: 'Mariana Silva',
+        email: 'mariana.silva@exemplo.com',
+        telefone: '(11) 98765-4321',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: '2026-09-01T10:00:00.000Z',
+      });
+      await clientesRepo.salvar({
+        uid: 'cliente-2',
+        nome: 'Ana Carolina Santos',
+        email: 'ana.santos@exemplo.com',
+        telefone: '(11) 97654-3210',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: '2026-09-05T10:00:00.000Z',
+      });
+      await clientesRepo.salvar({
+        uid: 'cliente-3',
+        nome: 'Carlos Eduardo',
+        email: 'carlos.eduardo@exemplo.com',
+        telefone: '(11) 95432-1098',
+        role: 'cliente',
+        status: 'inativo',
+        createdAt: '2026-09-10T10:00:00.000Z',
+      });
+    });
+
+    it('permite que a administradora liste todos os clientes cadastrados', async () => {
+      const lista = await listarClientes(adminUser, clientesRepo);
+      expect(lista).toHaveLength(3);
+      expect(lista.map((c) => c.nome)).toEqual([
+        'Ana Carolina Santos',
+        'Carlos Eduardo',
+        'Mariana Silva',
+      ]);
+    });
+
+    it('filtra clientes por termo de busca no nome', async () => {
+      const resultado = await listarClientes(adminUser, clientesRepo, 'Carolina');
+      expect(resultado).toHaveLength(1);
+      expect(resultado[0]?.nome).toBe('Ana Carolina Santos');
+    });
+
+    it('filtra clientes por termo de busca no e-mail', async () => {
+      const resultado = await listarClientes(adminUser, clientesRepo, 'mariana.silva');
+      expect(resultado).toHaveLength(1);
+      expect(resultado[0]?.email).toBe('mariana.silva@exemplo.com');
+    });
+
+    it('filtra clientes por telefone mesmo com formato numérico puro', async () => {
+      const resultado = await listarClientes(adminUser, clientesRepo, '954321098');
+      expect(resultado).toHaveLength(1);
+      expect(resultado[0]?.nome).toBe('Carlos Eduardo');
+    });
+
+    it('bloqueia cliente comum de listar clientes cadastrados com erro 403', async () => {
+      await expect(listarClientes(clienteUser, clientesRepo)).rejects.toThrowError(
+        ClienteBusinessError,
+      );
+      await expect(listarClientes(clienteUser, clientesRepo)).rejects.toThrowError(
+        /Acesso negado. Apenas administradoras podem listar clientes./,
+      );
+    });
+
+    it('bloqueia requisição não autenticada com erro 401', async () => {
+      const unauth = null as unknown as UserContext;
+      await expect(listarClientes(unauth, clientesRepo)).rejects.toThrowError(
+        /Acesso não autenticado/,
+      );
     });
   });
 });
