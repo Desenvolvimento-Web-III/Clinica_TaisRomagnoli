@@ -4,7 +4,12 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { marcarNotificacaoLidaInputSchema, type Agendamento } from '@clinica/shared';
 import { getHealthStatus } from './core/health-status.js';
-import { obterHorarios, salvarHorarios } from './modules/horarios/horarios-service.js';
+import {
+  obterHorarios,
+  salvarHorarios,
+  consultarGradeHorariosDisponiveis,
+  HorariosBusinessError,
+} from './modules/horarios/horarios-service.js';
 import {
   solicitarNovoAgendamento,
   alterarAgendamentoExistente,
@@ -40,7 +45,12 @@ import {
 
 initializeApp();
 
-export { obterHorarios, salvarHorarios } from './modules/horarios/horarios-service.js';
+export {
+  obterHorarios,
+  salvarHorarios,
+  consultarGradeHorariosDisponiveis,
+  HorariosBusinessError,
+} from './modules/horarios/horarios-service.js';
 export {
   solicitarNovoAgendamento,
   alterarAgendamentoExistente,
@@ -192,7 +202,8 @@ function responderErroNegocio(
     error instanceof ClienteBusinessError ||
     error instanceof CustomClaimsBusinessError ||
     error instanceof SessaoBusinessError ||
-    error instanceof AgendaBloqueiosBusinessError
+    error instanceof AgendaBloqueiosBusinessError ||
+    error instanceof HorariosBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
@@ -1348,3 +1359,55 @@ export const verificarDisponibilidadeHorario = onRequest(
     }
   },
 );
+
+/**
+ * Endpoint para consultar a grade de horários disponíveis para um determinado serviço/duração em uma data.
+ * Aplica a duração do serviço e os 30 minutos de organização entre sessões.
+ * Leitura pública/autenticada.
+ */
+export const obterHorariosDisponiveis = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use GET ou POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioOpcional(request.headers.authorization);
+    const firestore = getFirestore();
+
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+    const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
+    const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
+    const servicosRepo = new FirestoreServicosRepository(firestore);
+
+    const params = request.method === 'GET' ? request.query : request.body;
+
+    const resultado = await consultarGradeHorariosDisponiveis(
+      params,
+      firestore,
+      agendamentosRepo,
+      bloqueiosRepo,
+      horariosFixosRepo,
+      servicosRepo,
+      caller?.uid,
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      dados: resultado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({
+        error: 'Parâmetros de consulta de horários disponíveis inválidos.',
+        detalhes: error,
+      });
+      return;
+    }
+    console.error('Erro ao consultar horários disponíveis:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar horários disponíveis.' });
+  }
+});

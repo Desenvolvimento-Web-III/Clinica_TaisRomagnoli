@@ -11,6 +11,8 @@ import { InMemoryAgendamentosRepository } from '../src/modules/agendamentos/agen
 import { InMemoryNotificacoesRepository } from '../src/modules/notificacoes/notificacoes-repository.js';
 import { InMemoryBloqueiosRepository } from '../src/modules/agenda/bloqueios-repository.js';
 import { InMemoryHorariosFixosRepository } from '../src/modules/agenda/horarios-fixos-repository.js';
+import { InMemoryServicosRepository } from '../src/modules/servicos/servicos-repository.js';
+import { CONFIGURACAO_HORARIOS_PADRAO, type ServicoModel } from '@clinica/shared';
 
 describe('Agendamentos Service (Functions Backend)', () => {
   let repo: InMemoryAgendamentosRepository;
@@ -156,6 +158,91 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       expect(agendamento2.id).toBeDefined();
+    });
+
+    it('rejeita agendamento quando a duração informada diverge da duração cadastrada no serviço', async () => {
+      const servicosRepo = new InMemoryServicosRepository();
+      const servicoMock: ServicoModel = {
+        id: 'serv-relaxante-60',
+        nome: 'Massagem Relaxante',
+        descricao: 'Massagem relaxante corporal',
+        duracaoMinutos: 60,
+        preco: 170,
+        sinal: 51,
+        ativo: true,
+        categoria: 'Relaxamento',
+        destaque: true,
+        ordemExibicao: 1,
+        slug: 'massagem-relaxante',
+        sinalPersonalizado: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      };
+      await servicosRepo.salvar(servicoMock);
+
+      // Tenta solicitar informando 45 minutos ao invés de 60
+      const input = {
+        servicoId: 'serv-relaxante-60',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 45,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(input, clienteUser, repo, notifRepo, servicosRepo),
+      ).rejects.toThrow(/não corresponde à duração cadastrada para o serviço/i);
+    });
+
+    it('rejeita agendamento fora dos turnos de funcionamento quando a configuração da clínica é validada', async () => {
+      // Início às 17:30 com 60 min ultrapassa o término do turno às 18:00
+      const input = {
+        servicoId: 'serv-qualquer',
+        servicoNome: 'Massagem',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 15000,
+        dataHoraInicio: '2026-10-22T17:30:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          CONFIGURACAO_HORARIOS_PADRAO,
+        ),
+      ).rejects.toThrow(/ultrapassa os turnos de atendimento da clínica/i);
+    });
+
+    it('rejeita agendamento durante intervalo de manutenção (almoço/higienização)', async () => {
+      // Intervalo de manutenção de 12:00 às 14:00
+      const input = {
+        servicoId: 'serv-qualquer',
+        servicoNome: 'Massagem',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 15000,
+        dataHoraInicio: '2026-10-22T12:30:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          CONFIGURACAO_HORARIOS_PADRAO,
+        ),
+      ).rejects.toThrow(/ultrapassa os turnos de atendimento/i);
     });
   });
 

@@ -4,9 +4,11 @@ import {
   CONFIGURACAO_HORARIOS_PADRAO,
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
+  gerarHorariosDisponiveis,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
 } from '@clinica/shared';
+import { getFunctionsBaseUrl } from './agendamentos-service';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
 export const HORARIOS_DOCUMENT = 'horarios_funcionamento';
@@ -77,4 +79,52 @@ export async function salvarHorariosFuncionamento(
   await setDoc(docRef, dadosCompletos, { merge: true });
 
   return dadosCompletos;
+}
+
+/**
+ * Consulta a grade de horários disponíveis calculada pelo backend para uma determinada data e serviço/duração.
+ * Aplica a duração do serviço e os 30 minutos de organização entre sessões.
+ */
+export async function consultarHorariosDisponiveisBackend(params: {
+  data: string;
+  duracaoMinutos?: number;
+  servicoId?: string;
+  profissionalId?: string;
+}): Promise<string[]> {
+  const baseUrl = getFunctionsBaseUrl();
+  const url = new URL(`${baseUrl}/obterHorariosDisponiveis`);
+  url.searchParams.set('data', params.data);
+  if (params.duracaoMinutos) {
+    url.searchParams.set('duracaoMinutos', String(params.duracaoMinutos));
+  }
+  if (params.servicoId) {
+    url.searchParams.set('servicoId', params.servicoId);
+  }
+  if (params.profissionalId) {
+    url.searchParams.set('profissionalId', params.profissionalId);
+  }
+
+  try {
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.dados?.horarios)) {
+        return data.dados.horarios;
+      }
+    }
+  } catch (err) {
+    console.warn(
+      'Erro ao conectar com Cloud Function de horários disponíveis. Usando cálculo de disponibilidade local:',
+      err,
+    );
+  }
+
+  // Fallback local caso offline ou sem rede
+  const config = await buscarHorariosFuncionamento(params.profissionalId);
+  const slots = gerarHorariosDisponiveis({
+    data: params.data,
+    duracaoMinutos: params.duracaoMinutos ?? 60,
+    configuracaoHorarios: config,
+  });
+  return slots.map((s) => s.horaInicio);
 }

@@ -7,7 +7,9 @@ import {
   verificarConflitoHorarios,
   verificarConflitoBloqueioOuHorarioFixo,
   verificarAntecedenciaCancelamento,
+  validarEncaixeHorariosFuncionamento,
   CONFIGURACAO_HORARIOS_PADRAO,
+  type HorariosFuncionamento,
   type Agendamento,
 } from '@clinica/shared';
 import type { AgendamentosRepository } from './agendamentos-repository.js';
@@ -51,32 +53,57 @@ export async function solicitarNovoAgendamento(
   servicosRepo?: ServicosRepository,
   bloqueiosRepo?: BloqueiosRepository,
   horariosFixosRepo?: HorariosFixosRepository,
+  configuracaoHorarios?: HorariosFuncionamento,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
 
-  // 0. Validação de Serviço Ativo (se repositório fornecido)
+  // 0. Validação de Serviço Ativo e Duração (se repositório fornecido)
   if (servicosRepo) {
     const servico = await servicosRepo.buscarPorId(parsed.servicoId);
-    if (servico && !servico.ativo) {
+    if (!servico) {
+      throw new AgendamentoBusinessError('Procedimento selecionado não encontrado.', 404);
+    }
+    if (!servico.ativo) {
       throw new AgendamentoBusinessError(
         'O procedimento selecionado está desativado e não aceita novos agendamentos.',
         422,
       );
     }
+    if (servico.duracaoMinutos !== parsed.duracaoMinutos) {
+      throw new AgendamentoBusinessError(
+        `A duração informada (${parsed.duracaoMinutos} min) não corresponde à duração cadastrada para o serviço (${servico.duracaoMinutos} min).`,
+        422,
+      );
+    }
   }
 
-  // 1. Validação de Folga da Clínica
-  const inicioDate = new Date(parsed.dataHoraInicio);
-  const diaSemana = inicioDate.getDay();
-  const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
-  if (diaConfig && !diaConfig.ativo) {
-    throw new AgendamentoBusinessError(
-      'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
-      422,
+  // 1. Validação de Folga e Encaixe nos Horários da Clínica
+  if (configuracaoHorarios) {
+    const validacaoEncaixe = validarEncaixeHorariosFuncionamento(
+      parsed.dataHoraInicio,
+      parsed.duracaoMinutos,
+      configuracaoHorarios,
     );
+    if (!validacaoEncaixe.valido) {
+      throw new AgendamentoBusinessError(
+        validacaoEncaixe.motivo ||
+          'O horário selecionado não é válido para atendimento na clínica.',
+        422,
+      );
+    }
+  } else {
+    const inicioDate = new Date(parsed.dataHoraInicio);
+    const diaSemana = inicioDate.getDay();
+    const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
+    if (diaConfig && !diaConfig.ativo) {
+      throw new AgendamentoBusinessError(
+        'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
+        422,
+      );
+    }
   }
 
-  // 2. Cálculo da data/hora de término
+  // 2. Cálculo da data/hora de término garantindo a duração exata do serviço
   const dataHoraFim = calcularDataHoraFim(parsed.dataHoraInicio, parsed.duracaoMinutos);
 
   // 3. Verificação de conflitos com Bloqueios Únicos, Recorrentes ou Reservas de Clientes Fixos
@@ -173,6 +200,7 @@ export async function alterarAgendamentoExistente(
   dataReferenciaParam?: Date,
   bloqueiosRepo?: BloqueiosRepository,
   horariosFixosRepo?: HorariosFixosRepository,
+  configuracaoHorarios?: HorariosFuncionamento,
 ): Promise<Agendamento> {
   const notificacoesRepo =
     notificacoesRepoOuDataRef instanceof Date ? undefined : notificacoesRepoOuDataRef;
@@ -216,15 +244,30 @@ export async function alterarAgendamentoExistente(
     );
   }
 
-  // 1. Validação de Folga da Clínica na nova data
-  const inicioDate = new Date(parsed.novaDataHoraInicio);
-  const diaSemana = inicioDate.getDay();
-  const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
-  if (diaConfig && !diaConfig.ativo) {
-    throw new AgendamentoBusinessError(
-      'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
-      422,
+  // 1. Validação de Folga e Encaixe nos Horários da Clínica na nova data
+  if (configuracaoHorarios) {
+    const validacaoEncaixe = validarEncaixeHorariosFuncionamento(
+      parsed.novaDataHoraInicio,
+      agendamento.duracaoMinutos,
+      configuracaoHorarios,
     );
+    if (!validacaoEncaixe.valido) {
+      throw new AgendamentoBusinessError(
+        validacaoEncaixe.motivo ||
+          'O horário selecionado não é válido para atendimento na clínica.',
+        422,
+      );
+    }
+  } else {
+    const inicioDate = new Date(parsed.novaDataHoraInicio);
+    const diaSemana = inicioDate.getDay();
+    const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
+    if (diaConfig && !diaConfig.ativo) {
+      throw new AgendamentoBusinessError(
+        'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
+        422,
+      );
+    }
   }
 
   // 2. Novo cálculo de término

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { serviceCatalog } from '@/features/services/catalog';
 import { formatServiceDuration, formatServicePrice } from '@/features/services/formatters';
@@ -8,6 +8,7 @@ import { BookingCalendar } from '@/features/agendamentos/components/BookingCalen
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
 import { solicitarAgendamentoBackend } from '@/services/agendamentos-service';
+import { consultarHorariosDisponiveisBackend } from '@/services/horarios-service';
 import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
   maskCardNumber,
@@ -85,8 +86,29 @@ export function AgendamentoFlowPage() {
   const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Mariana Souza';
   const [dataSelecionada, setDataSelecionada] = useState<string>('2026-10-22');
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
   const [novoAgendamentoCriado, setNovoAgendamentoCriado] = useState<Agendamento | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    async function carregarHorarios() {
+      if (!dataSelecionada) return;
+      const duracao = servicoAtual?.durationMinutes || 60;
+      const slots = await consultarHorariosDisponiveisBackend({
+        data: dataSelecionada,
+        duracaoMinutos: duracao,
+        servicoId: selectedServiceId,
+      });
+      if (ativo && slots.length > 0) {
+        setHorariosDisponiveis(slots);
+      }
+    }
+    void carregarHorarios();
+    return () => {
+      ativo = false;
+    };
+  }, [dataSelecionada, selectedServiceId, servicoAtual]);
 
   // Cartão de crédito state, máscaras e erros
   const [cartaoNumero, setCartaoNumero] = useState('');
@@ -182,6 +204,7 @@ export function AgendamentoFlowPage() {
       <BookingCalendar
         dataSelecionada={dataSelecionada}
         horarioSelecionado={horarioSelecionado}
+        horariosDisponiveis={horariosDisponiveis.length > 0 ? horariosDisponiveis : undefined}
         onSelectData={(isoDate) => setDataSelecionada(isoDate)}
         onSelectHorario={(hora) => setHorarioSelecionado(hora)}
         onConfirmar={() => setStep('confirmacao')}
