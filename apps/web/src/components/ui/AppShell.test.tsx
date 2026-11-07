@@ -15,7 +15,7 @@ describe('AppShell - Estrutura Global Mobile First', () => {
     vi.clearAllMocks();
   });
 
-  it('renderiza o botao Entrar quando nao ha usuario autenticado', () => {
+  it('renderiza os links de acesso público (Entrar, Cadastre-se, Agendar) quando não há usuário autenticado', () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: null,
       isAuthReady: true,
@@ -35,9 +35,15 @@ describe('AppShell - Estrutura Global Mobile First', () => {
       </MemoryRouter>,
     );
 
-    const loginLink = screen.getByRole('link', { name: 'Entrar' });
-    expect(loginLink).toBeInTheDocument();
-    expect(loginLink).toHaveAttribute('href', '/login');
+    const loginLinks = screen.getAllByRole('link', { name: 'Entrar' });
+    expect(loginLinks.length).toBeGreaterThanOrEqual(1);
+    expect(loginLinks[0]).toHaveAttribute('href', '/login');
+
+    const registerLinks = screen.getAllByRole('link', { name: /cadastre-se|cadastro/i });
+    expect(registerLinks.length).toBeGreaterThanOrEqual(1);
+    expect(registerLinks[0]).toHaveAttribute('href', '/cadastro');
+
+    expect(screen.getAllByRole('link', { name: 'Agendar' })[0]).toHaveAttribute('href', '/agendar');
     expect(
       screen.queryByRole('button', { name: /menu da conta do cliente/i }),
     ).not.toBeInTheDocument();

@@ -5,7 +5,8 @@ import { BottomNav } from '@/features/agendamentos/components/BottomNav';
 import { AuthenticatedUserNav } from '@/features/auth/components/AuthenticatedUserNav';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 
-export type ActiveTab = 'inicio' | 'agendamentos' | 'notificacoes' | 'perfil' | 'admin_horarios';
+export type ActiveTab =
+  'inicio' | 'agendar' | 'agendamentos' | 'notificacoes' | 'perfil' | 'admin_horarios';
 
 export type AppShellProps = Readonly<{
   activeTab: ActiveTab;
@@ -24,6 +25,7 @@ type NavigationItem = Readonly<{ label: string; to: string; tab: ActiveTab }>;
 
 const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { label: 'Serviços', to: '/servicos', tab: 'inicio' },
+  { label: 'Agendar', to: '/agendar', tab: 'agendar' },
   { label: 'Agendamentos', to: '/agendamentos', tab: 'agendamentos' },
 ];
 
@@ -93,16 +95,24 @@ export function AppShell({
             })}
           </nav>
 
-          {/* Ações de Usuário (Login ou Menu Autenticado) */}
+          {/* Ações de Usuário (Login, Cadastro ou Menu Autenticado) */}
           {currentUser ? (
             <AuthenticatedUserNav />
           ) : (
-            <Link
-              to="/login"
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--color-brand-deep)] px-4 text-sm font-semibold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-soft)]"
-            >
-              Entrar
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/login"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[var(--color-brand-deep)] px-3 text-xs font-semibold text-[var(--color-brand-deep)] transition-colors hover:bg-[var(--color-brand-soft)] sm:min-h-11 sm:px-4 sm:text-sm"
+              >
+                Entrar
+              </Link>
+              <Link
+                to="/cadastro"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-3 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-[var(--color-brand-deep)] sm:min-h-11 sm:px-4 sm:text-sm"
+              >
+                Cadastre-se
+              </Link>
+            </div>
           )}
         </div>
       </header>
@@ -136,7 +146,7 @@ export function AppShell({
         {children}
       </main>
 
-      {/* Rodapé Global Institucional */}
+      {/* Rodapé Global Institucional com Navegação Pública */}
       {!hideFooter &&
         (footer ?? (
           <footer
@@ -144,16 +154,54 @@ export function AppShell({
             className="border-t border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)]"
           >
             <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-              <div className="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
-                <div>
-                  <p className="text-sm font-bold text-[var(--color-brand-deep)]">
-                    Tais Romagnoli — Massoterapia
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                    Cuidado e organização desde o primeiro contato.
-                  </p>
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
+                  <div>
+                    <p className="text-sm font-bold text-[var(--color-brand-deep)]">
+                      Tais Romagnoli — Massoterapia
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                      Cuidado e organização desde o primeiro contato.
+                    </p>
+                  </div>
+                  <nav
+                    aria-label="Navegação do rodapé"
+                    className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs font-medium text-[var(--color-brand-deep)] sm:justify-end"
+                  >
+                    <Link to="/servicos" className="hover:underline">
+                      Serviços
+                    </Link>
+                    <span className="text-[var(--color-border-default)]" aria-hidden="true">
+                      •
+                    </span>
+                    <Link to="/agendar" className="hover:underline">
+                      Agendar
+                    </Link>
+                    <span className="text-[var(--color-border-default)]" aria-hidden="true">
+                      •
+                    </span>
+                    <Link to="/agendamentos" className="hover:underline">
+                      Agendamentos
+                    </Link>
+                    {!currentUser && (
+                      <>
+                        <span className="text-[var(--color-border-default)]" aria-hidden="true">
+                          •
+                        </span>
+                        <Link to="/login" className="hover:underline">
+                          Entrar
+                        </Link>
+                        <span className="text-[var(--color-border-default)]" aria-hidden="true">
+                          •
+                        </span>
+                        <Link to="/cadastro" className="hover:underline">
+                          Cadastro
+                        </Link>
+                      </>
+                    )}
+                  </nav>
                 </div>
-                <div className="flex flex-col items-center gap-1 sm:items-end text-xs text-[var(--color-text-secondary)]">
+                <div className="flex flex-col items-center justify-between gap-2 border-t border-[var(--color-border-default)] pt-4 text-center text-xs text-[var(--color-text-secondary)] sm:flex-row sm:text-left">
                   <p>Atendimento de Segunda a Sábado • Hora marcada</p>
                   <p>© {currentYear} Clínica Tais Romagnoli. Todos os direitos reservados.</p>
                 </div>

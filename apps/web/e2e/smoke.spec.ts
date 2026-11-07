@@ -128,3 +128,34 @@ test('renderiza estrutura global mobile-first com skip-link, landmarks e rodapé
   await expect(footer).toBeVisible();
   await expect(footer.getByText(/Todos os direitos reservados/)).toBeVisible();
 });
+
+test('disponibiliza navegação pública para serviços, início do agendamento, login e cadastro', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/servicos');
+
+  // Verifica acesso a cadastro
+  const cadastroBtn = page.getByRole('link', { name: 'Cadastre-se' });
+  await expect(cadastroBtn).toBeVisible();
+  await cadastroBtn.click();
+  await expect(page).toHaveURL(/\/cadastro$/);
+  await expect(page.getByRole('heading', { name: 'Crie sua conta' })).toBeVisible();
+
+  // Verifica acesso a login a partir da página de cadastro ou cabeçalho
+  const loginLink = page.getByRole('link', { name: 'Entre' });
+  await loginLink.click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'Entre na sua conta' })).toBeVisible();
+
+  // Retorna para serviços e inicia agendamento pela navegação pública
+  await page.goto('/servicos');
+  const agendarNav = page
+    .getByRole('navigation', { name: 'Navegação principal' })
+    .getByRole('link', { name: 'Agendar' });
+  await expect(agendarNav).toBeVisible();
+  await agendarNav.click();
+  await expect(page).toHaveURL(/\/agendar/);
+  await expect(page.getByRole('heading', { name: 'Calendário' })).toBeVisible();
+  await expect(page.getByTestId('booking-calendar-container')).toBeVisible();
+});
