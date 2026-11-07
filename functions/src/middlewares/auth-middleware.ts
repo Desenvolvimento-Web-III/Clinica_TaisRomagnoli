@@ -70,11 +70,19 @@ export function extrairBearerToken(authorizationHeader?: string | string[]): str
 export async function validarIdToken(
   idToken: string,
   authVerifier: AuthTokenVerifier = getAuth(),
+  checkRevoked?: boolean,
 ): Promise<UserContext> {
+  if (!idToken || typeof idToken !== 'string' || !idToken.trim()) {
+    throw new AuthError('Token de autenticação ausente ou inválido.', 401);
+  }
+
   let decoded: DecodedIdToken;
 
   try {
-    decoded = await authVerifier.verifyIdToken(idToken);
+    decoded =
+      typeof checkRevoked === 'boolean'
+        ? await authVerifier.verifyIdToken(idToken, checkRevoked)
+        : await authVerifier.verifyIdToken(idToken);
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
     if (err.code === 'auth/id-token-expired') {
@@ -82,6 +90,12 @@ export async function validarIdToken(
     }
     if (err.code === 'auth/id-token-revoked') {
       throw new AuthError('Token de autenticação revogado. Faça login novamente.', 401);
+    }
+    if (err.code === 'auth/user-disabled') {
+      throw new AuthError('A conta do usuário foi desativada.', 403);
+    }
+    if (err.code === 'auth/user-not-found') {
+      throw new AuthError('Usuário associado ao token não encontrado.', 401);
     }
     if (err.code === 'auth/argument-error' || err.code === 'auth/invalid-id-token') {
       throw new AuthError('Token de autenticação inválido.', 401);
@@ -130,10 +144,11 @@ function obterHeaderAuthorization(
 export async function extrairUsuarioAutenticado(
   authorizationOrReq?: string | RequestWithHeaders,
   authVerifier: AuthTokenVerifier = getAuth(),
+  checkRevoked?: boolean,
 ): Promise<UserContext> {
   const header = obterHeaderAuthorization(authorizationOrReq);
   const token = extrairBearerToken(header);
-  return await validarIdToken(token, authVerifier);
+  return await validarIdToken(token, authVerifier, checkRevoked);
 }
 
 /**
@@ -143,6 +158,7 @@ export async function extrairUsuarioAutenticado(
 export async function extrairUsuarioOpcional(
   authorizationOrReq?: string | RequestWithHeaders,
   authVerifier: AuthTokenVerifier = getAuth(),
+  checkRevoked?: boolean,
 ): Promise<UserContext | null> {
   try {
     const header = obterHeaderAuthorization(authorizationOrReq);
@@ -150,7 +166,7 @@ export async function extrairUsuarioOpcional(
       return null;
     }
     const token = extrairBearerToken(header);
-    return await validarIdToken(token, authVerifier);
+    return await validarIdToken(token, authVerifier, checkRevoked);
   } catch {
     return null;
   }
