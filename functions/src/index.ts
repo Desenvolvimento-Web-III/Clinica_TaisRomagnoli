@@ -274,13 +274,10 @@ export const atualizarHorariosFuncionamento = onRequest(
 
     try {
       const user = await extrairUsuarioAutenticado(request.headers.authorization);
-      if (!user.isAdmin) {
-        response.status(403).json({
-          error:
-            'Acesso negado. Apenas a administradora possui permissão para alterar os horários.',
-        });
-        return;
-      }
+      exigirAdministrador(
+        user,
+        'Acesso negado. Apenas a administradora possui permissão para alterar os horários.',
+      );
 
       const firestore = getFirestore();
       const resultado = await salvarHorarios(firestore, request.body, user.uid);
@@ -541,12 +538,10 @@ export const processarLembretes = onRequest({ cors: true }, async (request, resp
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
-    if (!user.isAdmin) {
-      response.status(403).json({
-        error: 'Acesso negado. Apenas a administração pode disparar o processamento de lembretes.',
-      });
-      return;
-    }
+    exigirAdministrador(
+      user,
+      'Acesso negado. Apenas a administração pode disparar o processamento de lembretes.',
+    );
 
     const firestore = getFirestore();
     const agendamentosSnapshot = await firestore.collection('agendamentos').get();
@@ -579,6 +574,7 @@ export const cadastrarServico = onRequest({ cors: true }, async (request, respon
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreServicosRepository(firestore);
 
@@ -611,6 +607,7 @@ export const editarServico = onRequest({ cors: true }, async (request, response)
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreServicosRepository(firestore);
 
@@ -643,6 +640,7 @@ export const desativarServico = onRequest({ cors: true }, async (request, respon
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreServicosRepository(firestore);
 
@@ -676,6 +674,7 @@ export const reativarServico = onRequest({ cors: true }, async (request, respons
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreServicosRepository(firestore);
 
@@ -709,6 +708,7 @@ export const excluirServico = onRequest({ cors: true }, async (request, response
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreServicosRepository(firestore);
     const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
@@ -1088,6 +1088,7 @@ export const criarBloqueioAgenda = onRequest({ cors: true }, async (request, res
 
   try {
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
     const firestore = getFirestore();
     const repo = new FirestoreBloqueiosRepository(firestore);
 
@@ -1158,6 +1159,7 @@ export const removerBloqueioAgenda = onRequest({ cors: true }, async (request, r
 
   try {
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
     const id = (request.query['id'] as string) || (request.body?.id as string);
 
     const firestore = getFirestore();
@@ -1189,6 +1191,7 @@ export const alternarStatusBloqueioAgenda = onRequest({ cors: true }, async (req
 
   try {
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
     const id = request.body?.id as string;
     const ativo = Boolean(request.body?.ativo);
 
@@ -1222,6 +1225,7 @@ export const criarHorarioFixoCliente = onRequest({ cors: true }, async (request,
 
   try {
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
     const firestore = getFirestore();
     const repo = new FirestoreHorariosFixosRepository(firestore);
 
@@ -1292,6 +1296,7 @@ export const removerHorarioFixoCliente = onRequest({ cors: true }, async (reques
 
   try {
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
     const id = (request.query['id'] as string) || (request.body?.id as string);
 
     const firestore = getFirestore();
@@ -1323,6 +1328,7 @@ export const atualizarHorarioFixoCliente = onRequest({ cors: true }, async (requ
 
   try {
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
     const firestore = getFirestore();
     const repo = new FirestoreHorariosFixosRepository(firestore);
 
@@ -1520,6 +1526,7 @@ export const cadastrarProfissional = onRequest({ cors: true }, async (request, r
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreProfissionaisRepository(firestore);
 
@@ -1555,6 +1562,7 @@ export const atualizarProfissional = onRequest({ cors: true }, async (request, r
 
   try {
     const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
     const firestore = getFirestore();
     const repo = new FirestoreProfissionaisRepository(firestore);
 
@@ -1595,6 +1603,7 @@ export const vincularProfissionalAoServicoEndpoint = onRequest(
 
     try {
       const user = await extrairUsuarioAutenticado(request.headers.authorization);
+      exigirAdministrador(user);
       const firestore = getFirestore();
       const servicosRepo = new FirestoreServicosRepository(firestore);
       const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);

@@ -75,6 +75,9 @@ import {
   listarHorariosFixosClientes,
   removerHorarioFixoCliente,
   atualizarHorarioFixoCliente,
+  cadastrarProfissional,
+  atualizarProfissional,
+  vincularProfissionalAoServicoEndpoint,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -202,6 +205,13 @@ describe('[Backend] Validação de ID Token nas Cloud Functions protegidas', () 
     { name: 'listarHorariosFixosClientes', handler: listarHorariosFixosClientes, method: 'GET' },
     { name: 'removerHorarioFixoCliente', handler: removerHorarioFixoCliente, method: 'DELETE' },
     { name: 'atualizarHorarioFixoCliente', handler: atualizarHorarioFixoCliente, method: 'PUT' },
+    { name: 'cadastrarProfissional', handler: cadastrarProfissional, method: 'POST' },
+    { name: 'atualizarProfissional', handler: atualizarProfissional, method: 'PUT' },
+    {
+      name: 'vincularProfissionalAoServicoEndpoint',
+      handler: vincularProfissionalAoServicoEndpoint,
+      method: 'POST',
+    },
   ];
 
   describe('Rejeição quando o ID token não for fornecido', () => {
