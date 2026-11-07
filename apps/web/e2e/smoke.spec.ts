@@ -92,3 +92,39 @@ test('mantém os formulários de acesso sem rolagem horizontal no mobile e no de
     }
   }
 });
+
+test('renderiza estrutura global mobile-first com skip-link, landmarks e rodapé responsivo', async ({
+  page,
+}) => {
+  // 1. Mobile (375x667)
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/servicos');
+
+  // Skip link acessível
+  const skipLink = page.getByRole('link', { name: 'Pular para o conteúdo principal' });
+  await expect(skipLink).toHaveAttribute('href', '#main-content');
+
+  // Landmark principal com id
+  const main = page.locator('main#main-content');
+  await expect(main).toBeVisible();
+
+  // Rodapé institucional presente
+  const footer = page.getByRole('contentinfo', { name: 'Rodapé institucional' });
+  await expect(footer).toBeVisible();
+  await expect(footer.getByText('Tais Romagnoli — Massoterapia')).toBeVisible();
+
+  // Navegação móvel ativa e cabeçalho desktop oculto
+  await expect(page.getByTestId('mobile-navigation')).toBeVisible();
+
+  // 2. Desktop (1280x800)
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/servicos');
+
+  // Navegação desktop visível e barra inferior oculta
+  await expect(page.getByRole('navigation', { name: 'Navegação principal' }).first()).toBeVisible();
+  await expect(page.getByTestId('mobile-navigation')).toBeHidden();
+
+  // Rodapé institucional visível
+  await expect(footer).toBeVisible();
+  await expect(footer.getByText(/Todos os direitos reservados/)).toBeVisible();
+});
