@@ -76,4 +76,19 @@ describe('ServiceCatalogPage', () => {
       'Nenhum serviço está disponível no momento.',
     );
   });
+
+  it('abre o modal de detalhes do serviço ao clicar em Ver detalhes', () => {
+    renderPage([activeService]);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    const detalhesBtn = screen.getByTestId(`detalhes-servico-${activeService.id}`);
+    fireEvent.click(detalhesBtn);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Sinal para reserva (30%)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Fechar detalhes do serviço'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 });

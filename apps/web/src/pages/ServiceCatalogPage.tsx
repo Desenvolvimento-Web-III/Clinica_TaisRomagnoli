@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/ui/AppShell';
 import { getActiveServices, serviceCatalog } from '@/features/services/catalog';
 import { ServiceCard } from '@/features/services/components/ServiceCard';
+import { ServiceDetailsModal } from '@/features/services/components/ServiceDetailsModal';
 import { subscribeToServicesFromFirestore } from '@/features/services/service-firestore-repository';
 import type { Service } from '@/features/services/types';
 
@@ -12,6 +13,7 @@ type ServiceCatalogPageProps = {
 export function ServiceCatalogPage({ services }: ServiceCatalogPageProps) {
   const [firestoreServices, setFirestoreServices] = useState<readonly Service[] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedServiceForDetails, setSelectedServiceForDetails] = useState<Service | null>(null);
 
   useEffect(() => {
     if (services) return;
@@ -148,11 +150,22 @@ export function ServiceCatalogPage({ services }: ServiceCatalogPageProps) {
         ) : (
           <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
             {filteredServices.map((service) => (
-              <ServiceCard key={service.id} service={service} />
+              <ServiceCard
+                key={service.id}
+                service={service}
+                onDetailsClick={(svc) => setSelectedServiceForDetails(svc)}
+              />
             ))}
           </div>
         )}
       </section>
+
+      {/* Modal de Detalhes do Serviço */}
+      <ServiceDetailsModal
+        service={selectedServiceForDetails}
+        isOpen={Boolean(selectedServiceForDetails)}
+        onClose={() => setSelectedServiceForDetails(null)}
+      />
     </AppShell>
   );
 }

@@ -5,6 +5,7 @@ import type { Service } from '../types';
 type ServiceCardProps = {
   service: Service;
   onSelect?: (service: Service) => void;
+  onDetailsClick?: (service: Service) => void;
 };
 
 function ClockIcon() {
@@ -27,10 +28,13 @@ function ClockIcon() {
   );
 }
 
-export function ServiceCard({ service, onSelect }: ServiceCardProps) {
+export function ServiceCard({ service, onSelect, onDetailsClick }: ServiceCardProps) {
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition-all duration-200 hover:-translate-y-1 hover:border-[var(--color-brand-primary)] hover:shadow-[var(--shadow-elevated)]">
-      <div className="relative aspect-[4/3] overflow-hidden bg-[var(--color-canvas-neutral)] sm:aspect-[4/3]">
+      <div
+        className={`relative aspect-[4/3] overflow-hidden bg-[var(--color-canvas-neutral)] sm:aspect-[4/3] ${onDetailsClick ? 'cursor-pointer' : ''}`}
+        onClick={() => onDetailsClick?.(service)}
+      >
         <img
           src={service.imageSrc}
           alt={service.imageAlt}
@@ -43,7 +47,10 @@ export function ServiceCard({ service, onSelect }: ServiceCardProps) {
       </div>
 
       <div className="flex flex-1 flex-col p-4 sm:p-5">
-        <h3 className="text-base/6 font-bold text-[var(--color-text-primary)] sm:text-lg/7">
+        <h3
+          onClick={() => onDetailsClick?.(service)}
+          className={`text-base/6 font-bold text-[var(--color-text-primary)] sm:text-lg/7 ${onDetailsClick ? 'cursor-pointer transition-colors hover:text-[var(--color-brand-primary)]' : ''}`}
+        >
           {service.name}
         </h3>
         <p className="mt-1.5 line-clamp-2 flex-1 text-xs/5 text-[var(--color-text-secondary)] sm:text-sm/5">
@@ -66,13 +73,24 @@ export function ServiceCard({ service, onSelect }: ServiceCardProps) {
           </div>
         </dl>
 
-        <div className="mt-3.5 pt-1">
+        <div className="mt-3.5 flex flex-col gap-2 pt-1 sm:flex-row">
+          {onDetailsClick && (
+            <button
+              type="button"
+              data-testid={`detalhes-servico-${service.id}`}
+              onClick={() => onDetailsClick(service)}
+              className="inline-flex min-h-10 flex-1 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] shadow-xs transition-colors hover:border-[var(--color-brand-primary)] hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-text-primary)]"
+            >
+              Ver detalhes
+            </button>
+          )}
+
           {onSelect ? (
             <button
               type="button"
               data-testid={`selecionar-servico-${service.id}`}
               onClick={() => onSelect(service)}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--color-brand-strong)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98] sm:text-sm"
+              className="inline-flex min-h-10 flex-1 items-center justify-center rounded-full bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98] sm:text-sm"
             >
               Selecionar
             </button>
@@ -80,7 +98,7 @@ export function ServiceCard({ service, onSelect }: ServiceCardProps) {
             <Link
               to={`/agendar/${service.id}`}
               data-testid={`selecionar-servico-${service.id}`}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--color-brand-strong)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98] sm:text-sm"
+              className="inline-flex min-h-10 flex-1 items-center justify-center rounded-full bg-[var(--color-brand-strong)] px-3 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98] sm:text-sm"
             >
               Selecionar
             </Link>
