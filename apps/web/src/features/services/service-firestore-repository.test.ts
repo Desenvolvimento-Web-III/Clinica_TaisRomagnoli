@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   resolveLocalServiceImage,
   mapFirestoreDocToService,
+  mergeServicesWithDefaultCatalog,
   fetchServicesFromFirestore,
   subscribeToServicesFromFirestore,
   saveServiceToFirestore,
@@ -129,8 +130,60 @@ describe('service-firestore-repository', () => {
     });
   });
 
+  describe('mergeServicesWithDefaultCatalog', () => {
+    it('mescla serviço editado com catálogo padrão sem perder os demais serviços', () => {
+      const editedService = {
+        id: 'massagem-desportiva',
+        name: 'Massagem Desportiva Pro',
+        description: 'Descrição nova para atletas.',
+        durationMinutes: 75,
+        priceInCents: 22000,
+        sinalPercentual: 30,
+        sinalInCents: 6600,
+        category: 'Corporal',
+        imageSrc: 'https://example.com/desportiva.jpg',
+        imageAlt: 'Sessão desportiva pro',
+        active: true,
+      };
+
+      const merged = mergeServicesWithDefaultCatalog([editedService]);
+
+      expect(merged.length).toBe(serviceCatalog.length);
+      const desp = merged.find((s) => s.id === 'massagem-desportiva');
+      expect(desp?.name).toBe('Massagem Desportiva Pro');
+      expect(desp?.durationMinutes).toBe(75);
+      expect(desp?.priceInCents).toBe(22000);
+
+      // Garante que outros serviços padrão não foram perdidos
+      const relax = merged.find((s) => s.id === 'massagem-relaxante');
+      expect(relax).toBeDefined();
+      expect(relax?.name).toBe('Massagem Relaxante');
+    });
+
+    it('adiciona novos serviços personalizados cadastrados no Firestore', () => {
+      const customService = {
+        id: 'terapia-especial-zen',
+        name: 'Terapia Especial Zen',
+        description: 'Terapia exclusiva.',
+        durationMinutes: 90,
+        priceInCents: 30000,
+        sinalPercentual: 30,
+        sinalInCents: 9000,
+        category: 'Exclusiva',
+        imageSrc: 'https://example.com/zen.jpg',
+        imageAlt: 'Terapia zen',
+        active: true,
+      };
+
+      const merged = mergeServicesWithDefaultCatalog([customService]);
+
+      expect(merged.length).toBe(serviceCatalog.length + 1);
+      expect(merged.some((s) => s.id === 'terapia-especial-zen')).toBe(true);
+    });
+  });
+
   describe('fetchServicesFromFirestore', () => {
-    it('retorna os serviços do Firestore com imagens locais', async () => {
+    it('retorna os serviços do Firestore com imagens locais e preserva os demais do catálogo padrão', async () => {
       const fakeDb = {} as unknown as Parameters<typeof fetchServicesFromFirestore>[0];
       mockGetDocs.mockResolvedValueOnce({
         empty: false,
@@ -150,11 +203,16 @@ describe('service-firestore-repository', () => {
 
       const services = await fetchServicesFromFirestore(fakeDb);
 
-      expect(services).toHaveLength(1);
-      expect(services[0]?.name).toBe('Massagem Relaxante VIP');
-      expect(services[0]?.description).toBe('Descrição personalizada do banco.');
-      expect(services[0]?.durationMinutes).toBe(75);
-      expect(services[0]?.imageSrc).toBe(localServiceImages['massagem-relaxante']);
+      expect(services.length).toBeGreaterThanOrEqual(serviceCatalog.length);
+      const relaxante = services.find((s) => s.id === 'massagem-relaxante');
+      expect(relaxante?.name).toBe('Massagem Relaxante VIP');
+      expect(relaxante?.description).toBe('Descrição personalizada do banco.');
+      expect(relaxante?.durationMinutes).toBe(75);
+      expect(relaxante?.imageSrc).toBe(localServiceImages['massagem-relaxante']);
+
+      // Verifica se outro serviço padrão continua existindo na lista
+      const terapeutica = services.find((s) => s.id === 'massagem-terapeutica');
+      expect(terapeutica).toBeDefined();
     });
 
     it('usa catálogo padrão local caso Firestore não esteja inicializado ou falhe', async () => {

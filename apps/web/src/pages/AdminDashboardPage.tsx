@@ -10,6 +10,7 @@ import { AdminServicesList } from '@/features/services/components/AdminServicesL
 import {
   saveServiceToFirestore,
   subscribeToServicesFromFirestore,
+  syncMissingDefaultServicesToFirestore,
   toggleServiceStatus,
   type UpsertServiceInput,
 } from '@/features/services/service-firestore-repository';
@@ -243,6 +244,8 @@ export function AdminDashboardPage() {
   } | null>(null);
 
   useEffect(() => {
+    void syncMissingDefaultServicesToFirestore();
+
     const unsubscribe = subscribeToServicesFromFirestore(
       (novosServicos) => {
         if (novosServicos && novosServicos.length > 0) {
