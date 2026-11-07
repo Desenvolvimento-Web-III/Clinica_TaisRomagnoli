@@ -141,7 +141,24 @@ service cloud.firestore {
     // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
     // Escrita direta client-side bloqueada: criação, reagendamento e cancelamento são processados por Cloud Functions
     match /agendamentos/{agendamentoId} {
-    allow read: if isAdmin() || isDocOwner(resource.data);      allow write: if false;
+      allow read: if isAdmin() || isDocOwner(resource.data);
+      allow write: if false;
+    }
+
+    // Bloqueios de agenda da clínica (únicos e recorrentes)
+    // Leitura pública/autenticada liberada para consulta de horários disponíveis
+    // Escrita bloqueada no client-side: gerenciamento exclusivo via Cloud Functions pela administradora
+    match /bloqueios_agenda/{bloqueioId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Horários fixos de clientes da clínica (reservas semanais e quinzenais)
+    // Leitura restrita à administradora ou ao cliente titular do horário fixo
+    // Escrita bloqueada no client-side: gerenciamento exclusivo via Cloud Functions pela administradora
+    match /horarios_fixos/{horarioFixoId} {
+      allow read: if isAdmin() || isDocOwner(resource.data);
+      allow write: if false;
     }
 
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado

@@ -105,6 +105,30 @@ import {
   type StatusSessaoResult,
 } from './modules/auth/sessoes-service.js';
 import {
+  FirestoreBloqueiosRepository,
+  InMemoryBloqueiosRepository,
+  type BloqueiosRepository,
+  BLOQUEIOS_AGENDA_COLLECTION,
+} from './modules/agenda/bloqueios-repository.js';
+import {
+  FirestoreHorariosFixosRepository,
+  InMemoryHorariosFixosRepository,
+  type HorariosFixosRepository,
+  HORARIOS_FIXOS_COLLECTION,
+} from './modules/agenda/horarios-fixos-repository.js';
+import {
+  AgendaBloqueiosBusinessError,
+  criarBloqueioAgenda as criarBloqueioAgendaService,
+  listarBloqueiosAgenda as listarBloqueiosAgendaService,
+  removerBloqueioAgenda as removerBloqueioAgendaService,
+  alternarStatusBloqueioAgenda as alternarStatusBloqueioAgendaService,
+  criarHorarioFixoCliente as criarHorarioFixoClienteService,
+  listarHorariosFixosClientes as listarHorariosFixosClientesService,
+  removerHorarioFixoCliente as removerHorarioFixoClienteService,
+  atualizarHorarioFixoCliente as atualizarHorarioFixoClienteService,
+  verificarDisponibilidadeAgenda,
+} from './modules/agenda/agenda-bloqueios-service.js';
+import {
   AuthError,
   extrairUsuarioAutenticado,
   extrairUsuarioOpcional,
@@ -167,7 +191,8 @@ function responderErroNegocio(
     error instanceof ServicoBusinessError ||
     error instanceof ClienteBusinessError ||
     error instanceof CustomClaimsBusinessError ||
-    error instanceof SessaoBusinessError
+    error instanceof SessaoBusinessError ||
+    error instanceof AgendaBloqueiosBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
@@ -257,6 +282,8 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const repo = new FirestoreAgendamentosRepository(firestore);
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
     const servicosRepo = new FirestoreServicosRepository(firestore);
+    const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
+    const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
 
     const agendamento = await solicitarNovoAgendamento(
       request.body,
@@ -264,6 +291,8 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       repo,
       notifRepo,
       servicosRepo,
+      bloqueiosRepo,
+      horariosFixosRepo,
     );
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
@@ -297,8 +326,18 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
     const firestore = getFirestore();
     const repo = new FirestoreAgendamentosRepository(firestore);
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
+    const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
 
-    const agendamento = await alterarAgendamentoExistente(request.body, user, repo, notifRepo);
+    const agendamento = await alterarAgendamentoExistente(
+      request.body,
+      user,
+      repo,
+      notifRepo,
+      undefined,
+      bloqueiosRepo,
+      horariosFixosRepo,
+    );
     response.status(200).json({
       mensagem: 'Agendamento alterado com sucesso.',
       dados: agendamento,
@@ -971,3 +1010,341 @@ export const consultarSessao = onRequest({ cors: true }, async (request, respons
     response.status(500).json({ error: 'Erro interno ao consultar status da sessão.' });
   }
 });
+
+export {
+  FirestoreBloqueiosRepository,
+  InMemoryBloqueiosRepository,
+  type BloqueiosRepository,
+  BLOQUEIOS_AGENDA_COLLECTION,
+  FirestoreHorariosFixosRepository,
+  InMemoryHorariosFixosRepository,
+  type HorariosFixosRepository,
+  HORARIOS_FIXOS_COLLECTION,
+  AgendaBloqueiosBusinessError,
+  criarBloqueioAgendaService,
+  listarBloqueiosAgendaService,
+  removerBloqueioAgendaService,
+  alternarStatusBloqueioAgendaService,
+  criarHorarioFixoClienteService,
+  listarHorariosFixosClientesService,
+  removerHorarioFixoClienteService,
+  atualizarHorarioFixoClienteService,
+  verificarDisponibilidadeAgenda,
+};
+
+/**
+ * Endpoint para criar bloqueio pontual ou recorrente na agenda.
+ * Operação restrita à administradora.
+ */
+export const criarBloqueioAgenda = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreBloqueiosRepository(firestore);
+
+    const bloqueio = await criarBloqueioAgendaService(request.body, caller, repo);
+    response.status(201).json({
+      sucesso: true,
+      mensagem: 'Bloqueio de agenda criado com sucesso.',
+      dados: bloqueio,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados do bloqueio inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao criar bloqueio de agenda:', error);
+    response.status(500).json({ error: 'Erro interno ao criar bloqueio de agenda.' });
+  }
+});
+
+/**
+ * Endpoint para listar bloqueios cadastrados na agenda.
+ */
+export const listarBloqueiosAgenda = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const apenasAtivos = request.query['apenasAtivos'] !== 'false';
+    const profissionalId =
+      typeof request.query['profissionalId'] === 'string'
+        ? request.query['profissionalId']
+        : undefined;
+
+    const firestore = getFirestore();
+    const repo = new FirestoreBloqueiosRepository(firestore);
+
+    const bloqueios = await listarBloqueiosAgendaService(
+      caller,
+      repo,
+      apenasAtivos,
+      profissionalId,
+    );
+    response.status(200).json({ dados: bloqueios });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao listar bloqueios de agenda:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar bloqueios.' });
+  }
+});
+
+/**
+ * Endpoint para remover um bloqueio de agenda pelo ID.
+ * Operação restrita à administradora.
+ */
+export const removerBloqueioAgenda = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'DELETE' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use DELETE ou POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const id = (request.query['id'] as string) || (request.body?.id as string);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreBloqueiosRepository(firestore);
+
+    const resultado = await removerBloqueioAgendaService(id, caller, repo);
+    response.status(200).json({
+      sucesso: true,
+      mensagem: 'Bloqueio de agenda excluído com sucesso.',
+      dados: resultado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao remover bloqueio de agenda:', error);
+    response.status(500).json({ error: 'Erro interno ao remover bloqueio de agenda.' });
+  }
+});
+
+/**
+ * Endpoint para alternar o status ativo/inativo de um bloqueio.
+ */
+export const alternarStatusBloqueioAgenda = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'PATCH' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use PATCH ou POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const id = request.body?.id as string;
+    const ativo = Boolean(request.body?.ativo);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreBloqueiosRepository(firestore);
+
+    const atualizado = await alternarStatusBloqueioAgendaService(id, ativo, caller, repo);
+    response.status(200).json({
+      sucesso: true,
+      mensagem: `Status do bloqueio atualizado para ${ativo ? 'ativo' : 'inativo'}.`,
+      dados: atualizado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao alterar status de bloqueio:', error);
+    response.status(500).json({ error: 'Erro interno ao alterar status de bloqueio.' });
+  }
+});
+
+/**
+ * Endpoint para cadastrar uma reserva de horário fixo semanal/quinzenal para cliente.
+ * Restrito à administradora.
+ */
+export const criarHorarioFixoCliente = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreHorariosFixosRepository(firestore);
+
+    const horarioFixo = await criarHorarioFixoClienteService(request.body, caller, repo);
+    response.status(201).json({
+      sucesso: true,
+      mensagem: 'Reserva de horário fixo criada com sucesso.',
+      dados: horarioFixo,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados do horário fixo inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao criar horário fixo:', error);
+    response.status(500).json({ error: 'Erro interno ao criar horário fixo de cliente.' });
+  }
+});
+
+/**
+ * Endpoint para consultar horários fixos de clientes.
+ */
+export const listarHorariosFixosClientes = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const clienteIdFiltro =
+      typeof request.query['clienteId'] === 'string' ? request.query['clienteId'] : undefined;
+    const profissionalId =
+      typeof request.query['profissionalId'] === 'string'
+        ? request.query['profissionalId']
+        : undefined;
+
+    const firestore = getFirestore();
+    const repo = new FirestoreHorariosFixosRepository(firestore);
+
+    const horariosFixos = await listarHorariosFixosClientesService(
+      caller,
+      repo,
+      clienteIdFiltro,
+      profissionalId,
+    );
+    response.status(200).json({ dados: horariosFixos });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao listar horários fixos:', error);
+    response.status(500).json({ error: 'Erro interno ao listar horários fixos.' });
+  }
+});
+
+/**
+ * Endpoint para remover uma reserva de horário fixo.
+ */
+export const removerHorarioFixoCliente = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'DELETE' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use DELETE ou POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const id = (request.query['id'] as string) || (request.body?.id as string);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreHorariosFixosRepository(firestore);
+
+    const resultado = await removerHorarioFixoClienteService(id, caller, repo);
+    response.status(200).json({
+      sucesso: true,
+      mensagem: 'Horário fixo removido com sucesso.',
+      dados: resultado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao remover horário fixo:', error);
+    response.status(500).json({ error: 'Erro interno ao remover horário fixo.' });
+  }
+});
+
+/**
+ * Endpoint para atualizar uma reserva de horário fixo.
+ */
+export const atualizarHorarioFixoCliente = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'PUT' && request.method !== 'PATCH' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use PUT, PATCH ou POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreHorariosFixosRepository(firestore);
+
+    const atualizado = await atualizarHorarioFixoClienteService(request.body, caller, repo);
+    response.status(200).json({
+      sucesso: true,
+      mensagem: 'Horário fixo atualizado com sucesso.',
+      dados: atualizado,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados inválidos para horário fixo.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao atualizar horário fixo:', error);
+    response.status(500).json({ error: 'Erro interno ao atualizar horário fixo.' });
+  }
+});
+
+/**
+ * Endpoint para checar disponibilidade de horário considerando bloqueios e clientes fixos.
+ */
+export const verificarDisponibilidadeHorario = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== 'POST') {
+      response.status(405).json({ error: 'Método não permitido. Use POST.' });
+      return;
+    }
+
+    try {
+      const caller = await extrairUsuarioOpcional(request.headers.authorization);
+      const { dataHoraInicioIso, dataHoraFimIso, profissionalId } = request.body || {};
+
+      if (!dataHoraInicioIso || !dataHoraFimIso) {
+        response
+          .status(400)
+          .json({ error: 'dataHoraInicioIso e dataHoraFimIso são obrigatórios.' });
+        return;
+      }
+
+      const firestore = getFirestore();
+      const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
+      const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
+
+      const resultado = await verificarDisponibilidadeAgenda(
+        {
+          dataHoraInicioIso,
+          dataHoraFimIso,
+          clienteIdSolicitante: caller?.uid,
+          profissionalId,
+        },
+        bloqueiosRepo,
+        horariosFixosRepo,
+      );
+
+      response.status(200).json({ dados: resultado });
+    } catch (error: unknown) {
+      if (responderErroNegocio(response, error)) {
+        return;
+      }
+      console.error('Erro ao verificar disponibilidade de horário:', error);
+      response.status(500).json({ error: 'Erro interno ao consultar disponibilidade.' });
+    }
+  },
+);

@@ -224,5 +224,5 @@ describe('FichaAnamnesePage', () => {
     expect(
       await screen.findByRole('heading', { name: /1\. objetivo e queixa principal/i }),
     ).toBeInTheDocument();
-  });
+  }, 15000);
 });

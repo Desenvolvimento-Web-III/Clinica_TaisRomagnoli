@@ -9,6 +9,8 @@ import {
 } from '../src/modules/agendamentos/agendamentos-service.js';
 import { InMemoryAgendamentosRepository } from '../src/modules/agendamentos/agendamentos-repository.js';
 import { InMemoryNotificacoesRepository } from '../src/modules/notificacoes/notificacoes-repository.js';
+import { InMemoryBloqueiosRepository } from '../src/modules/agenda/bloqueios-repository.js';
+import { InMemoryHorariosFixosRepository } from '../src/modules/agenda/horarios-fixos-repository.js';
 
 describe('Agendamentos Service (Functions Backend)', () => {
   let repo: InMemoryAgendamentosRepository;
@@ -564,6 +566,130 @@ describe('Agendamentos Service (Functions Backend)', () => {
           dataRef,
         ),
       ).rejects.toThrow(AgendamentoBusinessError);
+    });
+
+    it('impede solicitação de agendamento que colide com bloqueio único ativo na agenda', async () => {
+      const bloqueiosRepo = new InMemoryBloqueiosRepository();
+      const horariosFixosRepo = new InMemoryHorariosFixosRepository();
+
+      await bloqueiosRepo.salvar({
+        id: 'bl-1',
+        tipo: 'unico',
+        data: '2026-10-22',
+        horaInicio: '14:00',
+        horaFim: '16:00',
+        diaInteiro: false,
+        motivo: 'Manutenção da sala de massoterapia',
+        profissionalId: 'default',
+        ativo: true,
+        criadoPor: 'admin-1',
+        criadoEm: '2026-10-01T00:00:00.000Z',
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T14:30:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          bloqueiosRepo,
+          horariosFixosRepo,
+        ),
+      ).rejects.toThrow(/bloqueio pontual/);
+    });
+
+    it('impede agendamento que colide com horário fixo reservado para outro cliente', async () => {
+      const bloqueiosRepo = new InMemoryBloqueiosRepository();
+      const horariosFixosRepo = new InMemoryHorariosFixosRepository();
+
+      // 2026-10-22 é quinta-feira (dia 4)
+      await horariosFixosRepo.salvar({
+        id: 'fixo-1',
+        clienteId: 'outro-cliente-titular',
+        clienteNome: 'Beatriz Silva',
+        diaSemana: 4,
+        horaInicio: '10:00',
+        horaFim: '11:00',
+        frequencia: 'semanal',
+        dataInicio: '2026-10-01',
+        profissionalId: 'default',
+        ativo: true,
+        criadoPor: 'admin-1',
+        criadoEm: '2026-10-01T00:00:00.000Z',
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          bloqueiosRepo,
+          horariosFixosRepo,
+        ),
+      ).rejects.toThrow(/cliente fixo/);
+    });
+
+    it('permite agendamento quando o solicitante for o próprio titular do horário fixo', async () => {
+      const bloqueiosRepo = new InMemoryBloqueiosRepository();
+      const horariosFixosRepo = new InMemoryHorariosFixosRepository();
+
+      await horariosFixosRepo.salvar({
+        id: 'fixo-2',
+        clienteId: 'user-cliente-1', // Mesmo uid do clienteUser
+        clienteNome: 'Mariana Souza',
+        diaSemana: 4,
+        horaInicio: '10:00',
+        horaFim: '11:00',
+        frequencia: 'semanal',
+        dataInicio: '2026-10-01',
+        profissionalId: 'default',
+        ativo: true,
+        criadoPor: 'admin-1',
+        criadoEm: '2026-10-01T00:00:00.000Z',
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      const ag = await solicitarNovoAgendamento(
+        input,
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        bloqueiosRepo,
+        horariosFixosRepo,
+      );
+
+      expect(ag.id).toBeDefined();
+      expect(ag.status).toBe('pendente');
     });
   });
 });

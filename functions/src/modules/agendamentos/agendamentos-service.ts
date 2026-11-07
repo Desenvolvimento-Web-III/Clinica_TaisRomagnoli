@@ -5,6 +5,7 @@ import {
   calcularValoresAgendamento,
   calcularDataHoraFim,
   verificarConflitoHorarios,
+  verificarConflitoBloqueioOuHorarioFixo,
   verificarAntecedenciaCancelamento,
   CONFIGURACAO_HORARIOS_PADRAO,
   type Agendamento,
@@ -12,6 +13,8 @@ import {
 import type { AgendamentosRepository } from './agendamentos-repository.js';
 import type { NotificacoesRepository } from '../notificacoes/notificacoes-repository.js';
 import type { ServicosRepository } from '../servicos/servicos-repository.js';
+import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
+import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
@@ -46,6 +49,8 @@ export async function solicitarNovoAgendamento(
   repo: AgendamentosRepository,
   notificacoesRepo?: NotificacoesRepository,
   servicosRepo?: ServicosRepository,
+  bloqueiosRepo?: BloqueiosRepository,
+  horariosFixosRepo?: HorariosFixosRepository,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
 
@@ -74,7 +79,28 @@ export async function solicitarNovoAgendamento(
   // 2. Cálculo da data/hora de término
   const dataHoraFim = calcularDataHoraFim(parsed.dataHoraInicio, parsed.duracaoMinutos);
 
-  // 3. Verificação de conflitos de horários e respeito ao intervalo de 30 min
+  // 3. Verificação de conflitos com Bloqueios Únicos, Recorrentes ou Reservas de Clientes Fixos
+  if (bloqueiosRepo || horariosFixosRepo) {
+    const bloqueios = bloqueiosRepo ? await bloqueiosRepo.listarAtivos(parsed.profissionalId) : [];
+    const horariosFixos = horariosFixosRepo
+      ? await horariosFixosRepo.listarAtivos(parsed.profissionalId)
+      : [];
+    const checagemBloqueios = verificarConflitoBloqueioOuHorarioFixo({
+      dataHoraInicioIso: parsed.dataHoraInicio,
+      dataHoraFimIso: dataHoraFim,
+      clienteIdSolicitante: user.uid,
+      bloqueios,
+      horariosFixos,
+    });
+    if (checagemBloqueios.conflito) {
+      throw new AgendamentoBusinessError(
+        checagemBloqueios.motivo || 'O horário selecionado está bloqueado na agenda da clínica.',
+        409,
+      );
+    }
+  }
+
+  // 4. Verificação de conflitos de horários e respeito ao intervalo de 30 min com outros agendamentos
   const dataYmd = parsed.dataHoraInicio.substring(0, 10);
   const existentes = await repo.listarPorProfissionalEData(parsed.profissionalId, dataYmd);
 
@@ -96,7 +122,7 @@ export async function solicitarNovoAgendamento(
     );
   }
 
-  // 4. Regra de Negócio de Isenção de Sinal (apenas administradora em agendamento presencial)
+  // 5. Regra de Negócio de Isenção de Sinal (apenas administradora em agendamento presencial)
   const isencaoSinal = user.isAdmin && parsed.isencaoSinalAdmin === true;
   const valores = calcularValoresAgendamento(parsed.valorTotalEmCentavos, 30, isencaoSinal);
 
@@ -145,6 +171,8 @@ export async function alterarAgendamentoExistente(
   repo: AgendamentosRepository,
   notificacoesRepoOuDataRef?: NotificacoesRepository | Date,
   dataReferenciaParam?: Date,
+  bloqueiosRepo?: BloqueiosRepository,
+  horariosFixosRepo?: HorariosFixosRepository,
 ): Promise<Agendamento> {
   const notificacoesRepo =
     notificacoesRepoOuDataRef instanceof Date ? undefined : notificacoesRepoOuDataRef;
@@ -205,9 +233,32 @@ export async function alterarAgendamentoExistente(
     agendamento.duracaoMinutos,
   );
 
-  // 3. Conflitos de horário com outros atendimentos
   const profissionalId = parsed.novoProfissionalId || agendamento.profissionalId;
   const profissionalNome = parsed.novoProfissionalNome || agendamento.profissionalNome;
+
+  // 3. Verificação de conflitos com Bloqueios Únicos, Recorrentes ou Horários Fixos
+  if (bloqueiosRepo || horariosFixosRepo) {
+    const bloqueios = bloqueiosRepo ? await bloqueiosRepo.listarAtivos(profissionalId) : [];
+    const horariosFixos = horariosFixosRepo
+      ? await horariosFixosRepo.listarAtivos(profissionalId)
+      : [];
+    const checagemBloqueios = verificarConflitoBloqueioOuHorarioFixo({
+      dataHoraInicioIso: parsed.novaDataHoraInicio,
+      dataHoraFimIso: novoDataHoraFim,
+      clienteIdSolicitante: agendamento.clienteId,
+      bloqueios,
+      horariosFixos,
+    });
+    if (checagemBloqueios.conflito) {
+      throw new AgendamentoBusinessError(
+        checagemBloqueios.motivo ||
+          'O novo horário selecionado está bloqueado na agenda da clínica.',
+        409,
+      );
+    }
+  }
+
+  // 4. Conflitos de horário com outros atendimentos
   const novaDataYmd = parsed.novaDataHoraInicio.substring(0, 10);
   const existentes = await repo.listarPorProfissionalEData(profissionalId, novaDataYmd);
 

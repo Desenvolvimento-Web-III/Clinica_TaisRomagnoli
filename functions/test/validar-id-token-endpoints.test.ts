@@ -67,6 +67,14 @@ import {
   revogarSessoes,
   iniciarSessaoUnica,
   consultarSessao,
+  criarBloqueioAgenda,
+  listarBloqueiosAgenda,
+  removerBloqueioAgenda,
+  alternarStatusBloqueioAgenda,
+  criarHorarioFixoCliente,
+  listarHorariosFixosClientes,
+  removerHorarioFixoCliente,
+  atualizarHorarioFixoCliente,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -182,6 +190,18 @@ describe('[Backend] Validação de ID Token nas Cloud Functions protegidas', () 
     { name: 'revogarSessoes', handler: revogarSessoes, method: 'POST' },
     { name: 'iniciarSessaoUnica', handler: iniciarSessaoUnica, method: 'POST' },
     { name: 'consultarSessao', handler: consultarSessao, method: 'GET' },
+    { name: 'criarBloqueioAgenda', handler: criarBloqueioAgenda, method: 'POST' },
+    { name: 'listarBloqueiosAgenda', handler: listarBloqueiosAgenda, method: 'GET' },
+    { name: 'removerBloqueioAgenda', handler: removerBloqueioAgenda, method: 'DELETE' },
+    {
+      name: 'alternarStatusBloqueioAgenda',
+      handler: alternarStatusBloqueioAgenda,
+      method: 'PATCH',
+    },
+    { name: 'criarHorarioFixoCliente', handler: criarHorarioFixoCliente, method: 'POST' },
+    { name: 'listarHorariosFixosClientes', handler: listarHorariosFixosClientes, method: 'GET' },
+    { name: 'removerHorarioFixoCliente', handler: removerHorarioFixoCliente, method: 'DELETE' },
+    { name: 'atualizarHorarioFixoCliente', handler: atualizarHorarioFixoCliente, method: 'PUT' },
   ];
 
   describe('Rejeição quando o ID token não for fornecido', () => {
