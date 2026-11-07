@@ -145,3 +145,44 @@ export async function obterPerfilCliente(
 
   return perfil;
 }
+
+/**
+ * Lista todos os clientes cadastrados com suporte a busca textual por nome, e-mail ou telefone.
+ * Acesso exclusivo para administradoras com validação de segurança estrita no backend.
+ */
+export async function listarClientes(
+  user: UserContext,
+  repo: ClientesRepository,
+  termoBusca?: string,
+): Promise<UserProfile[]> {
+  if (!user || !user.uid) {
+    throw new ClienteBusinessError('Acesso não autenticado. Forneça o token Bearer.', 401);
+  }
+
+  if (!user.isAdmin) {
+    throw new ClienteBusinessError(
+      'Acesso negado. Apenas administradoras podem listar clientes.',
+      403,
+    );
+  }
+
+  const clientes = await repo.listarTodos();
+
+  if (!termoBusca || !termoBusca.trim()) {
+    return clientes;
+  }
+
+  const termoNormalizado = termoBusca.trim().toLowerCase();
+  const termoApenasDigitos = termoBusca.replace(/\D/g, '');
+
+  return clientes.filter((c) => {
+    const nomeMatch = c.nome.toLowerCase().includes(termoNormalizado);
+    const emailMatch = c.email.toLowerCase().includes(termoNormalizado);
+    const telefoneDigitos = c.telefone.replace(/\D/g, '');
+    const telefoneMatch =
+      c.telefone.toLowerCase().includes(termoNormalizado) ||
+      (termoApenasDigitos.length > 0 && telefoneDigitos.includes(termoApenasDigitos));
+
+    return nomeMatch || emailMatch || telefoneMatch;
+  });
+}

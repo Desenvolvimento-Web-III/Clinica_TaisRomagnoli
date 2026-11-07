@@ -59,12 +59,14 @@ function Section({
   title,
   description,
   children,
-}: Readonly<{ title: string; description: string; children: React.ReactNode }>) {
+}: Readonly<{ title: string; description?: string; children: React.ReactNode }>) {
   return (
     <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white p-5 shadow-[var(--shadow-card)] sm:p-6">
       <div className="border-b border-[var(--color-border-default)] pb-4">
         <h2 className="text-lg/7 font-semibold">{title}</h2>
-        <p className="mt-1 text-sm/5 text-[var(--color-text-secondary)]">{description}</p>
+        {description ? (
+          <p className="mt-1 text-sm/5 text-[var(--color-text-secondary)]">{description}</p>
+        ) : null}
       </div>
       <div className="pt-5">{children}</div>
     </section>
@@ -155,15 +157,9 @@ export function AdminClientProfilePage({
             </dl>
           </Section>
 
-          <Section
-            title="Anamnese"
-            description="Informação sensível, visível somente ao cliente e à administradora."
-          >
+          <Section title="Anamnese">
             {profile.anamnesis ? (
               <div className="space-y-5 text-sm/5">
-                <div className="rounded-xl border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-3 text-[var(--color-warning-text)]">
-                  Acesso restrito. Consulte estes dados apenas quando necessário para o atendimento.
-                </div>
                 <div>
                   <h3 className="font-semibold">Pontos de atenção</h3>
                   {profile.anamnesis.attentionPoints.length > 0 ? (

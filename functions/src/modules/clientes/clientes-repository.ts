@@ -5,6 +5,7 @@ export interface ClientesRepository {
   salvar(cliente: UserProfile): Promise<UserProfile>;
   buscarPorUid(uid: string): Promise<UserProfile | null>;
   buscarPorEmail(email: string): Promise<UserProfile | null>;
+  listarTodos(): Promise<UserProfile[]>;
   atualizar(uid: string, dados: Partial<UserProfile>): Promise<UserProfile | null>;
 }
 
@@ -33,6 +34,10 @@ export class InMemoryClientesRepository implements ClientesRepository {
       }
     }
     return null;
+  }
+
+  async listarTodos(): Promise<UserProfile[]> {
+    return Array.from(this.itens.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }
 
   async atualizar(uid: string, dados: Partial<UserProfile>): Promise<UserProfile | null> {
@@ -87,6 +92,11 @@ export class FirestoreClientesRepository implements ClientesRepository {
     }
 
     return snapshot.docs[0].data() as UserProfile;
+  }
+
+  async listarTodos(): Promise<UserProfile[]> {
+    const snapshot = await this.collection.orderBy('nome').get();
+    return snapshot.docs.map((doc) => doc.data() as UserProfile);
   }
 
   async atualizar(uid: string, dados: Partial<UserProfile>): Promise<UserProfile | null> {

@@ -35,6 +35,7 @@ import { FirestoreClientesRepository } from './modules/clientes/clientes-reposit
 import {
   registrarPerfilCliente,
   obterPerfilCliente,
+  listarClientes as listarClientesService,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
 
@@ -85,6 +86,7 @@ export {
 export {
   registrarPerfilCliente,
   obterPerfilCliente,
+  listarClientes,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
 import {
@@ -750,6 +752,39 @@ export const obterPerfil = onRequest({ cors: true }, async (request, response) =
     }
     console.error('Erro ao consultar perfil do cliente:', error);
     response.status(500).json({ error: 'Erro interno ao consultar perfil do cliente.' });
+  }
+});
+
+/**
+ * Endpoint administrativo para listar todos os clientes cadastrados com busca textual.
+ * Exclusivo para administradoras autenticadas.
+ */
+export const listarClientesEndpoint = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const termoBusca =
+      typeof request.query['termoBusca'] === 'string'
+        ? request.query['termoBusca']
+        : typeof request.query['q'] === 'string'
+          ? request.query['q']
+          : undefined;
+
+    const firestore = getFirestore();
+    const repo = new FirestoreClientesRepository(firestore);
+
+    const clientes = await listarClientesService(user, repo, termoBusca);
+    response.status(200).json({ dados: clientes });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao listar clientes:', error);
+    response.status(500).json({ error: 'Erro interno ao listar clientes.' });
   }
 });
 

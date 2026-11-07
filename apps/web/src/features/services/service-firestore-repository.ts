@@ -246,6 +246,43 @@ export function mapFirestoreDocToService(id: string, data: FirestoreServiceData)
 }
 
 /**
+ * Mescla os serviços obtidos do Firestore com o catálogo base padrão.
+ * Qualquer serviço cadastrado ou editado no Firestore sobrescreve a versão padrão do catálogo.
+ * Os serviços do catálogo padrão que ainda não foram alterados no Firestore são preservados.
+ */
+export function mergeServicesWithDefaultCatalog(
+  firestoreServices: readonly Service[],
+  baseCatalog: readonly Service[] = serviceCatalog,
+): Service[] {
+  const firestoreMap = new Map<string, Service>();
+  for (const service of firestoreServices) {
+    firestoreMap.set(service.id.toLowerCase().trim(), service);
+  }
+
+  const merged: Service[] = [];
+  const processedIds = new Set<string>();
+
+  for (const catalogService of baseCatalog) {
+    const key = catalogService.id.toLowerCase().trim();
+    if (firestoreMap.has(key)) {
+      merged.push(firestoreMap.get(key)!);
+    } else {
+      merged.push(catalogService);
+    }
+    processedIds.add(key);
+  }
+
+  // Adiciona novos serviços personalizados criados no Firestore
+  for (const [key, service] of firestoreMap.entries()) {
+    if (!processedIds.has(key)) {
+      merged.push(service);
+    }
+  }
+
+  return merged;
+}
+
+/**
  * Consulta os serviços no Firestore e resolve suas imagens da pasta local do projeto.
  */
 export async function fetchServicesFromFirestore(
@@ -267,7 +304,8 @@ export async function fetchServicesFromFirestore(
       mapFirestoreDocToService(doc.id, doc.data() as FirestoreServiceData),
     );
 
-    return onlyActive ? mapped.filter((service) => service.active) : mapped;
+    const merged = mergeServicesWithDefaultCatalog(mapped);
+    return onlyActive ? merged.filter((service) => service.active) : merged;
   } catch {
     return onlyActive ? serviceCatalog.filter((s) => s.active) : [...serviceCatalog];
   }
@@ -300,7 +338,8 @@ export function subscribeToServicesFromFirestore(
           mapFirestoreDocToService(doc.id, doc.data() as FirestoreServiceData),
         );
 
-        const filtered = onlyActive ? mapped.filter((service) => service.active) : mapped;
+        const merged = mergeServicesWithDefaultCatalog(mapped);
+        const filtered = onlyActive ? merged.filter((service) => service.active) : merged;
         onUpdate(filtered.length > 0 ? filtered : [...serviceCatalog]);
       },
       () => {
@@ -339,6 +378,60 @@ function slugifyService(nome: string): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'servico'
   );
+}
+
+/**
+ * Sincroniza em segundo plano os serviços do catálogo padrão que ainda não existirem no Firestore.
+ */
+export async function syncMissingDefaultServicesToFirestore(
+  customDb: Firestore | null = db,
+): Promise<void> {
+  if (!customDb) return;
+
+  try {
+    const snapshot = await getDocs(collection(customDb, 'servicos'));
+    const existingIds = new Set(snapshot.docs.map((d) => d.id.toLowerCase().trim()));
+
+    const missingServices = serviceCatalog.filter(
+      (s) => !existingIds.has(s.id.toLowerCase().trim()),
+    );
+
+    if (missingServices.length === 0) return;
+
+    await Promise.all(
+      missingServices.map((service) => {
+        const docRef = doc(customDb, 'servicos', service.id);
+        const precoCentavos = service.priceInCents;
+        const sinalCentavos = service.sinalInCents ?? Math.round(precoCentavos * 0.3);
+        const firestoreData: FirestoreServiceData = {
+          nome: service.name,
+          name: service.name,
+          descricao: service.description,
+          description: service.description,
+          duracao: service.durationMinutes,
+          durationMinutes: service.durationMinutes,
+          preco: precoCentavos / 100,
+          precoCentavos,
+          priceInCents: precoCentavos,
+          sinal: sinalCentavos / 100,
+          sinalCentavos,
+          sinalInCents: sinalCentavos,
+          sinalPercentual: service.sinalPercentual ?? 30,
+          ativo: service.active,
+          active: service.active,
+          categoria:
+            'category' in service && typeof service.category === 'string'
+              ? service.category
+              : 'Corporal',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        return setDoc(docRef, firestoreData, { merge: true });
+      }),
+    );
+  } catch {
+    // Sincronização em segundo plano não bloqueante
+  }
 }
 
 /**
@@ -392,6 +485,9 @@ export async function saveServiceToFirestore(
 
   const docRef = doc(customDb, 'servicos', serviceId);
   await setDoc(docRef, firestoreData, { merge: true });
+
+  // Sincroniza em segundo plano os demais serviços que ainda não estejam salvos
+  void syncMissingDefaultServicesToFirestore(customDb);
 
   return mapFirestoreDocToService(serviceId, firestoreData);
 }

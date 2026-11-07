@@ -21,7 +21,7 @@ vi.mock('firebase-admin/firestore', () => ({
 }));
 
 // Import endpoints after mocks
-import { criarPerfil, obterPerfil } from '../src/index.js';
+import { criarPerfil, obterPerfil, listarClientesEndpoint } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
 
@@ -366,6 +366,105 @@ describe('Endpoints HTTP de Clientes (Functions)', () => {
 
       expect(res.statusCode).toBe(404);
       expect(res.body?.error).toContain('Perfil do cliente não encontrado');
+    });
+  });
+
+  describe('GET /listarClientesEndpoint', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('retorna 405 se o método não for GET', async () => {
+      const req = createMockRequest({ method: 'POST' });
+      const res = createMockResponse();
+
+      await (listarClientesEndpoint as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(405);
+      expect(res.body?.error).toContain('Método não permitido');
+    });
+
+    it('retorna 401 se não houver token de autorização', async () => {
+      const req = createMockRequest({
+        method: 'GET',
+        headers: {},
+      });
+      const res = createMockResponse();
+
+      await (listarClientesEndpoint as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(401);
+      expect(res.body?.error).toContain('Acesso não autenticado');
+    });
+
+    it('retorna 403 se o usuário autenticado for cliente comum (não admin)', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'cliente-comum',
+        email: 'cliente@exemplo.com',
+        role: 'cliente',
+      });
+
+      const req = createMockRequest({
+        method: 'GET',
+        headers: { authorization: 'Bearer token-cliente' },
+      });
+      const res = createMockResponse();
+
+      await (listarClientesEndpoint as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body?.error).toContain('Acesso negado');
+    });
+
+    it('retorna 200 e lista de clientes quando solicitado por administradora', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-tais',
+        email: 'admin@clinica.com',
+        admin: true,
+      });
+
+      const mockDocs = [
+        {
+          data: () => ({
+            uid: 'c-1',
+            nome: 'Ana Lima',
+            email: 'ana@exemplo.com',
+            telefone: '(11) 98765-4321',
+            role: 'cliente',
+            status: 'ativo',
+          }),
+        },
+        {
+          data: () => ({
+            uid: 'c-2',
+            nome: 'Beatriz Costa',
+            email: 'bia@exemplo.com',
+            telefone: '(11) 97654-3210',
+            role: 'cliente',
+            status: 'ativo',
+          }),
+        },
+      ];
+
+      mockFirestore.collection.mockReturnValueOnce({
+        orderBy: vi.fn().mockReturnValueOnce({
+          get: vi.fn().mockResolvedValueOnce({
+            docs: mockDocs,
+          }),
+        }),
+      });
+
+      const req = createMockRequest({
+        method: 'GET',
+        headers: { authorization: 'Bearer token-admin' },
+      });
+      const res = createMockResponse();
+
+      await (listarClientesEndpoint as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(Array.isArray(res.body?.dados)).toBe(true);
+      expect((res.body?.dados as unknown[]).length).toBe(2);
     });
   });
 });
