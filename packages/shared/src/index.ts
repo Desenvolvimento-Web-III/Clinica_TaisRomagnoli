@@ -58,3 +58,4 @@ export type {
 
 export * from './schemas/notificacao.js';
 export * from './schemas/cliente.js';
+export * from './models/schedule.js';

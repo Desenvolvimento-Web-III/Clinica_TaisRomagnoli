@@ -66,22 +66,27 @@ service cloud.firestore {
         allow update: if isOwner(uid) || isAdmin();
         allow delete: if isAdmin();
       }
-    match /notificacoes/{notifId} {
-  allow read: if isOwner(uid) || isAdmin();
-  allow update: if (isOwner(uid) || isAdmin())
-                && request.resource.data.diff(resource.data).affectedKeys()
-                  .hasOnly(['lida', 'updatedAt']);
-  allow create, delete: if false;
-  }
-}
+
+      match /notificacoes/{notifId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow update: if (isOwner(uid) || isAdmin())
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['lida', 'updatedAt']);
+        allow create, delete: if false;
+      }
+    }
+
     // Coleção raiz de agendamentos
+    // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
+    // Escrita direta client-side bloqueada: criação, reagendamento e cancelamento são processados por Cloud Functions
     match /agendamentos/{agendamentoId} {
       allow get: if isAdmin() || isDocOwner(resource.data);
       allow list: if isAdmin() || (isSignedIn() && (
         resource.data.clienteId == request.auth.uid ||
         resource.data.uid == request.auth.uid
       ));
-      }
+      allow write: if false;
+    }
 
     // Coleções raiz de anamneses e fichas de avaliação
     match /anamneses/{anamnesisId} {
@@ -111,7 +116,7 @@ service cloud.firestore {
       // Leitura pública liberada para visualização do catálogo e agendamento
       allow read: if true;
       // Criação, atualização e exclusão restritas à administração autenticada
-    allow write: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     // Configurações da clínica (intervalo, folgas, percentual do sinal)
@@ -119,7 +124,7 @@ service cloud.firestore {
     // Escrita restrita à administração com custom claim admin
     match /configuracoes/{configId} {
       allow read: if true;
-      allow write: if isAdmin() || (request.auth != null && request.auth.token.admin == true);
+      allow write: if isAdmin();
     }
 
     // Profissionais da clínica (dados de exibição, especialidade, folgas e intervalos)
@@ -133,15 +138,8 @@ service cloud.firestore {
     // Usuários do sistema (incluindo contas administrativas)
     // Leitura permitida apenas para o titular autenticado; criação administrativa protegida
     match /usuarios/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if isOwner(uid);
       allow write: if false;
-    }
-
-    // Agendamentos de serviços da clínica
-    // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
-    // Escrita direta client-side bloqueada: criação, reagendamento e cancelamento são processados por Cloud Functions
-    match /agendamentos/{agendamentoId} {
-    allow read: if isAdmin() || isDocOwner(resource.data);      allow write: if false;
     }
 
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado
