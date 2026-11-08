@@ -32,9 +32,28 @@ const mockDocGet = vi.fn().mockResolvedValue({
     sinalPercentual: 30,
     diasFolga: [0, 2],
     intervaloMinutos: 30,
+    clienteId: 'cliente-1',
+    clienteNome: 'Cliente Teste',
+    servicoId: 'serv-1',
+    servicoNome: 'Serviço Teste',
+    status: 'confirmado',
+    dataHoraInicio: '2026-11-20T10:00:00.000Z',
+    dataHoraFim: '2026-11-20T11:00:00.000Z',
+    intervaloAposMinutos: 30,
+    valorTotalEmCentavos: 10000,
+    valorSinalEmCentavos: 3000,
+    saldoRestanteEmCentavos: 7000,
+    profissionalId: 'prof-tais-romagnoli',
+    profissionalNome: 'Tais Romagnoli',
+    metodoPagamento: 'pix',
+    origem: 'app_cliente',
+    sinalIsento: false,
+    createdAt: '2026-11-01T10:00:00.000Z',
+    updatedAt: '2026-11-01T10:00:00.000Z',
   }),
 });
 const mockSubCollection = {
+  doc: vi.fn(() => mockDoc),
   where: vi.fn().mockReturnThis(),
   orderBy: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
@@ -79,6 +98,7 @@ import {
   cadastrarProfissional,
   atualizarProfissional,
   vincularProfissionalAoServicoEndpoint,
+  atualizarStatusAgendamento,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -323,6 +343,16 @@ describe('[Backend] Proteger operações administrativas', () => {
         habilitado: true,
       },
     },
+    {
+      name: 'atualizarStatusAgendamento',
+      handler: atualizarStatusAgendamento,
+      method: 'POST',
+      validBody: {
+        agendamentoId: 'ag-1',
+        novoStatus: 'falta',
+        motivo: 'Cliente faltou',
+      },
+    },
   ];
 
   describe('Validação de token ausente (HTTP 401)', () => {
@@ -487,6 +517,31 @@ describe('[Backend] Proteger operações administrativas', () => {
 
       expect(res.statusCode).toBe(201);
       expect(res.body?.mensagem).toContain('sucesso');
+    });
+
+    it('permite que administradora execute atualizarStatusAgendamento', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-uid',
+        email: 'admin@clinicataisromagnoli.com.br',
+        role: 'admin',
+        admin: true,
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin-valido' },
+        body: {
+          agendamentoId: 'item-1',
+          novoStatus: 'falta',
+          motivo: 'Paciente não compareceu',
+        },
+      });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body?.mensagem).toContain('falta');
     });
   });
 });

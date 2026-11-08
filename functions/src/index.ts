@@ -14,6 +14,7 @@ import {
   solicitarNovoAgendamento,
   alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
+  atualizarStatusAgendamento as atualizarStatusAgendamentoService,
   listarAgendamentos,
   AgendamentoBusinessError,
 } from './modules/agendamentos/agendamentos-service.js';
@@ -69,6 +70,7 @@ export {
   solicitarNovoAgendamento,
   alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
+  atualizarStatusAgendamento as atualizarStatusAgendamentoService,
   listarAgendamentos,
 } from './modules/agendamentos/agendamentos-service.js';
 export {
@@ -427,6 +429,49 @@ export const cancelarAgendamento = onRequest({ cors: true }, async (request, res
     }
     console.error('Erro ao cancelar agendamento:', error);
     response.status(500).json({ error: 'Erro interno ao cancelar agendamento.' });
+  }
+});
+
+/**
+ * Endpoint para atualizar o status de um agendamento existente conforme a máquina de estados.
+ * Operação restrita à administradora autenticada.
+ * Suporta transições para: pendente, confirmado, em_andamento, concluido, cancelado, reagendado, falta.
+ */
+export const atualizarStatusAgendamento = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreAgendamentosRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+
+    const agendamento = await atualizarStatusAgendamentoService(
+      request.body,
+      user,
+      repo,
+      notifRepo,
+    );
+
+    response.status(200).json({
+      mensagem: `Status do agendamento atualizado para '${agendamento.status}' com sucesso.`,
+      dados: agendamento,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados da requisição inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao atualizar status do agendamento:', error);
+    response.status(500).json({ error: 'Erro interno ao atualizar status do agendamento.' });
   }
 });
 

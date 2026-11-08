@@ -71,6 +71,54 @@ const STATUS_CONFIG: Record<
       </svg>
     ),
   },
+  em_andamento: {
+    label: 'Em Andamento',
+    bgClass: 'bg-blue-50',
+    textClass: 'text-blue-700',
+    borderClass: 'border-blue-200',
+    icon: (
+      <svg className="mr-1 h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M13 10V3L4 14h7v7l9-11h-7z"
+        />
+      </svg>
+    ),
+  },
+  reagendado: {
+    label: 'Reagendado',
+    bgClass: 'bg-purple-50',
+    textClass: 'text-purple-700',
+    borderClass: 'border-purple-200',
+    icon: (
+      <svg className="mr-1 h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+        />
+      </svg>
+    ),
+  },
+  falta: {
+    label: 'Falta',
+    bgClass: 'bg-gray-100',
+    textClass: 'text-gray-700',
+    borderClass: 'border-gray-300',
+    icon: (
+      <svg className="mr-1 h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+        />
+      </svg>
+    ),
+  },
 };
 
 export const AgendamentoCard: React.FC<AgendamentoCardProps> = ({

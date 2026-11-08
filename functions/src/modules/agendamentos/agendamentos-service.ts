@@ -2,6 +2,8 @@ import {
   solicitarAgendamentoInputSchema,
   cancelarAgendamentoInputSchema,
   alterarAgendamentoInputSchema,
+  atualizarStatusAgendamentoInputSchema,
+  validarTransicaoStatus,
   calcularValoresAgendamento,
   calcularDataHoraFim,
   verificarConflitoHorarios,
@@ -511,4 +513,124 @@ export async function listarAgendamentos(
   }
 
   return repo.listarPorCliente(user.uid);
+}
+
+/**
+ * Atualiza o status de um agendamento existente conforme a máquina de estados.
+ * Operação restrita à administradora.
+ * Controla os estados: pendente, confirmado, em_andamento, concluido, cancelado, reagendado e falta.
+ */
+export async function atualizarStatusAgendamento(
+  input: unknown,
+  user: { uid: string; isAdmin: boolean },
+  repo: AgendamentosRepository,
+  notificacoesRepo?: NotificacoesRepository,
+  dataReferenciaParam?: Date,
+): Promise<Agendamento> {
+  if (!user.isAdmin) {
+    throw new AgendamentoBusinessError(
+      'Acesso negado. Apenas a administradora possui permissão para alterar o status do agendamento.',
+      403,
+    );
+  }
+
+  const parsed = atualizarStatusAgendamentoInputSchema.parse(input);
+  const dataReferencia = dataReferenciaParam || new Date();
+  const dataReferenciaIso = dataReferencia.toISOString();
+
+  const agendamento = await repo.buscarPorId(parsed.agendamentoId);
+  if (!agendamento) {
+    throw new AgendamentoBusinessError('Agendamento não encontrado.', 404);
+  }
+
+  if (agendamento.status === parsed.novoStatus) {
+    return agendamento;
+  }
+
+  const validacao = validarTransicaoStatus(agendamento.status, parsed.novoStatus);
+  if (!validacao.valida) {
+    throw new AgendamentoBusinessError(
+      validacao.erro ||
+        `Transição de status inválida: não é permitido alterar de '${agendamento.status}' para '${parsed.novoStatus}'.`,
+      422,
+    );
+  }
+
+  const atualizado: Agendamento = {
+    ...agendamento,
+    status: parsed.novoStatus,
+    updatedAt: dataReferenciaIso,
+  };
+
+  if (parsed.observacoes) {
+    atualizado.observacoes = agendamento.observacoes
+      ? `${agendamento.observacoes}\n${parsed.observacoes}`
+      : parsed.observacoes;
+  }
+
+  switch (parsed.novoStatus) {
+    case 'falta': {
+      // Regra: "Cancelamento tardio ou falta causará perda do sinal."
+      atualizado.sinalRetido = true;
+      atualizado.sinalDisponivelReagendamento = false;
+      atualizado.faltaRegistradaEm = dataReferenciaIso;
+      atualizado.motivoCancelamento = parsed.motivo || 'Falta registrada pela administração';
+      break;
+    }
+    case 'cancelado': {
+      const antecedencia = verificarAntecedenciaCancelamento(
+        agendamento.dataHoraInicio,
+        3,
+        dataReferencia,
+      );
+      atualizado.canceladoEm = dataReferenciaIso;
+      atualizado.motivoCancelamento = parsed.motivo || 'Cancelamento registrado pela administração';
+      atualizado.sinalRetido = antecedencia.sinalRetido;
+      atualizado.classificacaoCancelamento = antecedencia.classificacao;
+      atualizado.tipoCancelamento = antecedencia.classificacao;
+      atualizado.sinalDisponivelReagendamento = antecedencia.sinalDisponivelReagendamento;
+      atualizado.antecedenciaCancelamentoHoras = antecedencia.horasRestantes;
+      break;
+    }
+    case 'concluido': {
+      atualizado.concluidoEm = dataReferenciaIso;
+      break;
+    }
+    case 'reagendado': {
+      atualizado.reagendadoEm = dataReferenciaIso;
+      if (parsed.motivo) {
+        atualizado.motivoCancelamento = parsed.motivo;
+      }
+      break;
+    }
+    case 'confirmado':
+    case 'em_andamento':
+    case 'pendente':
+    default:
+      break;
+  }
+
+  const salvo = await repo.atualizar(atualizado);
+
+  if (notificacoesRepo) {
+    if (parsed.novoStatus === 'cancelado') {
+      await criarNotificacaoCancelamento(
+        salvo,
+        salvo.sinalRetido ?? false,
+        notificacoesRepo,
+        parsed.motivo,
+        salvo.classificacaoCancelamento,
+      );
+    } else if (parsed.novoStatus === 'falta') {
+      await criarNotificacaoCancelamento(
+        salvo,
+        true,
+        notificacoesRepo,
+        parsed.motivo || 'Falta registrada pela administração da clínica',
+        'tardio',
+      );
+    }
+  }
+
+  return salvo;
 }

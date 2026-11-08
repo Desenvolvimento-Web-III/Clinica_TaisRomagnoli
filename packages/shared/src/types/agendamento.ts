@@ -1,5 +1,5 @@
 export type StatusAgendamento =
-  'pendente' | 'confirmado' | 'em_andamento' | 'concluido' | 'cancelado' | 'falta';
+  'pendente' | 'confirmado' | 'em_andamento' | 'concluido' | 'cancelado' | 'reagendado' | 'falta';
 
 export type MetodoPagamento = 'pix' | 'cartao' | 'boleto' | 'dinheiro' | 'presencial';
 
@@ -35,6 +35,9 @@ export interface Agendamento {
   sinalIsento: boolean;
   observacoes?: string;
   canceladoEm?: string;
+  concluidoEm?: string;
+  reagendadoEm?: string;
+  faltaRegistradaEm?: string;
   motivoCancelamento?: string;
   sinalRetido?: boolean;
   classificacaoCancelamento?: ClassificacaoCancelamento;
