@@ -21,6 +21,7 @@ import {
   calcularPontosAtencao,
 } from '@/features/anamnese/data/initial-anamnese';
 import { fichaAnamneseSchema } from '@/features/anamnese/schemas/anamnese-schema';
+import { salvarFichaAnamneseApi } from '@/services/anamnese-service';
 import type {
   FichaAnamneseData,
   CondicaoSaudeItem,
@@ -157,6 +158,14 @@ export function FichaAnamnesePage() {
           pontosAtencao: pontos,
         }),
       );
+
+      if (currentUser?.uid) {
+        try {
+          await salvarFichaAnamneseApi(formData, currentUser.uid);
+        } catch {
+          // Mantém persistência local caso ocorra falha de rede ou backend indisponível
+        }
+      }
 
       markClientNotificationAsRead(currentUser?.uid, ANAMNESE_NOTIFICATION_ID);
 

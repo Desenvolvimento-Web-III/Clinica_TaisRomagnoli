@@ -79,6 +79,8 @@ import {
   atualizarProfissional,
   vincularProfissionalAoServicoEndpoint,
   atualizarStatusAgendamento,
+  salvarFichaAnamnese,
+  obterFichaAnamnese,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -217,6 +219,16 @@ describe('[Backend] Validação de ID Token nas Cloud Functions protegidas', () 
       name: 'atualizarStatusAgendamento',
       handler: atualizarStatusAgendamento,
       method: 'POST',
+    },
+    {
+      name: 'salvarFichaAnamnese',
+      handler: salvarFichaAnamnese,
+      method: 'POST',
+    },
+    {
+      name: 'obterFichaAnamnese',
+      handler: obterFichaAnamnese,
+      method: 'GET',
     },
   ];
 

@@ -58,6 +58,12 @@ import {
   vincularProfissionalAoServico as vincularProfissionalAoServicoService,
 } from './modules/profissionais/profissionais-service.js';
 import { listarServicosCatalogPorProfissional } from './modules/servicos/servicos-service.js';
+import { FirestoreAnamneseRepository } from './modules/anamnese/anamnese-repository.js';
+import {
+  AnamneseBusinessError,
+  salvarFichaAnamneseService,
+  obterFichaAnamneseService,
+} from './modules/anamnese/anamnese-service.js';
 
 initializeApp();
 
@@ -115,6 +121,16 @@ export {
   listarClientes,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
+export {
+  FirestoreAnamneseRepository,
+  InMemoryAnamneseRepository,
+} from './modules/anamnese/anamnese-repository.js';
+export {
+  AnamneseBusinessError,
+  salvarFichaAnamneseService,
+  obterFichaAnamneseService,
+} from './modules/anamnese/anamnese-service.js';
+export type { AnamneseRepository } from './modules/anamnese/anamnese-repository.js';
 import {
   atribuirFuncaoAdministrativa as atribuirFuncaoAdministrativaService,
   definirAdministradoraInicial,
@@ -232,7 +248,8 @@ function responderErroNegocio(
     error instanceof SessaoBusinessError ||
     error instanceof AgendaBloqueiosBusinessError ||
     error instanceof HorariosBusinessError ||
-    error instanceof ProfissionalBusinessError
+    error instanceof ProfissionalBusinessError ||
+    error instanceof AnamneseBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
@@ -1750,5 +1767,101 @@ export const listarServicosProfissional = onRequest({ cors: true }, async (reque
     }
     console.error('Erro ao listar serviços do profissional:', error);
     response.status(500).json({ error: 'Erro interno ao listar serviços do profissional.' });
+  }
+});
+
+/**
+ * Endpoint para salvar ou atualizar a ficha de anamnese do cliente.
+ * Apenas o próprio cliente titular ou a administradora têm permissão de acesso.
+ */
+export const salvarFichaAnamnese = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PUT') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PUT.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreAnamneseRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+
+    const payload = request.body || {};
+    const clienteId = payload.clienteId || (!user.isAdmin ? user.uid : undefined);
+    const dados = payload.dados || payload;
+
+    const fichaSalva = await salvarFichaAnamneseService({
+      input: { clienteId, dados },
+      usuarioAutenticado: user,
+      repo,
+      notifRepo,
+    });
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: 'Ficha de anamnese salva com sucesso.',
+      dados: fichaSalva,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao salvar ficha de anamnese:', error);
+    response.status(500).json({ error: 'Erro interno ao salvar ficha de anamnese.' });
+  }
+});
+
+/**
+ * Endpoint para consultar a ficha de anamnese de um cliente.
+ * Apenas o próprio cliente titular ou a administradora têm permissão de acesso.
+ */
+export const obterFichaAnamnese = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+
+    const clienteId =
+      (request.query['clienteId'] as string) ||
+      (request.query['uid'] as string) ||
+      (!user.isAdmin ? user.uid : '');
+
+    if (!clienteId) {
+      response
+        .status(400)
+        .json({ error: 'O parâmetro clienteId é obrigatório para administradores.' });
+      return;
+    }
+
+    const firestore = getFirestore();
+    const repo = new FirestoreAnamneseRepository(firestore);
+
+    const ficha = await obterFichaAnamneseService({
+      clienteId,
+      usuarioAutenticado: user,
+      repo,
+    });
+
+    if (!ficha) {
+      response
+        .status(404)
+        .json({ error: 'Ficha de anamnese não encontrada para o cliente informado.' });
+      return;
+    }
+
+    response.status(200).json({
+      sucesso: true,
+      dados: ficha,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao consultar ficha de anamnese:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar ficha de anamnese.' });
   }
 });
