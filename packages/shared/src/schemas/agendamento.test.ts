@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   solicitarAgendamentoInputSchema,
   cancelarAgendamentoInputSchema,
+  atualizarStatusAgendamentoInputSchema,
+  statusAgendamentoSchema,
+  validarTransicaoStatus,
   calcularValoresAgendamento,
   calcularDataHoraFim,
   verificarConflitoHorarios,
@@ -193,6 +196,107 @@ describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
       expect(resultado.classificacao).toBe('tardio');
       expect(resultado.sinalRetido).toBe(true);
       expect(resultado.sinalDisponivelReagendamento).toBe(false);
+    });
+  });
+
+  describe('Controle de Estados do Agendamento (Máquina de Estados)', () => {
+    describe('statusAgendamentoSchema', () => {
+      it('aceita todos os estados válidos definidos no ciclo de vida', () => {
+        const estadosValidos = [
+          'pendente',
+          'confirmado',
+          'em_andamento',
+          'concluido',
+          'cancelado',
+          'reagendado',
+          'falta',
+        ];
+
+        estadosValidos.forEach((status) => {
+          expect(statusAgendamentoSchema.safeParse(status).success).toBe(true);
+        });
+      });
+
+      it('rejeita estados inexistentes ou inválidos', () => {
+        const invalidos = ['aguardando', 'finalizado', 'remarcado', '', 'null'];
+        invalidos.forEach((status) => {
+          expect(statusAgendamentoSchema.safeParse(status).success).toBe(false);
+        });
+      });
+    });
+
+    describe('validarTransicaoStatus', () => {
+      it('permite manter o mesmo status (idempotente)', () => {
+        expect(validarTransicaoStatus('confirmado', 'confirmado').valida).toBe(true);
+        expect(validarTransicaoStatus('pendente', 'pendente').valida).toBe(true);
+      });
+
+      it('permite transições válidas a partir de "pendente"', () => {
+        expect(validarTransicaoStatus('pendente', 'confirmado').valida).toBe(true);
+        expect(validarTransicaoStatus('pendente', 'cancelado').valida).toBe(true);
+        expect(validarTransicaoStatus('pendente', 'reagendado').valida).toBe(true);
+        expect(validarTransicaoStatus('pendente', 'concluido').valida).toBe(false);
+        expect(validarTransicaoStatus('pendente', 'falta').valida).toBe(false);
+      });
+
+      it('permite transições válidas a partir de "confirmado"', () => {
+        expect(validarTransicaoStatus('confirmado', 'em_andamento').valida).toBe(true);
+        expect(validarTransicaoStatus('confirmado', 'concluido').valida).toBe(true);
+        expect(validarTransicaoStatus('confirmado', 'cancelado').valida).toBe(true);
+        expect(validarTransicaoStatus('confirmado', 'reagendado').valida).toBe(true);
+        expect(validarTransicaoStatus('confirmado', 'falta').valida).toBe(true);
+        expect(validarTransicaoStatus('confirmado', 'pendente').valida).toBe(false);
+      });
+
+      it('permite transições válidas a partir de "em_andamento"', () => {
+        expect(validarTransicaoStatus('em_andamento', 'concluido').valida).toBe(true);
+        expect(validarTransicaoStatus('em_andamento', 'cancelado').valida).toBe(true);
+        expect(validarTransicaoStatus('em_andamento', 'falta').valida).toBe(true);
+        expect(validarTransicaoStatus('em_andamento', 'confirmado').valida).toBe(false);
+        expect(validarTransicaoStatus('em_andamento', 'pendente').valida).toBe(false);
+      });
+
+      it('bloqueia transições a partir de estados terminais', () => {
+        const estadosTerminais: Array<'concluido' | 'cancelado' | 'falta' | 'reagendado'> = [
+          'concluido',
+          'cancelado',
+          'falta',
+          'reagendado',
+        ];
+
+        estadosTerminais.forEach((terminal) => {
+          expect(validarTransicaoStatus(terminal, 'confirmado').valida).toBe(false);
+          expect(validarTransicaoStatus(terminal, 'pendente').valida).toBe(false);
+          expect(validarTransicaoStatus(terminal, 'em_andamento').valida).toBe(false);
+        });
+      });
+    });
+
+    describe('atualizarStatusAgendamentoInputSchema', () => {
+      it('valida payload com agendamentoId e novoStatus', () => {
+        const res = atualizarStatusAgendamentoInputSchema.safeParse({
+          agendamentoId: 'ag-123',
+          novoStatus: 'falta',
+          motivo: 'Paciente não compareceu',
+        });
+        expect(res.success).toBe(true);
+      });
+
+      it('rejeita payload sem agendamentoId ou com status inválido', () => {
+        expect(
+          atualizarStatusAgendamentoInputSchema.safeParse({
+            agendamentoId: '',
+            novoStatus: 'concluido',
+          }).success,
+        ).toBe(false);
+
+        expect(
+          atualizarStatusAgendamentoInputSchema.safeParse({
+            agendamentoId: 'ag-123',
+            novoStatus: 'status_invalido',
+          }).success,
+        ).toBe(false);
+      });
     });
   });
 });

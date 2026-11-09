@@ -92,3 +92,70 @@ test('mantém os formulários de acesso sem rolagem horizontal no mobile e no de
     }
   }
 });
+
+test('renderiza estrutura global mobile-first com skip-link, landmarks e rodapé responsivo', async ({
+  page,
+}) => {
+  // 1. Mobile (375x667)
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/servicos');
+
+  // Skip link acessível
+  const skipLink = page.getByRole('link', { name: 'Pular para o conteúdo principal' });
+  await expect(skipLink).toHaveAttribute('href', '#main-content');
+
+  // Landmark principal com id
+  const main = page.locator('main#main-content');
+  await expect(main).toBeVisible();
+
+  // Rodapé institucional presente
+  const footer = page.getByRole('contentinfo', { name: 'Rodapé institucional' });
+  await expect(footer).toBeVisible();
+  await expect(footer.getByText('Tais Romagnoli — Massoterapia')).toBeVisible();
+
+  // Navegação móvel ativa e cabeçalho desktop oculto
+  await expect(page.getByTestId('mobile-navigation')).toBeVisible();
+
+  // 2. Desktop (1280x800)
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/servicos');
+
+  // Navegação desktop visível e barra inferior oculta
+  await expect(page.getByRole('navigation', { name: 'Navegação principal' }).first()).toBeVisible();
+  await expect(page.getByTestId('mobile-navigation')).toBeHidden();
+
+  // Rodapé institucional visível
+  await expect(footer).toBeVisible();
+  await expect(footer.getByText(/Todos os direitos reservados/)).toBeVisible();
+});
+
+test('disponibiliza navegação pública para serviços, início do agendamento, login e cadastro', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/servicos');
+
+  // Verifica acesso a cadastro
+  const cadastroBtn = page.getByRole('link', { name: 'Cadastre-se' });
+  await expect(cadastroBtn).toBeVisible();
+  await cadastroBtn.click();
+  await expect(page).toHaveURL(/\/cadastro$/);
+  await expect(page.getByRole('heading', { name: 'Crie sua conta' })).toBeVisible();
+
+  // Verifica acesso a login a partir da página de cadastro ou cabeçalho
+  const loginLink = page.getByRole('link', { name: 'Entre' });
+  await loginLink.click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'Entre na sua conta' })).toBeVisible();
+
+  // Retorna para serviços e inicia agendamento pela navegação pública
+  await page.goto('/servicos');
+  const agendarNav = page
+    .getByRole('navigation', { name: 'Navegação principal' })
+    .getByRole('link', { name: 'Agendar' });
+  await expect(agendarNav).toBeVisible();
+  await agendarNav.click();
+  await expect(page).toHaveURL(/\/agendar/);
+  await expect(page.getByRole('heading', { name: 'Calendário' })).toBeVisible();
+  await expect(page.getByTestId('booking-calendar-container')).toBeVisible();
+});

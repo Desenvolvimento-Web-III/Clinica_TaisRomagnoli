@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ClassificacaoCancelamento } from '../types/agendamento.js';
+import type { ClassificacaoCancelamento, StatusAgendamento } from '../types/agendamento.js';
 
 export const statusAgendamentoSchema = z.enum([
   'pendente',
@@ -7,8 +7,45 @@ export const statusAgendamentoSchema = z.enum([
   'em_andamento',
   'concluido',
   'cancelado',
+  'reagendado',
   'falta',
 ]);
+
+/**
+ * Matriz de transições válidas de status de agendamento.
+ * Estados terminais: 'concluido', 'cancelado', 'falta', 'reagendado'.
+ */
+export const TRANSOES_STATUS_VALIDAS: Record<StatusAgendamento, StatusAgendamento[]> = {
+  pendente: ['confirmado', 'cancelado', 'reagendado'],
+  confirmado: ['em_andamento', 'concluido', 'cancelado', 'reagendado', 'falta'],
+  em_andamento: ['concluido', 'cancelado', 'falta'],
+  concluido: [],
+  cancelado: [],
+  falta: [],
+  reagendado: [],
+};
+
+/**
+ * Valida se uma transição de status é permitida pela máquina de estados do agendamento.
+ */
+export function validarTransicaoStatus(
+  statusAtual: StatusAgendamento,
+  novoStatus: StatusAgendamento,
+): { valida: boolean; erro?: string } {
+  if (statusAtual === novoStatus) {
+    return { valida: true };
+  }
+
+  const permitidos = TRANSOES_STATUS_VALIDAS[statusAtual];
+  if (!permitidos || !permitidos.includes(novoStatus)) {
+    return {
+      valida: false,
+      erro: `Transição de status inválida: não é permitido alterar de '${statusAtual}' para '${novoStatus}'.`,
+    };
+  }
+
+  return { valida: true };
+}
 
 export const metodoPagamentoSchema = z.enum(['pix', 'cartao', 'boleto', 'dinheiro', 'presencial']);
 
@@ -44,6 +81,15 @@ export const cancelarAgendamentoInputSchema = z.object({
 
 export type CancelarAgendamentoInput = z.infer<typeof cancelarAgendamentoInputSchema>;
 
+export const atualizarStatusAgendamentoInputSchema = z.object({
+  agendamentoId: z.string().min(1, 'ID do agendamento é obrigatório.'),
+  novoStatus: statusAgendamentoSchema,
+  motivo: z.string().max(300, 'Motivo não pode exceder 300 caracteres.').optional(),
+  observacoes: z.string().max(500, 'Observações não podem exceder 500 caracteres.').optional(),
+});
+
+export type AtualizarStatusAgendamentoInput = z.infer<typeof atualizarStatusAgendamentoInputSchema>;
+
 export const agendamentoSchema = z.object({
   id: z.string().min(1),
   clienteId: z.string().min(1),
@@ -67,6 +113,9 @@ export const agendamentoSchema = z.object({
   sinalIsento: z.boolean(),
   observacoes: z.string().optional(),
   canceladoEm: z.string().optional(),
+  concluidoEm: z.string().optional(),
+  reagendadoEm: z.string().optional(),
+  faltaRegistradaEm: z.string().optional(),
   motivoCancelamento: z.string().optional(),
   sinalRetido: z.boolean().optional(),
   createdAt: z.string(),

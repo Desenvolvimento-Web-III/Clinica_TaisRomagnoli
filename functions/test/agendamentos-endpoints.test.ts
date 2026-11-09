@@ -19,7 +19,7 @@ vi.mock('firebase-admin/firestore', () => ({
 }));
 
 // Import endpoints after mocks
-import { cancelarAgendamento } from '../src/index.js';
+import { cancelarAgendamento, atualizarStatusAgendamento } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
 
@@ -303,5 +303,110 @@ describe('cancelarAgendamento endpoint HTTP', () => {
     expect(dados.classificacaoCancelamento).toBe('tardio');
     expect(dados.sinalRetido).toBe(true);
     expect(dados.sinalDisponivelReagendamento).toBe(false);
+  });
+
+  describe('POST /atualizarStatusAgendamento', () => {
+    it('retorna 405 se o método não for POST ou PATCH', async () => {
+      const req = createMockRequest({ method: 'GET' });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(405);
+      expect(res.body?.error).toContain('Método não permitido');
+    });
+
+    it('retorna 401 se a requisição não tiver header de autorização', async () => {
+      const req = createMockRequest({ method: 'POST', headers: {} });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(401);
+      expect(res.body?.error).toContain('Acesso não autenticado');
+    });
+
+    it('retorna 403 se usuário autenticado não for administradora', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'cliente-123',
+        email: 'cliente@exemplo.com',
+        role: 'client',
+        admin: false,
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-cliente' },
+        body: { agendamentoId: 'ag-1', novoStatus: 'concluido' },
+      });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body?.error).toContain('Acesso negado');
+    });
+
+    it('atualiza status com sucesso quando solicitada por administradora', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-1',
+        email: 'admin@clinicataisromagnoli.com.br',
+        role: 'admin',
+        admin: true,
+      });
+
+      const mockDocSet = vi.fn().mockResolvedValue(undefined);
+      const mockDocUpdate = vi.fn().mockResolvedValue(undefined);
+      const mockDocRef: Record<string, unknown> = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          id: 'ag-1',
+          data: () => ({
+            id: 'ag-1',
+            clienteId: 'cliente-titular',
+            clienteNome: 'Mariana Souza',
+            servicoNome: 'Massagem Relaxante',
+            status: 'confirmado',
+            dataHoraInicio: '2026-11-20T10:00:00.000Z',
+            dataHoraFim: '2026-11-20T11:00:00.000Z',
+            duracaoMinutos: 60,
+            intervaloAposMinutos: 30,
+            valorTotalEmCentavos: 10000,
+            valorSinalEmCentavos: 3000,
+            saldoRestanteEmCentavos: 7000,
+            profissionalId: 'prof-tais-romagnoli',
+            profissionalNome: 'Tais Romagnoli',
+            metodoPagamento: 'pix',
+            origem: 'app_cliente',
+            sinalIsento: false,
+            createdAt: '2026-11-01T10:00:00.000Z',
+            updatedAt: '2026-11-01T10:00:00.000Z',
+          }),
+        }),
+        set: mockDocSet,
+        update: mockDocUpdate,
+      };
+      mockDocRef['collection'] = vi.fn().mockReturnValue({
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      });
+
+      mockFirestore.collection.mockReturnValue({
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: { agendamentoId: 'ag-1', novoStatus: 'concluido' },
+      });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const dados = res.body?.dados as Record<string, unknown>;
+      expect(dados.status).toBe('concluido');
+      expect(dados.concluidoEm).toBeDefined();
+    });
   });
 });

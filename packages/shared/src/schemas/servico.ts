@@ -74,6 +74,11 @@ export const servicoInputSchema = z
       .max(1000, 'A descrição deve ter no máximo 1000 caracteres'),
     ativo: z.boolean().default(true),
     categoria: z.string().trim().max(50, 'A categoria deve ter no máximo 50 caracteres').optional(),
+    profissionaisHabilitados: z
+      .array(z.string().trim().min(1, 'ID do profissional não pode ser vazio.'))
+      .optional()
+      .default(['prof-tais-romagnoli']),
+    profissionalPadraoId: z.string().trim().min(1).optional().default('prof-tais-romagnoli'),
   })
   .refine(
     (data) => {
@@ -144,6 +149,8 @@ export interface ServicoModel {
   categoria?: string;
   imageSrc?: string;
   imageAlt?: string;
+  profissionaisHabilitados?: string[];
+  profissionalPadraoId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -170,6 +177,11 @@ export const servicoDatabaseSchema = z
     categoria: z.string().trim().optional(),
     imageSrc: z.string().optional(),
     imageAlt: z.string().optional(),
+    profissionaisHabilitados: z
+      .array(z.string().trim().min(1))
+      .optional()
+      .default(['prof-tais-romagnoli']),
+    profissionalPadraoId: z.string().trim().min(1).optional().default('prof-tais-romagnoli'),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
   })
@@ -219,6 +231,8 @@ export const servicoFirestoreDocumentSchema = z.object({
   category: z.string().optional(),
   imageSrc: z.string().optional(),
   imageAlt: z.string().optional(),
+  profissionaisHabilitados: z.array(z.string()).optional(),
+  profissionalPadraoId: z.string().optional(),
   createdAt: z.unknown().optional(),
   updatedAt: z.unknown().optional(),
 });

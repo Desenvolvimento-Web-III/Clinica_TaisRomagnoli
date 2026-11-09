@@ -2,6 +2,8 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { User } from 'firebase/auth';
+import { DEFAULT_CLINIC_SETTINGS } from '@clinica/shared';
+import * as settingsService from '@/services/clinic-settings-service';
 import { AdminDashboardPage } from './AdminDashboardPage';
 import { useAuth } from '@/features/auth/auth-context';
 
@@ -14,6 +16,9 @@ describe('AdminDashboardPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
+      DEFAULT_CLINIC_SETTINGS,
+    );
     vi.mocked(useAuth).mockReturnValue({
       currentUser: {
         uid: 'admin-1',

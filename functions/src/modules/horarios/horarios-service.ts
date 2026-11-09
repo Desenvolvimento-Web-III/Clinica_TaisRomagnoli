@@ -3,12 +3,31 @@ import {
   CONFIGURACAO_HORARIOS_PADRAO,
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
+  consultarHorariosDisponiveisInputSchema,
+  gerarHorariosDisponiveis,
+  verificarProfissionalHabilitadoParaServico,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
+  type SlotDisponivel,
 } from '@clinica/shared';
+import type { AgendamentosRepository } from '../agendamentos/agendamentos-repository.js';
+import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
+import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
+import type { ServicosRepository } from '../servicos/servicos-repository.js';
+import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
 export const HORARIOS_DOCUMENT = 'horarios_funcionamento';
+
+export class HorariosBusinessError extends Error {
+  constructor(
+    message: string,
+    public statusCode = 400,
+  ) {
+    super(message);
+    this.name = 'HorariosBusinessError';
+  }
+}
 
 /**
  * Obtém a configuração de horários de funcionamento.
@@ -61,4 +80,111 @@ export async function salvarHorarios(
   await docRef.set(dadosComAuditoria, { merge: true });
 
   return dadosComAuditoria;
+}
+
+export interface ResultadoGradeHorariosDisponiveis {
+  data: string;
+  duracaoMinutos: number;
+  intervaloMinutos: number;
+  slots: SlotDisponivel[];
+  horarios: string[];
+}
+
+/**
+ * Consulta a grade de horários disponíveis aplicando rigorosamente a duração do serviço
+ * e o intervalo padrão de 30 minutos de organização entre sessões.
+ */
+export async function consultarGradeHorariosDisponiveis(
+  input: unknown,
+  firestore: Firestore,
+  agendamentosRepo: AgendamentosRepository,
+  bloqueiosRepo: BloqueiosRepository,
+  horariosFixosRepo: HorariosFixosRepository,
+  servicosRepo?: ServicosRepository,
+  clienteIdSolicitante?: string,
+  profissionaisRepo?: ProfissionaisRepository,
+): Promise<ResultadoGradeHorariosDisponiveis> {
+  const parsed = consultarHorariosDisponiveisInputSchema.parse(input);
+  const profissionalId = parsed.profissionalId || 'prof-tais-romagnoli';
+
+  if (profissionaisRepo) {
+    const profissional = await profissionaisRepo.buscarPorId(profissionalId);
+    if (!profissional) {
+      throw new HorariosBusinessError('Profissional informado não encontrado.', 404);
+    }
+    if (!profissional.ativo) {
+      throw new HorariosBusinessError(
+        'O profissional informado não está ativo para agendamentos.',
+        422,
+      );
+    }
+  }
+
+  let duracaoMinutos = parsed.duracaoMinutos;
+
+  if (parsed.servicoId) {
+    if (servicosRepo) {
+      const servico = await servicosRepo.buscarPorId(parsed.servicoId);
+      if (!servico) {
+        throw new HorariosBusinessError('Serviço informado não encontrado.', 404);
+      }
+      if (!servico.ativo) {
+        throw new HorariosBusinessError(
+          'O procedimento selecionado está desativado e não aceita novos agendamentos.',
+          422,
+        );
+      }
+      if (!verificarProfissionalHabilitadoParaServico(servico, profissionalId)) {
+        throw new HorariosBusinessError(
+          'O profissional selecionado não realiza o procedimento solicitado.',
+          422,
+        );
+      }
+      duracaoMinutos = servico.duracaoMinutos;
+    } else if (!duracaoMinutos) {
+      throw new HorariosBusinessError(
+        'Duração do serviço não informada e catálogo indisponível.',
+        400,
+      );
+    }
+  }
+
+  if (!duracaoMinutos) {
+    throw new HorariosBusinessError(
+      'É obrigatório informar a duração do atendimento em minutos ou o ID do serviço.',
+      400,
+    );
+  }
+
+  const config = await obterHorarios(firestore, profissionalId);
+
+  const agendamentos = await agendamentosRepo.listarPorProfissionalEData(
+    profissionalId,
+    parsed.data,
+  );
+
+  const [bloqueios, horariosFixos] = await Promise.all([
+    bloqueiosRepo.listarAtivos(profissionalId),
+    horariosFixosRepo.listarAtivos(profissionalId),
+  ]);
+
+  const slots = gerarHorariosDisponiveis({
+    data: parsed.data,
+    duracaoMinutos,
+    intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
+    passoMinutos: parsed.passoMinutos ?? 30,
+    configuracaoHorarios: config,
+    agendamentosExistentes: agendamentos,
+    bloqueios,
+    horariosFixos,
+    clienteIdSolicitante,
+  });
+
+  return {
+    data: parsed.data,
+    duracaoMinutos,
+    intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
+    slots,
+    horarios: slots.map((s) => s.horaInicio),
+  };
 }

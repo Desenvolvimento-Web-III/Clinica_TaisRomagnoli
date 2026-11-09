@@ -160,6 +160,45 @@ describe('Auth Middleware reutilizável de autenticação', () => {
       });
     });
 
+    it('converte erro auth/user-disabled para AuthError 403 amigável', async () => {
+      mockVerifyIdToken.mockRejectedValueOnce({ code: 'auth/user-disabled' });
+
+      await expect(validarIdToken('token-desativado', mockVerifier)).rejects.toMatchObject({
+        statusCode: 403,
+        message: 'A conta do usuário foi desativada.',
+      });
+    });
+
+    it('converte erro auth/user-not-found para AuthError 401 amigável', async () => {
+      mockVerifyIdToken.mockRejectedValueOnce({ code: 'auth/user-not-found' });
+
+      await expect(validarIdToken('token-nao-encontrado', mockVerifier)).rejects.toMatchObject({
+        statusCode: 401,
+        message: 'Usuário associado ao token não encontrado.',
+      });
+    });
+
+    it('lança erro 401 se idToken for vazio ou apenas espaços', async () => {
+      await expect(validarIdToken('', mockVerifier)).rejects.toMatchObject({
+        statusCode: 401,
+        message: 'Token de autenticação ausente ou inválido.',
+      });
+      await expect(validarIdToken('   ', mockVerifier)).rejects.toMatchObject({
+        statusCode: 401,
+        message: 'Token de autenticação ausente ou inválido.',
+      });
+    });
+
+    it('repassa o parâmetro checkRevoked para verifyIdToken', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'user-revoked-check',
+        email: 'user@teste.com',
+      });
+
+      await validarIdToken('token-check', mockVerifier, true);
+      expect(mockVerifyIdToken).toHaveBeenCalledWith('token-check', true);
+    });
+
     it('converte outro erro qualquer na verificação para AuthError 401', async () => {
       mockVerifyIdToken.mockRejectedValueOnce(new Error('Falha de rede'));
 

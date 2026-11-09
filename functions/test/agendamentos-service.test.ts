@@ -3,12 +3,22 @@ import {
   solicitarNovoAgendamento,
   alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
+  atualizarStatusAgendamento,
   listarAgendamentos,
   AgendamentoBusinessError,
   type UserContext,
 } from '../src/modules/agendamentos/agendamentos-service.js';
 import { InMemoryAgendamentosRepository } from '../src/modules/agendamentos/agendamentos-repository.js';
 import { InMemoryNotificacoesRepository } from '../src/modules/notificacoes/notificacoes-repository.js';
+import { InMemoryBloqueiosRepository } from '../src/modules/agenda/bloqueios-repository.js';
+import { InMemoryHorariosFixosRepository } from '../src/modules/agenda/horarios-fixos-repository.js';
+import { InMemoryServicosRepository } from '../src/modules/servicos/servicos-repository.js';
+import { InMemoryProfissionaisRepository } from '../src/modules/profissionais/profissionais-repository.js';
+import {
+  CONFIGURACAO_HORARIOS_PADRAO,
+  ID_PROFISSIONAL_PADRAO,
+  type ServicoModel,
+} from '@clinica/shared';
 
 describe('Agendamentos Service (Functions Backend)', () => {
   let repo: InMemoryAgendamentosRepository;
@@ -154,6 +164,91 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       expect(agendamento2.id).toBeDefined();
+    });
+
+    it('rejeita agendamento quando a duração informada diverge da duração cadastrada no serviço', async () => {
+      const servicosRepo = new InMemoryServicosRepository();
+      const servicoMock: ServicoModel = {
+        id: 'serv-relaxante-60',
+        nome: 'Massagem Relaxante',
+        descricao: 'Massagem relaxante corporal',
+        duracaoMinutos: 60,
+        preco: 170,
+        sinal: 51,
+        ativo: true,
+        categoria: 'Relaxamento',
+        destaque: true,
+        ordemExibicao: 1,
+        slug: 'massagem-relaxante',
+        sinalPersonalizado: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      };
+      await servicosRepo.salvar(servicoMock);
+
+      // Tenta solicitar informando 45 minutos ao invés de 60
+      const input = {
+        servicoId: 'serv-relaxante-60',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 45,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(input, clienteUser, repo, notifRepo, servicosRepo),
+      ).rejects.toThrow(/não corresponde à duração cadastrada para o serviço/i);
+    });
+
+    it('rejeita agendamento fora dos turnos de funcionamento quando a configuração da clínica é validada', async () => {
+      // Início às 17:30 com 60 min ultrapassa o término do turno às 18:00
+      const input = {
+        servicoId: 'serv-qualquer',
+        servicoNome: 'Massagem',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 15000,
+        dataHoraInicio: '2026-10-22T17:30:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          CONFIGURACAO_HORARIOS_PADRAO,
+        ),
+      ).rejects.toThrow(/ultrapassa os turnos de atendimento da clínica/i);
+    });
+
+    it('rejeita agendamento durante intervalo de manutenção (almoço/higienização)', async () => {
+      // Intervalo de manutenção de 12:00 às 14:00
+      const input = {
+        servicoId: 'serv-qualquer',
+        servicoNome: 'Massagem',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 15000,
+        dataHoraInicio: '2026-10-22T12:30:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          CONFIGURACAO_HORARIOS_PADRAO,
+        ),
+      ).rejects.toThrow(/ultrapassa os turnos de atendimento/i);
     });
   });
 
@@ -564,6 +659,581 @@ describe('Agendamentos Service (Functions Backend)', () => {
           dataRef,
         ),
       ).rejects.toThrow(AgendamentoBusinessError);
+    });
+
+    it('impede solicitação de agendamento que colide com bloqueio único ativo na agenda', async () => {
+      const bloqueiosRepo = new InMemoryBloqueiosRepository();
+      const horariosFixosRepo = new InMemoryHorariosFixosRepository();
+
+      await bloqueiosRepo.salvar({
+        id: 'bl-1',
+        tipo: 'unico',
+        data: '2026-10-22',
+        horaInicio: '14:00',
+        horaFim: '16:00',
+        diaInteiro: false,
+        motivo: 'Manutenção da sala de massoterapia',
+        profissionalId: 'default',
+        ativo: true,
+        criadoPor: 'admin-1',
+        criadoEm: '2026-10-01T00:00:00.000Z',
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T14:30:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          bloqueiosRepo,
+          horariosFixosRepo,
+        ),
+      ).rejects.toThrow(/bloqueio pontual/);
+    });
+
+    it('impede agendamento que colide com horário fixo reservado para outro cliente', async () => {
+      const bloqueiosRepo = new InMemoryBloqueiosRepository();
+      const horariosFixosRepo = new InMemoryHorariosFixosRepository();
+
+      // 2026-10-22 é quinta-feira (dia 4)
+      await horariosFixosRepo.salvar({
+        id: 'fixo-1',
+        clienteId: 'outro-cliente-titular',
+        clienteNome: 'Beatriz Silva',
+        diaSemana: 4,
+        horaInicio: '10:00',
+        horaFim: '11:00',
+        frequencia: 'semanal',
+        dataInicio: '2026-10-01',
+        profissionalId: 'default',
+        ativo: true,
+        criadoPor: 'admin-1',
+        criadoEm: '2026-10-01T00:00:00.000Z',
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          bloqueiosRepo,
+          horariosFixosRepo,
+        ),
+      ).rejects.toThrow(/cliente fixo/);
+    });
+
+    it('permite agendamento quando o solicitante for o próprio titular do horário fixo', async () => {
+      const bloqueiosRepo = new InMemoryBloqueiosRepository();
+      const horariosFixosRepo = new InMemoryHorariosFixosRepository();
+
+      await horariosFixosRepo.salvar({
+        id: 'fixo-2',
+        clienteId: 'user-cliente-1', // Mesmo uid do clienteUser
+        clienteNome: 'Mariana Souza',
+        diaSemana: 4,
+        horaInicio: '10:00',
+        horaFim: '11:00',
+        frequencia: 'semanal',
+        dataInicio: '2026-10-01',
+        profissionalId: 'default',
+        ativo: true,
+        criadoPor: 'admin-1',
+        criadoEm: '2026-10-01T00:00:00.000Z',
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      const ag = await solicitarNovoAgendamento(
+        input,
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        bloqueiosRepo,
+        horariosFixosRepo,
+      );
+
+      expect(ag.id).toBeDefined();
+      expect(ag.status).toBe('pendente');
+    });
+  });
+
+  describe('Validações de Vínculo com Profissionais', () => {
+    let profissionaisRepo: InMemoryProfissionaisRepository;
+    let servicosRepo: InMemoryServicosRepository;
+
+    const servicoMassagem: ServicoModel = {
+      id: 'massagem-relaxante',
+      nome: 'Massagem Relaxante',
+      duracaoMinutos: 60,
+      preco: 170,
+      precoEmCentavos: 17000,
+      sinal: 51,
+      sinalEmCentavos: 5100,
+      sinalPercentual: 30,
+      descricao: 'Relaxamento muscular',
+      ativo: true,
+      profissionaisHabilitados: [ID_PROFISSIONAL_PADRAO],
+      profissionalPadraoId: ID_PROFISSIONAL_PADRAO,
+    };
+
+    beforeEach(async () => {
+      profissionaisRepo = new InMemoryProfissionaisRepository(true);
+      servicosRepo = new InMemoryServicosRepository();
+      await servicosRepo.salvar(servicoMassagem);
+    });
+
+    it('vincula com sucesso o agendamento ao profissional cadastrado e preenche o nome oficial', async () => {
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z', // Quarta-feira
+        metodoPagamento: 'pix' as const,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Nome Qualquer Submetido',
+      };
+
+      const ag = await solicitarNovoAgendamento(
+        input,
+        clienteUser,
+        repo,
+        notifRepo,
+        servicosRepo,
+        undefined,
+        undefined,
+        undefined,
+        profissionaisRepo,
+      );
+
+      expect(ag.profissionalId).toBe(ID_PROFISSIONAL_PADRAO);
+      expect(ag.profissionalNome).toBe('Tais Romagnoli'); // Nome oficial do cadastro
+    });
+
+    it('rejeita agendamento se o profissional selecionado não existir (404)', async () => {
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: 'prof-inexistente',
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('Profissional selecionado não encontrado.');
+    });
+
+    it('rejeita agendamento se o profissional estiver inativo (422)', async () => {
+      await profissionaisRepo.salvar({
+        id: 'prof-inativo',
+        nome: 'Profissional Inativo',
+        especialidade: 'Massoterapeuta',
+        ativo: false,
+        diasFolga: [0],
+        intervaloMinutos: 30,
+        createdAt: new Date().toISOString(),
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: 'prof-inativo',
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('O profissional selecionado não está ativo para agendamentos.');
+    });
+
+    it('rejeita agendamento se for em dia de folga cadastrado para o profissional (422)', async () => {
+      // Tais Romagnoli folga domingo (0) e terça (2)
+      // 2026-10-20 foi uma terça-feira
+      const inputTerca = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-20T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          inputTerca,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('folga cadastrada');
+    });
+
+    it('rejeita agendamento se o profissional selecionado não realizar o procedimento solicitado (422)', async () => {
+      await profissionaisRepo.salvar({
+        id: 'prof-acupuntura',
+        nome: 'Mariana Acupunturista',
+        especialidade: 'Acupuntura',
+        ativo: true,
+        diasFolga: [0],
+        intervaloMinutos: 30,
+        createdAt: new Date().toISOString(),
+      });
+
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-21T14:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+        profissionalId: 'prof-acupuntura', // Não está em profissionaisHabilitados do serviço
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          notifRepo,
+          servicosRepo,
+          undefined,
+          undefined,
+          undefined,
+          profissionaisRepo,
+        ),
+      ).rejects.toThrow('O profissional selecionado não realiza o procedimento solicitado.');
+    });
+
+    it('valida o novo profissional ao alterar/reagendar um agendamento', async () => {
+      await profissionaisRepo.salvar({
+        id: 'prof-camila',
+        nome: 'Camila Massagens',
+        especialidade: 'Massoterapeuta',
+        ativo: true,
+        diasFolga: [0],
+        intervaloMinutos: 30,
+        createdAt: new Date().toISOString(),
+      });
+
+      await servicosRepo.salvar({
+        ...servicoMassagem,
+        profissionaisHabilitados: [ID_PROFISSIONAL_PADRAO, 'prof-camila'],
+      });
+
+      // Cria agendamento inicial com Tais
+      const agOriginal = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-21T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+          profissionalId: ID_PROFISSIONAL_PADRAO,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        servicosRepo,
+        undefined,
+        undefined,
+        undefined,
+        profissionaisRepo,
+      );
+
+      // Reagenda para quinta-feira trocando profissional para Camila
+      const reagendado = await alterarAgendamentoExistente(
+        {
+          agendamentoId: agOriginal.id,
+          novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
+          novoProfissionalId: 'prof-camila',
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        new Date('2026-10-20T10:00:00.000Z'),
+        undefined,
+        undefined,
+        undefined,
+        profissionaisRepo,
+        servicosRepo,
+      );
+
+      expect(reagendado.profissionalId).toBe('prof-camila');
+      expect(reagendado.profissionalNome).toBe('Camila Massagens');
+    });
+  });
+
+  describe('atualizarStatusAgendamento', () => {
+    it('bloqueia usuário cliente comum de alterar status de agendamento (HTTP 403)', async () => {
+      await expect(
+        atualizarStatusAgendamento(
+          { agendamentoId: 'ag-1', novoStatus: 'concluido' },
+          clienteUser,
+          repo,
+        ),
+      ).rejects.toThrow('Acesso negado');
+    });
+
+    it('lança 404 se o agendamento não for encontrado', async () => {
+      await expect(
+        atualizarStatusAgendamento(
+          { agendamentoId: 'inexistente', novoStatus: 'confirmado' },
+          adminUser,
+          repo,
+        ),
+      ).rejects.toThrow('Agendamento não encontrado');
+    });
+
+    it('permite que a administradora confirme um agendamento pendente', async () => {
+      const agOriginal = await repo.salvar({
+        id: 'ag-pendente',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        dataHoraFim: '2026-10-22T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'pendente',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-20T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+      const atualizado = await atualizarStatusAgendamento(
+        { agendamentoId: agOriginal.id, novoStatus: 'confirmado' },
+        adminUser,
+        repo,
+      );
+
+      expect(atualizado.status).toBe('confirmado');
+    });
+
+    it('permite transicionar de confirmado para em_andamento e depois concluido', async () => {
+      const agOriginal = await repo.salvar({
+        id: 'ag-fluxo-conclusao',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        dataHoraFim: '2026-10-22T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'confirmado',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-20T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+      // 1. Inicia o atendimento
+      const emAndamento = await atualizarStatusAgendamento(
+        { agendamentoId: agOriginal.id, novoStatus: 'em_andamento' },
+        adminUser,
+        repo,
+      );
+      expect(emAndamento.status).toBe('em_andamento');
+
+      // 2. Conclui o atendimento
+      const concluido = await atualizarStatusAgendamento(
+        { agendamentoId: agOriginal.id, novoStatus: 'concluido' },
+        adminUser,
+        repo,
+      );
+      expect(concluido.status).toBe('concluido');
+      expect(concluido.concluidoEm).toBeDefined();
+    });
+
+    it('registra falta com retenção total do sinal e criação de notificação', async () => {
+      const agOriginal = await repo.salvar({
+        id: 'ag-falta',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        dataHoraFim: '2026-10-22T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'confirmado',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-20T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+      const atualizado = await atualizarStatusAgendamento(
+        {
+          agendamentoId: agOriginal.id,
+          novoStatus: 'falta',
+          motivo: 'Cliente não compareceu e não atendeu telefone',
+        },
+        adminUser,
+        repo,
+        notifRepo,
+      );
+
+      expect(atualizado.status).toBe('falta');
+      expect(atualizado.sinalRetido).toBe(true);
+      expect(atualizado.sinalDisponivelReagendamento).toBe(false);
+      expect(atualizado.faltaRegistradaEm).toBeDefined();
+
+      const notifs = await notifRepo.listarPorDestinatario(clienteUser.uid);
+      expect(notifs.length).toBeGreaterThan(0);
+    });
+
+    it('registra status reagendado marcando reagendadoEm', async () => {
+      const agOriginal = await repo.salvar({
+        id: 'ag-reagendado',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        dataHoraFim: '2026-10-22T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'confirmado',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-20T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+      const atualizado = await atualizarStatusAgendamento(
+        {
+          agendamentoId: agOriginal.id,
+          novoStatus: 'reagendado',
+          motivo: 'Remarcado para a próxima semana',
+        },
+        adminUser,
+        repo,
+      );
+
+      expect(atualizado.status).toBe('reagendado');
+      expect(atualizado.reagendadoEm).toBeDefined();
+    });
+
+    it('rejeita transição a partir de estados terminais (ex: concluido para pendente)', async () => {
+      const agConcluido = await repo.salvar({
+        id: 'ag-terminal',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        dataHoraFim: '2026-10-22T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'concluido',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-20T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+      await expect(
+        atualizarStatusAgendamento(
+          { agendamentoId: agConcluido.id, novoStatus: 'confirmado' },
+          adminUser,
+          repo,
+        ),
+      ).rejects.toThrow(/Transição de status inválida/);
     });
   });
 });

@@ -4,6 +4,7 @@ import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 interface BookingCalendarProps {
   dataSelecionada: string; // ISO 'YYYY-MM-DD'
   horarioSelecionado: string; // 'HH:mm'
+  horariosDisponiveis?: string[];
   onSelectData: (isoDate: string) => void;
   onSelectHorario: (hora: string) => void;
   onConfirmar: () => void;
@@ -49,6 +50,7 @@ const HORARIOS_DISPONIVEIS_PADRAO = [
 export function BookingCalendar({
   dataSelecionada,
   horarioSelecionado,
+  horariosDisponiveis,
   onSelectData,
   onSelectHorario,
   onConfirmar,
@@ -410,26 +412,32 @@ export function BookingCalendar({
               {horariosAbertos && (
                 <div className="mt-4 border-t border-[var(--color-border-default)] pt-4">
                   {diaSelecionadoValido ? (
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {HORARIOS_DISPONIVEIS_PADRAO.map((hora) => {
-                        const isSelected = hora === horarioSelecionado;
-                        return (
-                          <button
-                            key={hora}
-                            type="button"
-                            data-testid={`slot-hora-${hora}`}
-                            onClick={() => onSelectHorario(hora)}
-                            className={`inline-flex min-h-10 items-center justify-center rounded-xl px-2 py-1 text-xs font-semibold transition-all ${
-                              isSelected
-                                ? 'bg-[var(--color-brand-strong)] text-white shadow-sm'
-                                : 'bg-[var(--color-canvas-neutral)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-deep)]'
-                            }`}
-                          >
-                            {hora}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    (horariosDisponiveis ?? HORARIOS_DISPONIVEIS_PADRAO).length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {(horariosDisponiveis ?? HORARIOS_DISPONIVEIS_PADRAO).map((hora) => {
+                          const isSelected = hora === horarioSelecionado;
+                          return (
+                            <button
+                              key={hora}
+                              type="button"
+                              data-testid={`slot-hora-${hora}`}
+                              onClick={() => onSelectHorario(hora)}
+                              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-2 py-1 text-xs font-semibold transition-all ${
+                                isSelected
+                                  ? 'bg-[var(--color-brand-strong)] text-white shadow-sm'
+                                  : 'bg-[var(--color-canvas-neutral)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-deep)]'
+                              }`}
+                            >
+                              {hora}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl bg-[var(--color-canvas-neutral)] p-3 text-center text-xs font-medium text-[var(--color-text-secondary)] border border-[var(--color-border-default)]">
+                        Nenhum horário disponível para a data selecionada.
+                      </div>
+                    )
                   ) : (
                     <div className="rounded-xl bg-[var(--color-error-bg)] p-3 text-center text-xs font-medium text-[var(--color-error-text)] border border-[var(--color-error-border)]">
                       O dia selecionado é uma folga da clínica. Escolha um dia disponível para

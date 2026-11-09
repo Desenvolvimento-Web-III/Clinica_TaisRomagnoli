@@ -10,12 +10,12 @@ vi.mock('@/features/auth/auth-context', () => ({
   useAuth: () => mockUseOptionalAuth(),
 }));
 
-describe('AppShell', () => {
+describe('AppShell - Estrutura Global Mobile First', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renderiza o botao Entrar quando nao ha usuario autenticado', () => {
+  it('renderiza os links de acesso público (Entrar, Cadastre-se, Agendar) quando não há usuário autenticado', () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: null,
       isAuthReady: true,
@@ -35,9 +35,15 @@ describe('AppShell', () => {
       </MemoryRouter>,
     );
 
-    const loginLink = screen.getByRole('link', { name: 'Entrar' });
-    expect(loginLink).toBeInTheDocument();
-    expect(loginLink).toHaveAttribute('href', '/login');
+    const loginLinks = screen.getAllByRole('link', { name: 'Entrar' });
+    expect(loginLinks.length).toBeGreaterThanOrEqual(1);
+    expect(loginLinks[0]).toHaveAttribute('href', '/login');
+
+    const registerLinks = screen.getAllByRole('link', { name: /cadastre-se|cadastro/i });
+    expect(registerLinks.length).toBeGreaterThanOrEqual(1);
+    expect(registerLinks[0]).toHaveAttribute('href', '/cadastro');
+
+    expect(screen.getAllByRole('link', { name: 'Agendar' })[0]).toHaveAttribute('href', '/agendar');
     expect(
       screen.queryByRole('button', { name: /menu da conta do cliente/i }),
     ).not.toBeInTheDocument();
@@ -106,5 +112,181 @@ describe('AppShell', () => {
     const adminLink = screen.getByRole('link', { name: 'Horários da Clínica' });
     expect(adminLink).toBeInTheDocument();
     expect(adminLink).toHaveAttribute('href', '/admin/horarios');
+  });
+
+  it('renderiza o link de acessibilidade (skip link) direcionando para #main-content', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const skipLink = screen.getByRole('link', { name: 'Pular para o conteúdo principal' });
+    expect(skipLink).toBeInTheDocument();
+    expect(skipLink).toHaveAttribute('href', '#main-content');
+  });
+
+  it('renderiza o landmark main com id="main-content" contendo os elementos filhos', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+        >
+          <p>Conteúdo da página de testes</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const mainElement = screen.getByRole('main');
+    expect(mainElement).toHaveAttribute('id', 'main-content');
+    expect(screen.getByText('Conteúdo da página de testes')).toBeInTheDocument();
+  });
+
+  it('renderiza o rodape institucional com dados da marca e direitos autorais por padrao', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const footer = screen.getByRole('contentinfo', { name: 'Rodapé institucional' });
+    expect(footer).toBeInTheDocument();
+    expect(screen.getByText('Tais Romagnoli — Massoterapia')).toBeInTheDocument();
+    expect(screen.getByText('Cuidado e organização desde o primeiro contato.')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Clínica Tais Romagnoli\. Todos os direitos reservados\./),
+    ).toBeInTheDocument();
+  });
+
+  it('permite ocultar o rodape institucional via hideFooter', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+          hideFooter
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByRole('contentinfo', { name: 'Rodapé institucional' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('permite fornecer um rodape customizado via prop footer', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+          footer={<footer data-testid="custom-footer">Rodapé Especial</footer>}
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('custom-footer')).toHaveTextContent('Rodapé Especial');
+  });
+
+  it('permite ocultar a secao hero quando hideHero e true', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos Sem Hero"
+          description="Descricao de teste"
+          hideHero
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('heading', { name: 'Servicos Sem Hero' })).not.toBeInTheDocument();
+  });
+
+  it('sempre renderiza a barra de navegacao inferior fixa mobile (BottomNav)', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell
+          activeTab="inicio"
+          eyebrow="Clinica Tais Romagnoli"
+          title="Servicos"
+          description="Descricao de teste"
+        >
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('mobile-navigation')).toBeInTheDocument();
   });
 });
