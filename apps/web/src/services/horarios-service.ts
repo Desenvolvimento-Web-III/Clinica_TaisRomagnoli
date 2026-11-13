@@ -5,10 +5,12 @@ import {
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
   gerarHorariosDisponiveis,
+  calcularDataHoraFim,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
 } from '@clinica/shared';
 import { getFunctionsBaseUrl } from './agendamentos-service';
+import { getTodosAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
 export const HORARIOS_DOCUMENT = 'horarios_funcionamento';
@@ -121,10 +123,22 @@ export async function consultarHorariosDisponiveisBackend(params: {
 
   // Fallback local caso offline ou sem rede
   const config = await buscarHorariosFuncionamento(params.profissionalId);
+  const todosAgendamentos = getTodosAgendamentosStorage();
   const slots = gerarHorariosDisponiveis({
     data: params.data,
     duracaoMinutos: params.duracaoMinutos ?? 60,
     configuracaoHorarios: config,
+    agendamentosExistentes: todosAgendamentos.map((a) => {
+      const inicioIso = a.dataHoraIso.endsWith('Z')
+        ? a.dataHoraIso
+        : `${a.dataHoraIso.slice(0, 19)}.000Z`;
+      return {
+        dataHoraInicio: inicioIso,
+        dataHoraFim: calcularDataHoraFim(inicioIso, a.duracaoMinutos),
+        intervaloAposMinutos: 30,
+        status: a.status,
+      };
+    }),
   });
   return slots.map((s) => s.horaInicio);
 }

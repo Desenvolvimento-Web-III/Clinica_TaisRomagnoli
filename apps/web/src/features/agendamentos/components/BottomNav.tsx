@@ -46,34 +46,6 @@ export function BottomNav({ activeTab = 'agendamentos' }: BottomNavProps) {
           <span>Serviços</span>
         </Link>
 
-        {/* Se visitante público: Início do agendamento (Agendar) */}
-        {isPublicVisitor ? (
-          <Link
-            to="/agendar"
-            aria-current={activeTab === 'agendar' ? 'page' : undefined}
-            className={`min-h-12 min-w-16 sm:min-w-20 rounded-xl px-2 py-1 flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
-              activeTab === 'agendar'
-                ? 'bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)] font-semibold'
-                : 'text-[var(--color-nav-muted)] hover:text-[var(--color-brand-deep)]'
-            }`}
-          >
-            <div className="relative">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={activeTab === 'agendar' ? 2.5 : 1.8}
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              {activeTab === 'agendar' && (
-                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--color-brand-strong)] ring-2 ring-white" />
-              )}
-            </div>
-            <span>Agendar</span>
-          </Link>
-        ) : null}
-
         {/* Agendamentos */}
         <Link
           to="/agendamentos"

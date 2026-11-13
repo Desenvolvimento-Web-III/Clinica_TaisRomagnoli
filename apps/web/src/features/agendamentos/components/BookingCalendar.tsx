@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 
 interface BookingCalendarProps {
   dataSelecionada: string; // ISO 'YYYY-MM-DD'
   horarioSelecionado: string; // 'HH:mm'
-  horariosDisponiveis?: string[];
+  horariosDisponiveis?: string[] | null;
+  diasLotados?: string[];
   onSelectData: (isoDate: string) => void;
   onSelectHorario: (hora: string) => void;
   onConfirmar: () => void;
@@ -51,6 +52,7 @@ export function BookingCalendar({
   dataSelecionada,
   horarioSelecionado,
   horariosDisponiveis,
+  diasLotados,
   onSelectData,
   onSelectHorario,
   onConfirmar,
@@ -142,15 +144,17 @@ export function BookingCalendar({
       const isFolga = diasInativosClinica.has(dayOfWeek);
       const isoDate = `${anoAtual}-${String(mesAtual + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const isPassado = isoDate < hojeIso;
+      const isLotado = diasLotados?.includes(isoDate) ?? false;
 
       grid.push({
         dia: d,
         mes: mesAtual,
         ano: anoAtual,
         isCurrentMonth: true,
-        isDisponivel: !isFolga && !isPassado,
+        isDisponivel: !isFolga && !isPassado && !isLotado,
         isPassado,
         isFolga,
+        isLotado,
         isoDate,
       });
     }
@@ -166,12 +170,13 @@ export function BookingCalendar({
         isDisponivel: false,
         isPassado: false,
         isFolga: false,
+        isLotado: false,
         isoDate: '',
       });
     }
 
     return grid;
-  }, [anoAtual, mesAtual, diasInativosClinica, hojeIso]);
+  }, [anoAtual, mesAtual, diasInativosClinica, hojeIso, diasLotados]);
 
   const isDataPassada = dataSelecionada < hojeIso;
 
@@ -181,12 +186,24 @@ export function BookingCalendar({
 
   // Horários disponíveis filtrando horários passados caso a data seja hoje
   const horariosDisponiveisFiltrados = useMemo(() => {
-    const lista = horariosDisponiveis ?? HORARIOS_DISPONIVEIS_PADRAO;
+    const lista =
+      horariosDisponiveis !== undefined && horariosDisponiveis !== null
+        ? horariosDisponiveis
+        : HORARIOS_DISPONIVEIS_PADRAO;
     if (dataSelecionada === hojeIso) {
       return lista.filter((h) => h > horaMinutoAtual);
     }
     return lista;
   }, [horariosDisponiveis, dataSelecionada, hojeIso, horaMinutoAtual]);
+
+  // Auto-seleciona o primeiro horário disponível válido caso o horário atual não esteja disponível
+  useEffect(() => {
+    if (horariosDisponiveisFiltrados.length > 0) {
+      if (!horariosDisponiveisFiltrados.includes(horarioSelecionado)) {
+        onSelectHorario(horariosDisponiveisFiltrados[0]!);
+      }
+    }
+  }, [horariosDisponiveisFiltrados, horarioSelecionado, onSelectHorario]);
 
   // Verifica se o dia selecionado é válido
   const diaSelecionadoValido = useMemo(() => {
@@ -197,6 +214,8 @@ export function BookingCalendar({
     const dia = parts[2] || 1;
     const dayOfWeek = new Date(ano, mes, dia).getDay();
     if (diasInativosClinica.has(dayOfWeek)) return false;
+    if (diasLotados?.includes(dataSelecionada)) return false;
+    if (horariosDisponiveisFiltrados.length === 0) return false;
     if (dataSelecionada === hojeIso && horarioSelecionado) {
       if (horarioSelecionado <= horaMinutoAtual) return false;
     }
@@ -206,6 +225,8 @@ export function BookingCalendar({
     horarioSelecionado,
     isDataPassada,
     diasInativosClinica,
+    diasLotados,
+    horariosDisponiveisFiltrados.length,
     hojeIso,
     horaMinutoAtual,
     agora,
@@ -420,11 +441,16 @@ export function BookingCalendar({
                   }
 
                   if (!item.isDisponivel) {
+                    const motivoTitulo = item.isFolga
+                      ? 'Dia indisponível (Folga da clínica)'
+                      : item.isLotado
+                        ? 'Dia indisponível (Sem horários disponíveis)'
+                        : 'Dia indisponível';
                     return (
                       <div
                         key={`indisp-${item.isoDate}`}
                         data-testid={`dia-indisponivel-${item.isoDate}`}
-                        title="Dia indisponível (Folga da clínica)"
+                        title={motivoTitulo}
                         className="flex h-10 items-center justify-center rounded-xl bg-[#6B7280] font-bold text-white shadow-sm"
                       >
                         {item.dia}
@@ -559,13 +585,21 @@ export function BookingCalendar({
               <button
                 type="button"
                 data-testid="confirmar-agendamento-btn"
-                disabled={!diaSelecionadoValido || isDataPassada}
+                disabled={
+                  !diaSelecionadoValido ||
+                  isDataPassada ||
+                  horariosDisponiveisFiltrados.length === 0
+                }
                 title={
-                  isDataPassada ? 'Não é permitido agendar para datas que já passaram' : undefined
+                  isDataPassada
+                    ? 'Não é permitido agendar para datas que já passaram'
+                    : horariosDisponiveisFiltrados.length === 0
+                      ? 'Nenhum horário disponível para a data selecionada'
+                      : undefined
                 }
                 onClick={onConfirmar}
                 className={`inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all ${
-                  diaSelecionadoValido && !isDataPassada
+                  diaSelecionadoValido && !isDataPassada && horariosDisponiveisFiltrados.length > 0
                     ? 'bg-[var(--color-brand-strong)] hover:bg-[var(--color-brand-deep)] active:scale-[0.98]'
                     : 'cursor-not-allowed bg-slate-300 opacity-60'
                 }`}

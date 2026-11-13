@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   avaliarBloqueioContraindicacao,
+  calcularDataHoraFim,
+  verificarConflitoHorarios,
   type ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';
 import { serviceCatalog } from '@/features/services/catalog';
@@ -10,7 +12,10 @@ import { useOptionalAuth } from '@/features/auth/auth-context';
 import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
-import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import {
+  addAgendamentoStorage,
+  getTodosAgendamentosStorage,
+} from '@/features/agendamentos/data/agendamentos-storage';
 import {
   getAuthToken,
   mapBackendAgendamentoToUi,
@@ -137,7 +142,7 @@ export function AgendamentoFlowPage() {
     return `${y}-${m}-${dia}`;
   });
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
-  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[] | null>(null);
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
   const [novoAgendamentoCriado, setNovoAgendamentoCriado] = useState<Agendamento | null>(null);
   const [remoteAvaliacaoState, setRemoteAvaliacaoState] = useState<{
@@ -188,7 +193,7 @@ export function AgendamentoFlowPage() {
         duracaoMinutos: duracao,
         servicoId: selectedServiceId,
       });
-      if (ativo && slots.length > 0) {
+      if (ativo) {
         setHorariosDisponiveis(slots);
       }
     }
@@ -252,10 +257,35 @@ export function AgendamentoFlowPage() {
       setCardErrors({});
     }
 
-    const dataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
+    const dataHoraInicioIso = new Date(`${dataSelecionada}T${horarioSelecionado}:00`).toISOString();
     if (new Date(dataHoraInicioIso).getTime() < Date.now()) {
       setErroAgendamento(
         'Não é permitido realizar agendamento para uma data ou horário que já passou.',
+      );
+      return;
+    }
+
+    const fimHora = calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes);
+    const inicioIso = `${dataSelecionada}T${horarioSelecionado}:00`;
+    const fimIso = `${dataSelecionada}T${fimHora}:00`;
+
+    const todosAgendamentos = getTodosAgendamentosStorage();
+    const conflitoExistente = todosAgendamentos.some(
+      (existente) =>
+        existente.status !== 'cancelado' &&
+        verificarConflitoHorarios(
+          { inicioIso, fimIso, intervaloMinutos: 30 },
+          {
+            inicioIso: existente.dataHoraIso,
+            fimIso: calcularDataHoraFim(existente.dataHoraIso, existente.duracaoMinutos),
+            intervaloMinutos: 30,
+          },
+        ),
+    );
+
+    if (conflitoExistente) {
+      setErroAgendamento(
+        'O horário selecionado não está mais disponível pois já foi reservado por outro cliente.',
       );
       return;
     }
@@ -332,13 +362,23 @@ export function AgendamentoFlowPage() {
       <BookingCalendar
         dataSelecionada={dataSelecionada}
         horarioSelecionado={horarioSelecionado}
-        horariosDisponiveis={horariosDisponiveis.length > 0 ? horariosDisponiveis : undefined}
+        horariosDisponiveis={horariosDisponiveis}
         onSelectData={(isoDate) => setDataSelecionada(isoDate)}
         onSelectHorario={(hora) => setHorarioSelecionado(hora)}
         onConfirmar={() => {
-          const hojeIso = new Date().toISOString().slice(0, 10);
+          const agora = new Date();
+          const y = agora.getFullYear();
+          const m = String(agora.getMonth() + 1).padStart(2, '0');
+          const d = String(agora.getDate()).padStart(2, '0');
+          const hojeIso = `${y}-${m}-${d}`;
           if (dataSelecionada < hojeIso) {
             return;
+          }
+          if (dataSelecionada === hojeIso) {
+            const horaMinutoAtual = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+            if (horarioSelecionado <= horaMinutoAtual) {
+              return;
+            }
           }
           setStep('confirmacao');
         }}

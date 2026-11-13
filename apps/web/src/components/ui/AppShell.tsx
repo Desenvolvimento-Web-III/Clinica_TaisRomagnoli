@@ -25,7 +25,6 @@ type NavigationItem = Readonly<{ label: string; to: string; tab: ActiveTab }>;
 
 const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { label: 'Serviços', to: '/servicos', tab: 'inicio' },
-  { label: 'Agendar', to: '/agendar', tab: 'agendar' },
   { label: 'Agendamentos', to: '/agendamentos', tab: 'agendamentos' },
 ];
 
@@ -170,12 +169,6 @@ export function AppShell({
                   >
                     <Link to="/servicos" className="hover:underline">
                       Serviços
-                    </Link>
-                    <span className="text-[var(--color-border-default)]" aria-hidden="true">
-                      •
-                    </span>
-                    <Link to="/agendar" className="hover:underline">
-                      Agendar
                     </Link>
                     <span className="text-[var(--color-border-default)]" aria-hidden="true">
                       •

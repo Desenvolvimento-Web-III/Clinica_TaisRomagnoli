@@ -39,23 +39,26 @@ describe('BottomNav', () => {
     );
   });
 
-  it('conecta a navegação pública (Serviços, Agendar, Agendamentos, Entrar) quando não há usuário logado', () => {
+  it('conecta a navegação pública (Serviços, Agendamentos, Entrar) quando não há usuário logado', () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: null,
       isAuthReady: true,
     });
 
-    render(<BottomNav activeTab="agendar" />, { wrapper: MemoryRouter });
+    render(<BottomNav activeTab="agendamentos" />, { wrapper: MemoryRouter });
 
     expect(screen.getByRole('link', { name: 'Serviços' })).toHaveAttribute('href', '/servicos');
-    expect(screen.getByRole('link', { name: 'Agendar' })).toHaveAttribute('href', '/agendar');
+    expect(screen.queryByRole('link', { name: 'Agendar' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Agendamentos' })).toHaveAttribute(
       'href',
       '/agendamentos',
     );
     expect(screen.getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/login');
 
-    expect(screen.getByRole('link', { name: 'Agendar' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Agendamentos' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     expect(screen.queryByRole('link', { name: 'Notificações' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Perfil' })).not.toBeInTheDocument();
   });

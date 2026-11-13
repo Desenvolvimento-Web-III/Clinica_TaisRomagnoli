@@ -263,4 +263,33 @@ describe('AgendamentoFlowPage', () => {
     expect(diaPassado).toBeInTheDocument();
     expect(diaPassado).toHaveAttribute('aria-disabled', 'true');
   });
+
+  it('permite agendar para horários futuros no próprio dia atual e oculta horários que já passaram', () => {
+    // Quarta-feira às 16:40
+    vi.setSystemTime(new Date('2026-10-21T16:40:00.000'));
+    renderFlow('/agendar/massagem-relaxante');
+
+    // Seleciona o dia de hoje (2026-10-21)
+    const diaHoje = screen.getByTestId('dia-disponivel-2026-10-21');
+    fireEvent.click(diaHoje);
+
+    // Horários anteriores às 16:40 não devem ser exibidos
+    expect(screen.queryByTestId('slot-hora-10:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-14:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-16:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-16:30')).not.toBeInTheDocument();
+
+    // Horário futuro (17:00) deve estar disponível e ser selecionável
+    const slot17 = screen.getByTestId('slot-hora-17:00');
+    expect(slot17).toBeInTheDocument();
+    fireEvent.click(slot17);
+
+    // Permite confirmar agendamento para o mesmo dia em horário futuro
+    const btnConfirmar = screen.getByTestId('confirmar-agendamento-btn');
+    expect(btnConfirmar).not.toBeDisabled();
+    fireEvent.click(btnConfirmar);
+
+    expect(screen.getByText('Confirmação do Agendamento')).toBeInTheDocument();
+    expect(screen.getByText(/17:00 às 18:00/i)).toBeInTheDocument();
+  });
 });
