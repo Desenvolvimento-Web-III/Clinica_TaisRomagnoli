@@ -61,6 +61,28 @@ export const perfilClienteSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime().optional(),
   preferenciasContato: contactPreferencesSchema.optional(),
+  recorrente: z.boolean().optional(),
+  totalAtendimentosMes: z.number().int().nonnegative().optional(),
+  mesReferenciaRecorrencia: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+  ultimoAtendimento: z.string().datetime().optional(),
+  totalAtendimentosConcluidos: z.number().int().nonnegative().optional(),
 });
 
 export type PerfilClienteModel = z.infer<typeof perfilClienteSchema>;
+
+export const recorrenciaClienteSchema = z.object({
+  clienteId: z.string().min(1, 'ID do cliente é obrigatório.'),
+  recorrente: z.boolean(),
+  totalAtendimentosMes: z.number().int().nonnegative(),
+  totalAtendimentosConcluidos: z.number().int().nonnegative(),
+  mesReferencia: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, 'Mês de referência deve estar no formato YYYY-MM.'),
+  criterioMinimo: z.number().int().min(1),
+  ultimoAtendimento: z.string().datetime().optional(),
+});
+
+export type RecorrenciaCliente = z.infer<typeof recorrenciaClienteSchema>;

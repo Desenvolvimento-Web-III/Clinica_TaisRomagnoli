@@ -392,6 +392,11 @@ describe('cancelarAgendamento endpoint HTTP', () => {
 
       mockFirestore.collection.mockReturnValue({
         doc: vi.fn().mockReturnValue(mockDocRef),
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            get: vi.fn().mockResolvedValue({ docs: [] }),
+          }),
+        }),
       });
 
       const req = createMockRequest({

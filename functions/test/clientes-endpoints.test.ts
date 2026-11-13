@@ -21,7 +21,12 @@ vi.mock('firebase-admin/firestore', () => ({
 }));
 
 // Import endpoints after mocks
-import { criarPerfil, obterPerfil, listarClientesEndpoint } from '../src/index.js';
+import {
+  criarPerfil,
+  obterPerfil,
+  listarClientesEndpoint,
+  calcularRecorrenciaCliente,
+} from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
 
@@ -465,6 +470,114 @@ describe('Endpoints HTTP de Clientes (Functions)', () => {
       expect(res.statusCode).toBe(200);
       expect(Array.isArray(res.body?.dados)).toBe(true);
       expect((res.body?.dados as unknown[]).length).toBe(2);
+    });
+  });
+
+  describe('calcularRecorrenciaCliente', () => {
+    it('bloqueia requisição sem autenticação com erro 401', async () => {
+      const req = createMockRequest({
+        method: 'GET',
+        headers: {},
+      });
+      const res = createMockResponse();
+
+      await (calcularRecorrenciaCliente as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(401);
+      expect(res.body?.error).toContain('Acesso não autenticado');
+    });
+
+    it('bloqueia cliente tentando calcular recorrência de outro cliente com erro 403', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'cliente-1',
+        role: 'cliente',
+        admin: false,
+      });
+
+      const req = createMockRequest({
+        method: 'GET',
+        headers: { authorization: 'Bearer token-cli1' },
+        query: { uid: 'cliente-2' },
+      });
+      const res = createMockResponse();
+
+      await (calcularRecorrenciaCliente as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body?.error).toContain('Acesso negado');
+    });
+
+    it('calcula e retorna recorrência do próprio cliente com sucesso', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'cliente-1',
+        role: 'cliente',
+        admin: false,
+      });
+
+      // Mock Firestore para buscar o cliente
+      mockFirestore.collection.mockImplementation((nome: string) => {
+        if (nome === 'clientes') {
+          return {
+            doc: vi.fn().mockReturnValue({
+              get: vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                  uid: 'cliente-1',
+                  nome: 'Cliente Um',
+                  email: 'cli1@exemplo.com',
+                }),
+              }),
+              update: vi.fn().mockResolvedValue(undefined),
+            }),
+          };
+        }
+        if (nome === 'agendamentos') {
+          return {
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                  docs: [
+                    {
+                      id: 'ag-1',
+                      data: () => ({
+                        id: 'ag-1',
+                        clienteId: 'cliente-1',
+                        status: 'concluido',
+                        dataHoraInicio: '2026-11-05T10:00:00.000Z',
+                      }),
+                    },
+                    {
+                      id: 'ag-2',
+                      data: () => ({
+                        id: 'ag-2',
+                        clienteId: 'cliente-1',
+                        status: 'concluido',
+                        dataHoraInicio: '2026-11-12T10:00:00.000Z',
+                      }),
+                    },
+                  ],
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const req = createMockRequest({
+        method: 'GET',
+        headers: { authorization: 'Bearer token-cli1' },
+        query: { mesReferencia: '2026-11' },
+      });
+      const res = createMockResponse();
+
+      await (calcularRecorrenciaCliente as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const dados = res.body?.dados as Record<string, unknown>;
+      expect(dados?.recorrente).toBe(true);
+      expect(dados?.totalAtendimentosMes).toBe(2);
+      expect(dados?.mesReferencia).toBe('2026-11');
     });
   });
 });

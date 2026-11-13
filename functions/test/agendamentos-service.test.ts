@@ -15,6 +15,7 @@ import { InMemoryHorariosFixosRepository } from '../src/modules/agenda/horarios-
 import { InMemoryServicosRepository } from '../src/modules/servicos/servicos-repository.js';
 import { InMemoryProfissionaisRepository } from '../src/modules/profissionais/profissionais-repository.js';
 import { InMemoryAnamneseRepository } from '../src/modules/anamnese/anamnese-repository.js';
+import { InMemoryClientesRepository } from '../src/modules/clientes/clientes-repository.js';
 import {
   salvarFichaAnamneseService,
   registrarLiberacaoMedicaService,
@@ -1125,6 +1126,85 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
       expect(concluido.status).toBe('concluido');
       expect(concluido.concluidoEm).toBeDefined();
+    });
+
+    it('atualiza a recorrência mensal do cliente para true ao concluir a 2ª sessão no mês', async () => {
+      const clientesRepo = new InMemoryClientesRepository();
+      await clientesRepo.salvar({
+        uid: clienteUser.uid,
+        nome: clienteUser.nome,
+        email: clienteUser.email,
+        telefone: '(11) 98765-4321',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: '2026-10-01T10:00:00.000Z',
+      });
+
+      // 1ª sessão concluída no mesmo mês
+      await repo.salvar({
+        id: 'ag-concluido-1',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-05T10:00:00.000Z',
+        dataHoraFim: '2026-10-05T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'concluido',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        concluidoEm: '2026-10-05T11:00:00.000Z',
+        createdAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-05T11:00:00.000Z',
+      });
+
+      // 2ª sessão que será concluída agora
+      const ag2 = await repo.salvar({
+        id: 'ag-concluido-2',
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-20T10:00:00.000Z',
+        dataHoraFim: '2026-10-20T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'em_andamento',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+      const resultado = await atualizarStatusAgendamento(
+        { agendamentoId: ag2.id, novoStatus: 'concluido' },
+        adminUser,
+        repo,
+        notifRepo,
+        new Date('2026-10-20T11:00:00.000Z'),
+        undefined,
+        clientesRepo,
+      );
+
+      expect(resultado.status).toBe('concluido');
+
+      const clienteAtualizado = await clientesRepo.buscarPorUid(clienteUser.uid);
+      expect(clienteAtualizado?.recorrente).toBe(true);
+      expect(clienteAtualizado?.totalAtendimentosMes).toBe(2);
+      expect(clienteAtualizado?.mesReferenciaRecorrencia).toBe('2026-10');
     });
 
     it('registra falta com retenção total do sinal e criação de notificação', async () => {

@@ -29,4 +29,24 @@ export interface UserProfile {
   updatedAt?: string;
   /** Preferências de contato e notificações do cliente */
   preferenciasContato?: ContactPreferences;
+  /** Indica se o cliente é recorrente no mês (mínimo de 2 sessões concluídas no mês) */
+  recorrente?: boolean;
+  /** Total de atendimentos concluídos no mês de referência */
+  totalAtendimentosMes?: number;
+  /** Mês de referência no formato YYYY-MM para o cálculo de recorrência */
+  mesReferenciaRecorrencia?: string;
+  /** Data/hora do último atendimento concluído */
+  ultimoAtendimento?: string;
+  /** Total histórico de atendimentos concluídos */
+  totalAtendimentosConcluidos?: number;
+}
+
+export interface RecorrenciaClienteOutput {
+  clienteId: string;
+  recorrente: boolean;
+  totalAtendimentosMes: number;
+  totalAtendimentosConcluidos: number;
+  mesReferencia: string;
+  criterioMinimo: number;
+  ultimoAtendimento?: string;
 }

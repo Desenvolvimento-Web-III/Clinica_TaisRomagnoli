@@ -23,11 +23,13 @@ import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
 import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
 import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
 import type { AnamneseRepository } from '../anamnese/anamnese-repository.js';
+import type { ClientesRepository } from '../clientes/clientes-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
   criarNotificacaoCancelamento,
 } from '../notificacoes/notificacoes-service.js';
+import { calcularRecorrenciaMensalCliente } from '../clientes/clientes-service.js';
 
 export interface UserContext {
   uid: string;
@@ -573,6 +575,7 @@ export async function atualizarStatusAgendamento(
   notificacoesRepo?: NotificacoesRepository,
   dataReferenciaParam?: Date,
   anamneseRepo?: AnamneseRepository,
+  clientesRepo?: ClientesRepository,
 ): Promise<Agendamento> {
   if (!user.isAdmin) {
     throw new AgendamentoBusinessError(
@@ -679,6 +682,18 @@ export async function atualizarStatusAgendamento(
         notificacoesRepo,
         parsed.motivo || 'Falta registrada pela administração da clínica',
         'tardio',
+      );
+    }
+  }
+
+  // Recalcula a recorrência mensal do cliente sempre que uma sessão é concluída ou revertida
+  if (clientesRepo && (parsed.novoStatus === 'concluido' || agendamento.status === 'concluido')) {
+    try {
+      await calcularRecorrenciaMensalCliente(salvo.clienteId, clientesRepo, repo, dataReferencia);
+    } catch (err) {
+      console.warn(
+        'Aviso: Falha ao atualizar recorrência do cliente após conclusão do agendamento:',
+        err,
       );
     }
   }

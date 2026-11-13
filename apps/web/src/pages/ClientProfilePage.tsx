@@ -9,6 +9,10 @@ import { getUserDisplayName, getUserInitials } from '@/features/auth/user-displa
 import { LogoutButton } from '@/features/auth/components/LogoutButton';
 import { auth, db } from '@/lib/firebase';
 import type { ContactPreferences } from '@clinica/shared';
+import {
+  consultarRecorrenciaCliente,
+  type ClientRecorrenciaData,
+} from '@/services/cliente-perfil-service';
 
 const profileSchema = z.object({
   nome: z
@@ -47,6 +51,7 @@ export function ClientProfilePage() {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [preferencias, setPreferencias] = useState<ContactPreferences>(defaultPreferences);
+  const [recorrencia, setRecorrencia] = useState<ClientRecorrenciaData | null>(null);
   const [errors, setErrors] = useState<ProfileErrors>({});
   const [loadingDoc, setLoadingDoc] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,7 +93,35 @@ export function ClientProfilePage() {
               lembretesAgendamento: data.preferenciasContato.lembretesAgendamento ?? true,
             });
           }
+
+          if (
+            typeof data.totalAtendimentosMes === 'number' ||
+            typeof data.recorrente === 'boolean'
+          ) {
+            const isRecorrente = Boolean(
+              data.recorrente ||
+              (typeof data.totalAtendimentosMes === 'number' && data.totalAtendimentosMes >= 2),
+            );
+            setRecorrencia({
+              recorrente: isRecorrente,
+              totalAtendimentosMes:
+                typeof data.totalAtendimentosMes === 'number' ? data.totalAtendimentosMes : 0,
+              totalAtendimentosConcluidos:
+                typeof data.totalAtendimentosConcluidos === 'number'
+                  ? data.totalAtendimentosConcluidos
+                  : undefined,
+              mesReferencia: data.mesReferenciaRecorrencia,
+              ultimoAtendimento: data.ultimoAtendimento,
+            });
+          }
         }
+
+        // Tenta sincronizar a recorrência mais recente via backend
+        void consultarRecorrenciaCliente(currentUser.uid).then((rec) => {
+          if (isMounted && rec) {
+            setRecorrencia(rec);
+          }
+        });
       } catch {
         // Usa dados de fallback
       } finally {
@@ -262,12 +295,79 @@ export function ClientProfilePage() {
                     <p className="truncate text-sm text-[var(--color-text-secondary)]">
                       {currentUser?.email}
                     </p>
-                    <span className="mt-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-                      Conta Ativa
-                    </span>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                        Conta Ativa
+                      </span>
+                      {recorrencia?.recorrente && (
+                        <span
+                          data-testid="badge-cliente-recorrente"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/90 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-900 shadow-sm"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            className="h-3.5 w-3.5 text-amber-600"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          Cliente Recorrente
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
+
+              {/* Card de Destaque de Recorrência Mensal */}
+              {recorrencia?.recorrente && (
+                <section
+                  data-testid="secao-cliente-recorrente"
+                  className="rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/40 p-6 shadow-[var(--shadow-card)] sm:p-7"
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      aria-hidden="true"
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-100 text-amber-800"
+                    >
+                      <svg
+                        className="h-6 w-6 text-amber-700"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.504-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.004 0V9.75a3 3 0 00-3-3m0 0a3 3 0 00-3 3v4.5m6 0H9"
+                        />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-bold text-amber-950">Cliente Recorrente</h2>
+                        <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                          {recorrencia.totalAtendimentosMes}{' '}
+                          {recorrencia.totalAtendimentosMes === 1
+                            ? 'sessão concluída'
+                            : 'sessões concluídas'}{' '}
+                          no mês
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                        Você atingiu o critério de recorrência mensal da clínica ao concluir pelo
+                        menos duas sessões neste mês.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              )}
 
               {/* Card de Dados Pessoais */}
               <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">
