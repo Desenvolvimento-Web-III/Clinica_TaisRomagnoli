@@ -1,5 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import {
+  avaliarBloqueioContraindicacao,
+  type ResultadoAvaliacaoContraindicacao,
+} from '@clinica/shared';
 import { serviceCatalog } from '@/features/services/catalog';
 import { formatServiceDuration, formatServicePrice } from '@/features/services/formatters';
 import { useOptionalAuth } from '@/features/auth/auth-context';
@@ -7,7 +11,12 @@ import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
-import { solicitarAgendamentoBackend } from '@/services/agendamentos-service';
+import {
+  getAuthToken,
+  mapBackendAgendamentoToUi,
+  solicitarAgendamentoBackend,
+} from '@/services/agendamentos-service';
+import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { consultarHorariosDisponiveisBackend } from '@/services/horarios-service';
 import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
@@ -20,6 +29,35 @@ import {
   type CardValidationErrors,
 } from '@/features/agendamentos/utils/payment-formatters';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
+
+const ANAMNESE_STORAGE_PREFIX = 'clinica_anamnese_data_';
+
+function loadLocalAnamneseEvaluation(
+  uid?: string | null,
+): ResultadoAvaliacaoContraindicacao | null {
+  if (!uid || typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(`${ANAMNESE_STORAGE_PREFIX}${uid}`);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    return avaliarBloqueioContraindicacao({
+      ...(parsed.data ?? parsed),
+      exigeLiberacaoMedica: parsed.exigeLiberacaoMedica,
+      contraindicacoes: parsed.contraindicacoes,
+      liberacaoMedicaAprovada: parsed.liberacaoMedicaAprovada,
+    });
+  } catch {
+    return null;
+  }
+}
 
 type FlowStep = 'calendario' | 'confirmacao' | 'pagamento' | 'concluido';
 type MetodoPagamento = 'pix' | 'cartao' | 'boleto';
@@ -89,6 +127,43 @@ export function AgendamentoFlowPage() {
   const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
   const [novoAgendamentoCriado, setNovoAgendamentoCriado] = useState<Agendamento | null>(null);
+  const [remoteAvaliacaoState, setRemoteAvaliacaoState] = useState<{
+    uid: string;
+    avaliacao: ResultadoAvaliacaoContraindicacao;
+  } | null>(null);
+  const [submittingAgendamento, setSubmittingAgendamento] = useState(false);
+  const [erroAgendamento, setErroAgendamento] = useState<string | null>(null);
+
+  useEffect(() => {
+    const uid = currentUser?.uid;
+    if (!uid) {
+      return;
+    }
+
+    let ativo = true;
+    void obterFichaAnamneseApi(uid).then((res) => {
+      if (ativo && res.sucesso && res.dados) {
+        setRemoteAvaliacaoState({
+          uid,
+          avaliacao: avaliarBloqueioContraindicacao(res.dados),
+        });
+      }
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [currentUser?.uid]);
+
+  const avaliacaoContraindicacao = useMemo(() => {
+    const uid = currentUser?.uid;
+    if (!uid) {
+      return null;
+    }
+    if (remoteAvaliacaoState?.uid === uid) {
+      return remoteAvaliacaoState.avaliacao;
+    }
+    return loadLocalAnamneseEvaluation(uid);
+  }, [currentUser?.uid, remoteAvaliacaoState]);
 
   useEffect(() => {
     let ativo = true;
@@ -130,8 +205,25 @@ export function AgendamentoFlowPage() {
 
   const cardBrand = useMemo(() => detectCardBrand(cartaoNumero), [cartaoNumero]);
 
+  const concluirSolicitacaoLocal = (agendamentoFinal: Agendamento) => {
+    addAgendamentoStorage(agendamentoFinal, currentUser?.uid);
+    addClientNotification(currentUser?.uid, {
+      tipo: 'agendamento',
+      titulo: 'Agendamento Solicitado',
+      mensagem: avaliacaoContraindicacao?.bloqueado
+        ? `Sua solicitação de ${servicoAtual.name} para ${agendamentoFinal.dataFormatada} (${agendamentoFinal.horarioFormatado}) foi registrada e aguarda liberação médica para confirmação.`
+        : `Seu agendamento de ${servicoAtual.name} para ${agendamentoFinal.dataFormatada} (${agendamentoFinal.horarioFormatado}) foi registrado com sucesso.`,
+      link: '/agendamentos',
+    });
+
+    setNovoAgendamentoCriado(agendamentoFinal);
+    setStep('concluido');
+  };
+
   // Finalizar agendamento com validação de pagamento e sincronização com backend/Firestore
-  const handleFinalizar = () => {
+  const handleFinalizar = async () => {
+    setErroAgendamento(null);
+
     if (metodoPagamento === 'cartao') {
       const validation = validateCreditCardForm({
         numero: cartaoNumero,
@@ -167,33 +259,50 @@ export function AgendamentoFlowPage() {
       observacao: `Agendado via aplicativo por ${nomeCliente}. Método: ${metodoPagamento.toUpperCase()}.`,
     };
 
-    addAgendamentoStorage(novo, currentUser?.uid);
-    addClientNotification(currentUser?.uid, {
-      tipo: 'agendamento',
-      titulo: 'Agendamento Solicitado',
-      mensagem: `Seu agendamento de ${servicoAtual.name} para ${novo.dataFormatada} (${novo.horarioFormatado}) foi registrado com sucesso.`,
-      link: '/agendamentos',
-    });
-
-    // Se o cliente estiver autenticado, persiste no Firestore via Cloud Function
-    if (currentUser?.uid) {
-      solicitarAgendamentoBackend({
-        servicoId: servicoAtual.id,
-        servicoNome: servicoAtual.name,
-        duracaoMinutos: servicoAtual.durationMinutes,
-        valorTotalEmCentavos: servicoAtual.priceInCents,
-        dataHoraInicio: dataHoraInicioIso,
-        metodoPagamento,
-        profissionalId: 'prof-tais-romagnoli',
-        profissionalNome: 'Tais Romagnoli',
-        observacoes: novo.observacao,
-      }).catch((e) => {
-        console.warn('Sincronização em background do agendamento:', e);
-      });
+    if (!currentUser?.uid) {
+      concluirSolicitacaoLocal(novo);
+      return;
     }
 
-    setNovoAgendamentoCriado(novo);
-    setStep('concluido');
+    setSubmittingAgendamento(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        concluirSolicitacaoLocal(novo);
+        return;
+      }
+
+      const resposta = await solicitarAgendamentoBackend(
+        {
+          servicoId: servicoAtual.id,
+          servicoNome: servicoAtual.name,
+          duracaoMinutos: servicoAtual.durationMinutes,
+          valorTotalEmCentavos: servicoAtual.priceInCents,
+          dataHoraInicio: dataHoraInicioIso,
+          metodoPagamento,
+          profissionalId: 'prof-tais-romagnoli',
+          profissionalNome: 'Tais Romagnoli',
+          observacoes: novo.observacao,
+        },
+        token,
+      );
+
+      if (!resposta.sucesso) {
+        if (resposta.networkError) {
+          concluirSolicitacaoLocal(novo);
+          return;
+        }
+        setErroAgendamento(
+          resposta.erro || 'Não foi possível concluir a solicitação de agendamento.',
+        );
+        return;
+      }
+
+      const agendamentoFinal = resposta.dados ? mapBackendAgendamentoToUi(resposta.dados) : novo;
+      concluirSolicitacaoLocal(agendamentoFinal);
+    } finally {
+      setSubmittingAgendamento(false);
+    }
   };
 
   // ==========================================
@@ -278,6 +387,20 @@ export function AgendamentoFlowPage() {
               </div>
             </div>
           </div>
+
+          {avaliacaoContraindicacao?.bloqueado && (
+            <div
+              role="status"
+              data-testid="aviso-concluido-liberacao-medica"
+              className="mt-4 w-full rounded-2xl border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-4 text-left text-xs/5 text-[var(--color-warning-text)] shadow-sm sm:text-sm/6"
+            >
+              <p className="font-bold">Confirmação condicionada à liberação médica</p>
+              <p className="mt-1">
+                Seu agendamento permanece como pendente até que a clínica registre a aprovação da
+                liberação médica na sua ficha de anamnese.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Botões Inferiores */}
@@ -680,15 +803,26 @@ export function AgendamentoFlowPage() {
                 </div>
               )}
 
+              {erroAgendamento && (
+                <div
+                  role="alert"
+                  data-testid="erro-finalizar-agendamento"
+                  className="rounded-2xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-4 text-xs/5 font-medium text-[var(--color-error-text)] sm:text-sm/6"
+                >
+                  {erroAgendamento}
+                </div>
+              )}
+
               {/* Botão Finalizar */}
               <div className="pt-2">
                 <button
                   type="button"
                   data-testid="finalizar-agendamento-btn"
-                  onClick={handleFinalizar}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--color-brand-strong)] px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98]"
+                  disabled={submittingAgendamento}
+                  onClick={() => void handleFinalizar()}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-[var(--color-brand-strong)] px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:bg-[var(--color-brand-deep)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
                 >
-                  Finalizar
+                  {submittingAgendamento ? 'Finalizando…' : 'Finalizar'}
                 </button>
               </div>
             </div>
@@ -730,6 +864,51 @@ export function AgendamentoFlowPage() {
       </header>
 
       <main className="mx-auto mt-6 max-w-4xl px-4 sm:px-6">
+        {avaliacaoContraindicacao?.bloqueado && (
+          <aside
+            role="status"
+            data-testid="aviso-liberacao-medica-agendamento"
+            className="mb-6 flex flex-col gap-3 rounded-2xl border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-5 text-[var(--color-warning-text)] shadow-xs sm:flex-row sm:items-start sm:justify-between"
+          >
+            <div className="flex items-start gap-3">
+              <svg
+                aria-hidden="true"
+                className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-warning-text)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <div className="space-y-1.5 text-xs/5 sm:text-sm/6">
+                <p className="font-bold">Liberação médica necessária antes da confirmação</p>
+                <p>
+                  Sua ficha de anamnese indica condições que exigem avaliação e liberação médica
+                  prévia antes da confirmação do atendimento pela clínica.
+                </p>
+                {avaliacaoContraindicacao.contraindicacoes.length > 0 && (
+                  <ul className="list-disc space-y-1 pl-5 text-xs font-medium">
+                    {avaliacaoContraindicacao.contraindicacoes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <Link
+              to="/anamnese"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-[var(--color-warning-border)] bg-white px-4 py-2 text-xs font-semibold text-[var(--color-warning-text)] transition-colors hover:bg-[var(--color-warning-bg)]"
+            >
+              Revisar ficha de anamnese
+            </Link>
+          </aside>
+        )}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start lg:gap-8">
           {/* Coluna Esquerda: Dados do Agendamento (Somente Leitura) */}
           <div className="space-y-4 rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-surface)] p-5 shadow-sm sm:p-6 lg:col-span-7">

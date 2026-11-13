@@ -1,10 +1,22 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
+import * as anamneseService from '@/services/anamnese-service';
+import * as agendamentosService from '@/services/agendamentos-service';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
+
+const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
+
+vi.mock('@/features/auth/auth-context', () => ({
+  useOptionalAuth: () => mockUseOptionalAuth(),
+}));
 
 describe('AgendamentoFlowPage', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     localStorage.clear();
+    mockUseOptionalAuth.mockReturnValue(null);
   });
 
   const renderFlow = (initialRoute = '/agendar/massagem-relaxante') => {
@@ -15,6 +27,7 @@ describe('AgendamentoFlowPage', () => {
           <Route path="/agendar" element={<AgendamentoFlowPage />} />
           <Route path="/servicos" element={<div>Página de Serviços</div>} />
           <Route path="/agendamentos" element={<div>Página de Meus Agendamentos</div>} />
+          <Route path="/anamnese" element={<div>Página de Anamnese</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -157,5 +170,75 @@ describe('AgendamentoFlowPage', () => {
     // Finaliza com sucesso
     fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
     expect(screen.getByText('Agendamento Concluído!')).toBeInTheDocument();
+  });
+
+  it('exibe aviso de liberação médica pendente na confirmação e no resumo concluído para cliente bloqueado', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-blocked', displayName: 'Ana Clara' },
+    });
+
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        tratamentoOncologico: { resposta: true, detalhes: 'Em tratamento' },
+        clienteId: 'cli-blocked',
+        submittedAt: '2026-10-10T10:00:00.000Z',
+        updatedAt: '2026-10-10T10:00:00.000Z',
+        pontosAtencao: ['Tratamento Oncológico: Em tratamento'],
+        exigeLiberacaoMedica: true,
+        contraindicacoes: ['Tratamento Oncológico: Em tratamento'],
+        liberacaoMedicaAprovada: false,
+      },
+    });
+    vi.spyOn(agendamentosService, 'getAuthToken').mockResolvedValue(null);
+
+    renderFlow('/agendar/massagem-relaxante');
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+
+    const aviso = await screen.findByTestId('aviso-liberacao-medica-agendamento');
+    expect(aviso).toHaveTextContent(/liberação médica necessária antes da confirmação/i);
+    expect(aviso).toHaveTextContent(/tratamento oncológico: em tratamento/i);
+    expect(screen.getByRole('link', { name: /revisar ficha de anamnese/i })).toHaveAttribute(
+      'href',
+      '/anamnese',
+    );
+
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aviso-concluido-liberacao-medica')).toHaveTextContent(
+        /confirmação condicionada à liberação médica/i,
+      );
+    });
+  });
+
+  it('exibe erro e impede conclusão quando backend retorna falha de negócio ao finalizar', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana' },
+    });
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: undefined,
+    });
+    vi.spyOn(agendamentosService, 'getAuthToken').mockResolvedValue('jwt-token');
+    vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend').mockResolvedValue({
+      sucesso: false,
+      statusCode: 422,
+      erro: 'Agendamento recusado pela regra de liberação médica.',
+    });
+
+    renderFlow('/agendar/massagem-relaxante');
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    const erro = await screen.findByTestId('erro-finalizar-agendamento');
+    expect(erro).toHaveTextContent('Agendamento recusado pela regra de liberação médica.');
+    expect(screen.queryByText('Agendamento Concluído!')).not.toBeInTheDocument();
   });
 });

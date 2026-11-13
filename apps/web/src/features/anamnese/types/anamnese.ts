@@ -7,4 +7,5 @@ export type {
   CondicaoSaudeItem,
   FichaAnamneseData,
   FichaAnamneseRecord,
+  ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';

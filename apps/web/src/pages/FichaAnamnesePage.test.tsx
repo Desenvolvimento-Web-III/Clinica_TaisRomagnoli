@@ -1,6 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
+import * as anamneseService from '@/services/anamnese-service';
 import { FichaAnamnesePage } from './FichaAnamnesePage';
 
 const mockUseOptionalAuth = vi.fn();
@@ -225,4 +227,82 @@ describe('FichaAnamnesePage', () => {
       await screen.findByRole('heading', { name: /1\. objetivo e queixa principal/i }),
     ).toBeInTheDocument();
   }, 15000);
+
+  it('exibe alerta na seção de saúde e card de liberação pendente ao salvar ficha com contraindicação', async () => {
+    render(
+      <MemoryRouter initialEntries={['/anamnese']}>
+        <Routes>
+          <Route path="/anamnese" element={<FichaAnamnesePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /avançar para histórico de saúde/i }));
+
+    const oncoFieldset = (
+      await screen.findByText(/7\. está realizando ou já realizou tratamento oncológico/i)
+    ).closest('fieldset')!;
+    fireEvent.click(oncoFieldset.querySelector('input[value="sim"]')!);
+
+    const detalhesInput = await screen.findByPlaceholderText(/descreva o tratamento/i);
+    fireEvent.change(detalhesInput, { target: { value: 'Radioterapia encerrada recentemente' } });
+
+    expect(screen.getByTestId('aviso-contraindicacao-saude')).toHaveTextContent(
+      /liberação médica necessária/i,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /avançar para hábitos & preferências/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /avançar para consentimento/i }));
+
+    const consentCheckbox = await screen.findByRole('checkbox', {
+      name: /li, compreendi e concordo com o termo de consentimento/i,
+    });
+    fireEvent.click(consentCheckbox);
+    fireEvent.click(screen.getByRole('button', { name: /salvar ficha de anamnese/i }));
+
+    const pendenteBanner = await screen.findByTestId('anamnese-liberacao-pendente');
+    expect(pendenteBanner).toHaveTextContent(/aguardando liberação médica para confirmação/i);
+    expect(pendenteBanner).toHaveTextContent(
+      /tratamento oncológico: radioterapia encerrada recentemente/i,
+    );
+  }, 15000);
+
+  it('exibe status de liberação médica aprovada quando servidor retorna ficha liberada', async () => {
+    vi.spyOn(anamneseService, 'salvarFichaAnamneseApi').mockResolvedValueOnce({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        tratamentoOncologico: { resposta: true, detalhes: 'Alta médica confirmada' },
+        clienteId: 'client-123',
+        submittedAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-12T10:00:00.000Z',
+        pontosAtencao: ['Tratamento Oncológico: Alta médica confirmada'],
+        exigeLiberacaoMedica: true,
+        contraindicacoes: ['Tratamento Oncológico: Alta médica confirmada'],
+        liberacaoMedicaAprovada: true,
+        liberacaoMedicaAprovadaEm: '2026-10-12T10:00:00.000Z',
+        liberacaoMedicaObservacoes: 'Atestado médico válido',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/anamnese']}>
+        <Routes>
+          <Route path="/anamnese" element={<FichaAnamnesePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /etapa 4/i }));
+    const consentCheckbox = await screen.findByRole('checkbox', {
+      name: /li, compreendi e concordo com o termo de consentimento/i,
+    });
+    fireEvent.click(consentCheckbox);
+    fireEvent.click(screen.getByRole('button', { name: /salvar ficha de anamnese/i }));
+
+    const aprovadaBanner = await screen.findByTestId('anamnese-liberacao-aprovada');
+    expect(aprovadaBanner).toHaveTextContent(/liberação médica aprovada/i);
+    expect(aprovadaBanner).toHaveTextContent(/atestado médico válido/i);
+  });
 });

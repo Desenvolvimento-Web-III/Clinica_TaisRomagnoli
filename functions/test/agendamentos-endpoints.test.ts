@@ -408,5 +408,152 @@ describe('cancelarAgendamento endpoint HTTP', () => {
       expect(dados.status).toBe('concluido');
       expect(dados.concluidoEm).toBeDefined();
     });
+
+    it('retorna HTTP 422 ao tentar confirmar agendamento quando a ficha de anamnese exigir liberação médica sem aprovação', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-1',
+        email: 'admin@clinicataisromagnoli.com.br',
+        role: 'admin',
+        admin: true,
+      });
+
+      const mockUpdateAgendamento = vi.fn().mockResolvedValue(undefined);
+      const agDocRef = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          id: 'ag-1',
+          data: () => ({
+            id: 'ag-1',
+            clienteId: 'cliente-contraindicado',
+            clienteNome: 'Mariana Souza',
+            servicoNome: 'Massagem Relaxante',
+            status: 'pendente',
+            dataHoraInicio: '2026-11-20T10:00:00.000Z',
+            dataHoraFim: '2026-11-20T11:00:00.000Z',
+            duracaoMinutos: 60,
+            intervaloAposMinutos: 30,
+            valorTotalEmCentavos: 10000,
+            valorSinalEmCentavos: 3000,
+            saldoRestanteEmCentavos: 7000,
+            profissionalId: 'prof-tais-romagnoli',
+            profissionalNome: 'Tais Romagnoli',
+            metodoPagamento: 'pix',
+            origem: 'app_cliente',
+            sinalIsento: false,
+            createdAt: '2026-11-01T10:00:00.000Z',
+            updatedAt: '2026-11-01T10:00:00.000Z',
+          }),
+        }),
+        update: mockUpdateAgendamento,
+      };
+
+      const anamneseDocRef = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({
+            clienteId: 'cliente-contraindicado',
+            tratamentoOncologico: { resposta: true, detalhes: 'Quimioterapia em curso' },
+            exigeLiberacaoMedica: true,
+            contraindicacoes: ['Tratamento Oncológico: Quimioterapia em curso'],
+            liberacaoMedicaAprovada: false,
+          }),
+        }),
+      };
+
+      mockFirestore.collection.mockImplementation((nomeColecao: string) => {
+        if (nomeColecao === 'anamneses') {
+          return { doc: vi.fn().mockReturnValue(anamneseDocRef) };
+        }
+        return { doc: vi.fn().mockReturnValue(agDocRef) };
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: { agendamentoId: 'ag-1', novoStatus: 'confirmado' },
+      });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(422);
+      expect(res.body?.error).toMatch(/liberação médica/i);
+      expect(mockUpdateAgendamento).not.toHaveBeenCalled();
+    });
+
+    it('permite confirmar agendamento com HTTP 200 quando a ficha tiver liberação médica aprovada', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-1',
+        email: 'admin@clinicataisromagnoli.com.br',
+        role: 'admin',
+        admin: true,
+      });
+
+      const mockUpdateAgendamento = vi.fn().mockResolvedValue(undefined);
+      const agDocRef = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          id: 'ag-1',
+          data: () => ({
+            id: 'ag-1',
+            clienteId: 'cliente-liberado',
+            clienteNome: 'Mariana Souza',
+            servicoNome: 'Massagem Relaxante',
+            status: 'pendente',
+            dataHoraInicio: '2026-11-20T10:00:00.000Z',
+            dataHoraFim: '2026-11-20T11:00:00.000Z',
+            duracaoMinutos: 60,
+            intervaloAposMinutos: 30,
+            valorTotalEmCentavos: 10000,
+            valorSinalEmCentavos: 3000,
+            saldoRestanteEmCentavos: 7000,
+            profissionalId: 'prof-tais-romagnoli',
+            profissionalNome: 'Tais Romagnoli',
+            metodoPagamento: 'pix',
+            origem: 'app_cliente',
+            sinalIsento: false,
+            createdAt: '2026-11-01T10:00:00.000Z',
+            updatedAt: '2026-11-01T10:00:00.000Z',
+          }),
+        }),
+        update: mockUpdateAgendamento,
+      };
+
+      const anamneseDocRef = {
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({
+            clienteId: 'cliente-liberado',
+            tratamentoOncologico: { resposta: true, detalhes: 'Com atestado médico' },
+            exigeLiberacaoMedica: true,
+            contraindicacoes: ['Tratamento Oncológico: Com atestado médico'],
+            liberacaoMedicaAprovada: true,
+            liberacaoMedicaAprovadaEm: '2026-11-08T10:00:00.000Z',
+            liberacaoMedicaAprovadaPor: 'admin-1',
+          }),
+        }),
+      };
+
+      mockFirestore.collection.mockImplementation((nomeColecao: string) => {
+        if (nomeColecao === 'anamneses') {
+          return { doc: vi.fn().mockReturnValue(anamneseDocRef) };
+        }
+        return { doc: vi.fn().mockReturnValue(agDocRef) };
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin' },
+        body: { agendamentoId: 'ag-1', novoStatus: 'confirmado' },
+      });
+      const res = createMockResponse();
+
+      await (atualizarStatusAgendamento as unknown as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const dados = res.body?.dados as Record<string, unknown>;
+      expect(dados.status).toBe('confirmado');
+      expect(mockUpdateAgendamento).toHaveBeenCalled();
+    });
   });
 });

@@ -52,6 +52,8 @@ export const metodoPagamentoSchema = z.enum(['pix', 'cartao', 'boleto', 'dinheir
 export const origemAgendamentoSchema = z.enum(['app_cliente', 'presencial_admin']);
 
 export const solicitarAgendamentoInputSchema = z.object({
+  clienteId: z.string().min(1, 'ID do cliente inválido.').optional(),
+  clienteNome: z.string().min(1, 'Nome do cliente inválido.').optional(),
   servicoId: z.string().min(1, 'ID do serviço é obrigatório.'),
   servicoNome: z.string().min(1, 'Nome do serviço é obrigatório.'),
   duracaoMinutos: z

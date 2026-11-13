@@ -99,6 +99,7 @@ import {
   atualizarProfissional,
   vincularProfissionalAoServicoEndpoint,
   atualizarStatusAgendamento,
+  atualizarLiberacaoMedica,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -353,6 +354,16 @@ describe('[Backend] Proteger operações administrativas', () => {
         motivo: 'Cliente faltou',
       },
     },
+    {
+      name: 'atualizarLiberacaoMedica',
+      handler: atualizarLiberacaoMedica,
+      method: 'POST',
+      validBody: {
+        clienteId: 'cliente-1',
+        aprovada: true,
+        observacoes: 'Atestado médico aprovado.',
+      },
+    },
   ];
 
   describe('Validação de token ausente (HTTP 401)', () => {
@@ -542,6 +553,31 @@ describe('[Backend] Proteger operações administrativas', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.body?.mensagem).toContain('falta');
+    });
+
+    it('permite que administradora execute atualizarLiberacaoMedica', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'admin-uid',
+        email: 'admin@clinicataisromagnoli.com.br',
+        role: 'admin',
+        admin: true,
+      });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-admin-valido' },
+        body: {
+          clienteId: 'cliente-1',
+          aprovada: true,
+          observacoes: 'Avaliação médica favorável anexada.',
+        },
+      });
+      const res = createMockResponse();
+
+      await (atualizarLiberacaoMedica as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body?.mensagem).toContain('sucesso');
     });
   });
 });

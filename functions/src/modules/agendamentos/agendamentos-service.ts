@@ -12,6 +12,7 @@ import {
   validarEncaixeHorariosFuncionamento,
   CONFIGURACAO_HORARIOS_PADRAO,
   verificarProfissionalHabilitadoParaServico,
+  avaliarBloqueioContraindicacao,
   type HorariosFuncionamento,
   type Agendamento,
 } from '@clinica/shared';
@@ -21,6 +22,7 @@ import type { ServicosRepository } from '../servicos/servicos-repository.js';
 import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
 import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
 import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
+import type { AnamneseRepository } from '../anamnese/anamnese-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
@@ -46,6 +48,29 @@ export class AgendamentoBusinessError extends Error {
 }
 
 /**
+ * Impede confirmação de agendamento quando a ficha de anamnese do cliente
+ * exigir liberação médica prévia sem aprovação registrada.
+ */
+async function verificarBloqueioConfirmacaoPorAnamnese(
+  clienteId: string,
+  anamneseRepo?: AnamneseRepository,
+): Promise<void> {
+  if (!anamneseRepo) {
+    return;
+  }
+
+  const ficha = await anamneseRepo.obterPorClienteId(clienteId);
+  const avaliacao = avaliarBloqueioContraindicacao(ficha);
+  if (avaliacao.bloqueado) {
+    throw new AgendamentoBusinessError(
+      avaliacao.motivoBloqueio ||
+        'Não é possível confirmar o agendamento porque a ficha de anamnese indica contraindicação que exige liberação médica prévia.',
+      422,
+    );
+  }
+}
+
+/**
  * Cria uma nova solicitação de agendamento validando regras de negócio,
  * folgas, concorrência e o sinal de 30%, disparando notificação interna de confirmação.
  */
@@ -59,8 +84,22 @@ export async function solicitarNovoAgendamento(
   horariosFixosRepo?: HorariosFixosRepository,
   configuracaoHorarios?: HorariosFuncionamento,
   profissionaisRepo?: ProfissionaisRepository,
+  anamneseRepo?: AnamneseRepository,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
+
+  if (parsed.clienteId && parsed.clienteId !== user.uid && !user.isAdmin) {
+    throw new AgendamentoBusinessError(
+      'Acesso negado: apenas a administradora pode registrar agendamento para outro cliente.',
+      403,
+    );
+  }
+
+  const clienteIdAlvo = user.isAdmin && parsed.clienteId ? parsed.clienteId : user.uid;
+  const clienteNomeAlvo =
+    user.isAdmin && parsed.clienteId && parsed.clienteId !== user.uid
+      ? parsed.clienteNome || 'Cliente presencial'
+      : user.nome;
 
   let profissionalNomeFinal = parsed.profissionalNome;
 
@@ -155,7 +194,7 @@ export async function solicitarNovoAgendamento(
     const checagemBloqueios = verificarConflitoBloqueioOuHorarioFixo({
       dataHoraInicioIso: parsed.dataHoraInicio,
       dataHoraFimIso: dataHoraFim,
-      clienteIdSolicitante: user.uid,
+      clienteIdSolicitante: clienteIdAlvo,
       bloqueios,
       horariosFixos,
     });
@@ -191,14 +230,21 @@ export async function solicitarNovoAgendamento(
 
   // 5. Regra de Negócio de Isenção de Sinal (apenas administradora em agendamento presencial)
   const isencaoSinal = user.isAdmin && parsed.isencaoSinalAdmin === true;
+  const statusInicial = isencaoSinal ? 'confirmado' : 'pendente';
+
+  // 6. Bloqueio por contraindicação clínica sem liberação médica quando o agendamento já nasce confirmado
+  if (statusInicial === 'confirmado') {
+    await verificarBloqueioConfirmacaoPorAnamnese(clienteIdAlvo, anamneseRepo);
+  }
+
   const valores = calcularValoresAgendamento(parsed.valorTotalEmCentavos, 30, isencaoSinal);
 
   const novoAgendamento: Agendamento = {
     id: `ag-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    clienteId: user.uid,
-    clienteNome: user.nome,
-    clienteEmail: user.email,
-    clienteTelefone: user.telefone,
+    clienteId: clienteIdAlvo,
+    clienteNome: clienteNomeAlvo,
+    clienteEmail: clienteIdAlvo === user.uid ? user.email : undefined,
+    clienteTelefone: clienteIdAlvo === user.uid ? user.telefone : undefined,
     servicoId: parsed.servicoId,
     servicoNome: parsed.servicoNome,
     duracaoMinutos: parsed.duracaoMinutos,
@@ -210,7 +256,7 @@ export async function solicitarNovoAgendamento(
     intervaloAposMinutos: 30,
     profissionalId: parsed.profissionalId,
     profissionalNome: profissionalNomeFinal,
-    status: isencaoSinal ? 'confirmado' : 'pendente',
+    status: statusInicial,
     metodoPagamento: parsed.metodoPagamento,
     origem: user.isAdmin ? 'presencial_admin' : 'app_cliente',
     sinalIsento: valores.sinalIsento,
@@ -526,6 +572,7 @@ export async function atualizarStatusAgendamento(
   repo: AgendamentosRepository,
   notificacoesRepo?: NotificacoesRepository,
   dataReferenciaParam?: Date,
+  anamneseRepo?: AnamneseRepository,
 ): Promise<Agendamento> {
   if (!user.isAdmin) {
     throw new AgendamentoBusinessError(
@@ -554,6 +601,10 @@ export async function atualizarStatusAgendamento(
         `Transição de status inválida: não é permitido alterar de '${agendamento.status}' para '${parsed.novoStatus}'.`,
       422,
     );
+  }
+
+  if (parsed.novoStatus === 'confirmado') {
+    await verificarBloqueioConfirmacaoPorAnamnese(agendamento.clienteId, anamneseRepo);
   }
 
   const atualizado: Agendamento = {

@@ -1,8 +1,15 @@
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { User } from 'firebase/auth';
-import { DEFAULT_CLINIC_SETTINGS } from '@clinica/shared';
+import {
+  DEFAULT_CLINIC_SETTINGS,
+  INITIAL_ANAMNESE_DATA,
+  MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
+  type Agendamento as SharedAgendamento,
+} from '@clinica/shared';
+import * as anamneseService from '@/services/anamnese-service';
+import * as agendamentosService from '@/services/agendamentos-service';
 import * as settingsService from '@/services/clinic-settings-service';
 import { AdminDashboardPage } from './AdminDashboardPage';
 import { useAuth } from '@/features/auth/auth-context';
@@ -202,5 +209,142 @@ describe('AdminDashboardPage', () => {
     });
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it('impede confirmação de agendamento pendente na agenda quando ficha exige liberação médica', async () => {
+    const spyObterAnamnese = vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        tratamentoOncologico: { resposta: true, detalhes: 'Quimioterapia' },
+        clienteId: 'demo-client-4',
+        submittedAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-01T10:00:00.000Z',
+        pontosAtencao: ['Tratamento Oncológico: Quimioterapia'],
+        exigeLiberacaoMedica: true,
+        contraindicacoes: ['Tratamento Oncológico: Quimioterapia'],
+        liberacaoMedicaAprovada: false,
+      },
+    });
+    const spyAtualizarStatus = vi.spyOn(agendamentosService, 'atualizarStatusAgendamentoBackend');
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn-ag-4'));
+
+    const banner = await screen.findByTestId('agenda-feedback-banner');
+    expect(banner).toHaveAttribute('role', 'alert');
+    expect(banner).toHaveTextContent(MENSAGEM_BLOQUEIO_CONTRAINDICACAO);
+    expect(screen.getByRole('link', { name: /revisar ficha e liberação médica/i })).toHaveAttribute(
+      'href',
+      '/admin/clientes/demo-client-4',
+    );
+    expect(spyAtualizarStatus).not.toHaveBeenCalled();
+    expect(screen.getByTestId('agenda-item-ag-4')).toHaveTextContent('PENDENTE');
+
+    spyObterAnamnese.mockRestore();
+    spyAtualizarStatus.mockRestore();
+  });
+
+  it('permite confirmar agendamento pendente na agenda quando cliente tem liberação médica aprovada', async () => {
+    const spyObterAnamnese = vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        doencasCardiacas: { resposta: true, detalhes: 'Acompanhamento médico' },
+        clienteId: 'demo-client-4',
+        submittedAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-05T10:00:00.000Z',
+        pontosAtencao: ['Cardíaco: Acompanhamento médico'],
+        exigeLiberacaoMedica: true,
+        contraindicacoes: ['Cardíaco: Acompanhamento médico'],
+        liberacaoMedicaAprovada: true,
+      },
+    });
+    const agendamentoConfirmado: SharedAgendamento = {
+      id: 'ag-4',
+      clienteId: 'demo-client-4',
+      clienteNome: 'Carlos Eduardo',
+      servicoId: 'srv-4',
+      servicoNome: 'Liberação Miofascial',
+      duracaoMinutos: 60,
+      valorTotalEmCentavos: 17000,
+      valorSinalEmCentavos: 5100,
+      saldoRestanteEmCentavos: 11900,
+      dataHoraInicio: '2026-10-22T15:30:00.000Z',
+      dataHoraFim: '2026-10-22T16:30:00.000Z',
+      intervaloAposMinutos: 30,
+      profissionalId: 'prof-tais-romagnoli',
+      profissionalNome: 'Tais Romagnoli',
+      status: 'confirmado',
+      metodoPagamento: 'pix',
+      origem: 'app_cliente',
+      sinalIsento: false,
+      createdAt: '2026-10-20T10:00:00.000Z',
+      updatedAt: '2026-10-20T10:05:00.000Z',
+    };
+    const spyAtualizarStatus = vi
+      .spyOn(agendamentosService, 'atualizarStatusAgendamentoBackend')
+      .mockResolvedValue({
+        sucesso: true,
+        dados: agendamentoConfirmado,
+      });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn-ag-4'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agenda-item-ag-4')).toHaveTextContent('CONFIRMADO');
+    });
+    expect(screen.getByTestId('agenda-feedback-banner')).toHaveTextContent(
+      /agendamento de carlos eduardo confirmado com sucesso/i,
+    );
+
+    spyObterAnamnese.mockRestore();
+    spyAtualizarStatus.mockRestore();
+  });
+
+  it('exibe alerta de contraindicação e mantém modal presencial aberto quando cliente selecionado exige liberação médica', async () => {
+    const spyObterAnamnese = vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        problemasCirculatorios: { resposta: true, detalhes: 'Trombose prévia' },
+        clienteId: 'demo-client-1',
+        submittedAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-01T10:00:00.000Z',
+        pontosAtencao: ['Circulatório/Varizes: Trombose prévia'],
+        exigeLiberacaoMedica: true,
+        contraindicacoes: ['Circulatório/Trombose: Trombose prévia'],
+        liberacaoMedicaAprovada: false,
+      },
+    });
+    const spySolicitar = vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend');
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole('button', { name: /novo agendamento presencial/i }));
+
+    fireEvent.change(screen.getByLabelText(/cliente cadastrado/i), {
+      target: { value: 'demo-client-1' },
+    });
+
+    const alertaModal = await screen.findByTestId('modal-presencial-bloqueio-alerta');
+    expect(alertaModal).toHaveTextContent(/ficha exige liberação médica/i);
+
+    const modal = screen.getByRole('dialog');
+    fireEvent.click(within(modal).getByRole('button', { name: /confirmar agendamento/i }));
+
+    const erroModal = await screen.findByTestId('modal-presencial-erro');
+    expect(erroModal).toHaveTextContent(MENSAGEM_BLOQUEIO_CONTRAINDICACAO);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(spySolicitar).not.toHaveBeenCalled();
+
+    spyObterAnamnese.mockRestore();
+    spySolicitar.mockRestore();
   });
 });

@@ -32,6 +32,32 @@ describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
       }
     });
 
+    it('aceita clienteId e clienteNome opcionais e rejeita clienteId vazio', () => {
+      const valido = solicitarAgendamentoInputSchema.safeParse({
+        clienteId: 'cliente-presencial-1',
+        clienteNome: 'Ana Paula',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'presencial',
+        isencaoSinalAdmin: true,
+      });
+      expect(valido.success).toBe(true);
+
+      const invalido = solicitarAgendamentoInputSchema.safeParse({
+        clienteId: '',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'presencial',
+      });
+      expect(invalido.success).toBe(false);
+    });
+
     it('rejeita payload com duração inválida ou valor negativo', () => {
       const inputInvalido = {
         servicoId: '',

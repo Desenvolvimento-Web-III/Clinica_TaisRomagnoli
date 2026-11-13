@@ -3,9 +3,11 @@ import {
   type SolicitarAgendamentoInput,
   type CancelarAgendamentoInput,
   type AlterarAgendamentoInput,
+  type AtualizarStatusAgendamentoInput,
 } from '@clinica/shared';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { environment } from '@/config/env';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { Agendamento as UiAgendamento } from '@/features/agendamentos/types/agendamento';
 import {
   getAgendamentosStorage,
@@ -81,7 +83,13 @@ export async function getAuthToken(): Promise<string | null> {
 export async function solicitarAgendamentoBackend(
   input: SolicitarAgendamentoInput,
   token?: string | null,
-): Promise<{ sucesso: boolean; dados?: SharedAgendamento; erro?: string }> {
+): Promise<{
+  sucesso: boolean;
+  dados?: SharedAgendamento;
+  erro?: string;
+  statusCode?: number;
+  networkError?: boolean;
+}> {
   const authToken = token ?? (await getAuthToken());
   if (!authToken) {
     return { sucesso: false, erro: 'Usuário não autenticado no Firebase.' };
@@ -104,13 +112,60 @@ export async function solicitarAgendamentoBackend(
       return {
         sucesso: false,
         erro: body.error || 'Não foi possível processar o agendamento no servidor.',
+        statusCode: response.status,
       };
     }
 
     return { sucesso: true, dados: body.dados };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Falha na comunicação com o servidor.';
-    return { sucesso: false, erro: msg };
+    return { sucesso: false, erro: msg, networkError: true };
+  }
+}
+
+/**
+ * Atualiza o status de um agendamento existente via Cloud Function (restrito à administradora).
+ */
+export async function atualizarStatusAgendamentoBackend(
+  input: AtualizarStatusAgendamentoInput,
+  token?: string | null,
+): Promise<{
+  sucesso: boolean;
+  dados?: SharedAgendamento;
+  erro?: string;
+  statusCode?: number;
+  networkError?: boolean;
+}> {
+  const authToken = token ?? (await getAuthToken());
+  if (!authToken) {
+    return { sucesso: false, erro: 'Usuário não autenticado no Firebase.' };
+  }
+
+  try {
+    const url = `${getFunctionsBaseUrl()}/atualizarStatusAgendamento`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    const body = await response.json();
+
+    if (!response.ok) {
+      return {
+        sucesso: false,
+        erro: body.error || 'Não foi possível atualizar o status do agendamento.',
+        statusCode: response.status,
+      };
+    }
+
+    return { sucesso: true, dados: body.dados };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Falha na comunicação com o servidor.';
+    return { sucesso: false, erro: msg, networkError: true };
   }
 }
 
@@ -193,10 +248,11 @@ export async function cancelarAgendamentoBackend(
 }
 
 /**
- * Lista os agendamentos do cliente autenticado via Cloud Function.
+ * Lista os agendamentos do cliente autenticado (ou de um cliente específico para administradora) via Cloud Function.
  */
 export async function listarAgendamentosBackend(
   token?: string | null,
+  clienteId?: string,
 ): Promise<{ sucesso: boolean; dados: SharedAgendamento[]; erro?: string }> {
   const authToken = token ?? (await getAuthToken());
   if (!authToken) {
@@ -204,7 +260,8 @@ export async function listarAgendamentosBackend(
   }
 
   try {
-    const url = `${getFunctionsBaseUrl()}/listarMeusAgendamentos`;
+    const querySuffix = clienteId ? `?clienteId=${encodeURIComponent(clienteId)}` : '';
+    const url = `${getFunctionsBaseUrl()}/listarMeusAgendamentos${querySuffix}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -226,6 +283,27 @@ export async function listarAgendamentosBackend(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Falha na comunicação com o servidor.';
     return { sucesso: false, dados: [], erro: msg };
+  }
+}
+
+/**
+ * Consulta agendamentos diretamente no Firestore para a visão da agenda administrativa.
+ */
+export async function buscarAgendamentosAdmin(): Promise<SharedAgendamento[]> {
+  if (!db || !auth?.currentUser) {
+    return [];
+  }
+
+  try {
+    const q = query(collection(db, 'agendamentos'), orderBy('dataHoraInicio', 'asc'));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return [];
+    }
+
+    return snapshot.docs.map((docSnap) => docSnap.data() as SharedAgendamento);
+  } catch {
+    return [];
   }
 }
 

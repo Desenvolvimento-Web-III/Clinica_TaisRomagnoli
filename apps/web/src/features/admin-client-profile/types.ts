@@ -1,6 +1,14 @@
 export type ClientStatus = 'ativo' | 'inativo';
 
-export type AppointmentStatus = 'agendado' | 'concluido' | 'cancelado' | 'falta';
+export type AppointmentStatus =
+  | 'agendado'
+  | 'pendente'
+  | 'confirmado'
+  | 'em_andamento'
+  | 'concluido'
+  | 'cancelado'
+  | 'reagendado'
+  | 'falta';
 
 export type PaymentStatus = 'pago' | 'pendente' | 'credito' | 'perdido';
 
@@ -27,6 +35,12 @@ export type ClientAnamnesis = Readonly<{
   consentConfirmed: boolean;
   attentionPoints: readonly string[];
   notes: string;
+  exigeLiberacaoMedica?: boolean;
+  contraindicacoes?: readonly string[];
+  liberacaoMedicaAprovada?: boolean;
+  liberacaoMedicaObservacoes?: string;
+  liberacaoMedicaAprovadaEm?: string;
+  liberacaoMedicaAprovadaPor?: string;
 }>;
 
 export type AdministrativeClientProfile = Readonly<{

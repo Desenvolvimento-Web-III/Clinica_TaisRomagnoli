@@ -14,9 +14,15 @@ import { InMemoryBloqueiosRepository } from '../src/modules/agenda/bloqueios-rep
 import { InMemoryHorariosFixosRepository } from '../src/modules/agenda/horarios-fixos-repository.js';
 import { InMemoryServicosRepository } from '../src/modules/servicos/servicos-repository.js';
 import { InMemoryProfissionaisRepository } from '../src/modules/profissionais/profissionais-repository.js';
+import { InMemoryAnamneseRepository } from '../src/modules/anamnese/anamnese-repository.js';
+import {
+  salvarFichaAnamneseService,
+  registrarLiberacaoMedicaService,
+} from '../src/modules/anamnese/anamnese-service.js';
 import {
   CONFIGURACAO_HORARIOS_PADRAO,
   ID_PROFISSIONAL_PADRAO,
+  INITIAL_ANAMNESE_DATA,
   type ServicoModel,
 } from '@clinica/shared';
 
@@ -1234,6 +1240,302 @@ describe('Agendamentos Service (Functions Backend)', () => {
           repo,
         ),
       ).rejects.toThrow(/Transição de status inválida/);
+    });
+  });
+
+  describe('Bloqueio por contraindicação na confirmação de agendamento', () => {
+    let anamneseRepo: InMemoryAnamneseRepository;
+
+    const criarAgendamentoPendente = async (id = 'ag-contraindicacao') =>
+      repo.salvar({
+        id,
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        dataHoraFim: '2026-10-22T11:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: ID_PROFISSIONAL_PADRAO,
+        profissionalNome: 'Tais Romagnoli',
+        status: 'pendente',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-20T10:00:00.000Z',
+        updatedAt: '2026-10-20T10:00:00.000Z',
+      });
+
+    beforeEach(() => {
+      anamneseRepo = new InMemoryAnamneseRepository();
+    });
+
+    it('impede confirmação de agendamento pendente (HTTP 422) quando a ficha exigir liberação médica', async () => {
+      await criarAgendamentoPendente('ag-bloqueado-1');
+
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...INITIAL_ANAMNESE_DATA,
+            tratamentoOncologico: { resposta: true, detalhes: 'Em tratamento oncológico' },
+            consentimentoConfirmado: true,
+          },
+        },
+        usuarioAutenticado: {
+          ...clienteUser,
+          role: 'cliente',
+          isClient: true,
+        },
+        repo: anamneseRepo,
+      });
+
+      await expect(
+        atualizarStatusAgendamento(
+          { agendamentoId: 'ag-bloqueado-1', novoStatus: 'confirmado' },
+          adminUser,
+          repo,
+          notifRepo,
+          undefined,
+          anamneseRepo,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(/liberação médica/i),
+      });
+
+      const persistido = await repo.buscarPorId('ag-bloqueado-1');
+      expect(persistido?.status).toBe('pendente');
+    });
+
+    it('impede confirmação também para condição circulatória ou cardíaca sem liberação e libera após aprovação da administradora', async () => {
+      await criarAgendamentoPendente('ag-cardiaco-1');
+
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...INITIAL_ANAMNESE_DATA,
+            doencasCardiacas: { resposta: true, detalhes: 'Uso de marca-passo' },
+            consentimentoConfirmado: true,
+          },
+        },
+        usuarioAutenticado: {
+          ...clienteUser,
+          role: 'cliente',
+          isClient: true,
+        },
+        repo: anamneseRepo,
+      });
+
+      // Bloqueado antes da aprovação médica
+      await expect(
+        atualizarStatusAgendamento(
+          { agendamentoId: 'ag-cardiaco-1', novoStatus: 'confirmado' },
+          adminUser,
+          repo,
+          notifRepo,
+          undefined,
+          anamneseRepo,
+        ),
+      ).rejects.toThrow(/liberação médica/i);
+
+      // Administradora registra o aval médico recebido
+      await registrarLiberacaoMedicaService({
+        input: {
+          clienteId: clienteUser.uid,
+          aprovada: true,
+          observacoes: 'Atestado do cardiologista validado.',
+        },
+        usuarioAutenticado: {
+          ...adminUser,
+          role: 'admin',
+          isClient: false,
+        },
+        repo: anamneseRepo,
+      });
+
+      // Confirmação liberada após aprovação
+      const confirmado = await atualizarStatusAgendamento(
+        { agendamentoId: 'ag-cardiaco-1', novoStatus: 'confirmado' },
+        adminUser,
+        repo,
+        notifRepo,
+        undefined,
+        anamneseRepo,
+      );
+
+      expect(confirmado.status).toBe('confirmado');
+    });
+
+    it('permite confirmação quando a ficha tem apenas pontos de atenção sem exigência médica ou quando não há ficha', async () => {
+      await criarAgendamentoPendente('ag-sem-ficha');
+      const confirmadoSemFicha = await atualizarStatusAgendamento(
+        { agendamentoId: 'ag-sem-ficha', novoStatus: 'confirmado' },
+        adminUser,
+        repo,
+        notifRepo,
+        undefined,
+        anamneseRepo,
+      );
+      expect(confirmadoSemFicha.status).toBe('confirmado');
+
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...INITIAL_ANAMNESE_DATA,
+            alergiasProdutos: { resposta: true, detalhes: 'Óleo de eucalipto' },
+            gestanteOuLactante: { resposta: true, detalhes: '22 semanas de gestação' },
+            consentimentoConfirmado: true,
+          },
+        },
+        usuarioAutenticado: {
+          ...clienteUser,
+          role: 'cliente',
+          isClient: true,
+        },
+        repo: anamneseRepo,
+      });
+
+      await criarAgendamentoPendente('ag-alergia-ok');
+      const confirmadoComAlertaLeve = await atualizarStatusAgendamento(
+        { agendamentoId: 'ag-alergia-ok', novoStatus: 'confirmado' },
+        adminUser,
+        repo,
+        notifRepo,
+        undefined,
+        anamneseRepo,
+      );
+      expect(confirmadoComAlertaLeve.status).toBe('confirmado');
+    });
+
+    it('permite cancelar agendamento pendente mesmo quando a ficha exige liberação médica', async () => {
+      await criarAgendamentoPendente('ag-cancelar-pendente');
+
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...INITIAL_ANAMNESE_DATA,
+            problemasCirculatorios: { resposta: true, detalhes: 'Suspeita de trombose' },
+            consentimentoConfirmado: true,
+          },
+        },
+        usuarioAutenticado: {
+          ...clienteUser,
+          role: 'cliente',
+          isClient: true,
+        },
+        repo: anamneseRepo,
+      });
+
+      const cancelado = await atualizarStatusAgendamento(
+        { agendamentoId: 'ag-cancelar-pendente', novoStatus: 'cancelado', motivo: 'Sem laudo' },
+        adminUser,
+        repo,
+        notifRepo,
+        undefined,
+        anamneseRepo,
+      );
+
+      expect(cancelado.status).toBe('cancelado');
+    });
+
+    it('impede criação presencial já confirmada quando a ficha do cliente exigir liberação médica sem aprovação', async () => {
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...INITIAL_ANAMNESE_DATA,
+            tratamentoOncologico: { resposta: true, detalhes: 'Radioterapia recente' },
+            consentimentoConfirmado: true,
+          },
+        },
+        usuarioAutenticado: {
+          ...clienteUser,
+          role: 'cliente',
+          isClient: true,
+        },
+        repo: anamneseRepo,
+      });
+
+      const inputPresencial = {
+        clienteId: clienteUser.uid,
+        clienteNome: clienteUser.nome,
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T14:00:00.000Z',
+        metodoPagamento: 'presencial' as const,
+        isencaoSinalAdmin: true,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          inputPresencial,
+          adminUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          anamneseRepo,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(/liberação médica/i),
+      });
+
+      // Cliente comum solicitando pelo app continua podendo criar solicitação com status pendente
+      const pendenteCliente = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        anamneseRepo,
+      );
+
+      expect(pendenteCliente.status).toBe('pendente');
+    });
+
+    it('bloqueia cliente comum que tentar agendar informando clienteId de terceiro (HTTP 403)', async () => {
+      await expect(
+        solicitarNovoAgendamento(
+          {
+            clienteId: 'outro-cliente-uid',
+            servicoId: 'massagem-relaxante',
+            servicoNome: 'Massagem Relaxante',
+            duracaoMinutos: 60,
+            valorTotalEmCentavos: 17000,
+            dataHoraInicio: '2026-10-22T16:00:00.000Z',
+            metodoPagamento: 'pix' as const,
+          },
+          clienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          anamneseRepo,
+        ),
+      ).rejects.toMatchObject({ statusCode: 403 });
     });
   });
 });

@@ -57,4 +57,18 @@ export interface FichaAnamneseRecord extends FichaAnamneseData {
   submittedAt: string;
   updatedAt: string;
   pontosAtencao: string[];
+  exigeLiberacaoMedica?: boolean;
+  contraindicacoes?: string[];
+  liberacaoMedicaAprovada?: boolean;
+  liberacaoMedicaObservacoes?: string;
+  liberacaoMedicaAprovadaEm?: string;
+  liberacaoMedicaAprovadaPor?: string;
+}
+
+export interface ResultadoAvaliacaoContraindicacao {
+  exigeLiberacaoMedica: boolean;
+  contraindicacoes: string[];
+  liberacaoMedicaAprovada: boolean;
+  bloqueado: boolean;
+  motivoBloqueio?: string;
 }

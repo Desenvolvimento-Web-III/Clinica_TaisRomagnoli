@@ -63,6 +63,7 @@ import {
   AnamneseBusinessError,
   salvarFichaAnamneseService,
   obterFichaAnamneseService,
+  registrarLiberacaoMedicaService,
 } from './modules/anamnese/anamnese-service.js';
 
 initializeApp();
@@ -129,6 +130,7 @@ export {
   AnamneseBusinessError,
   salvarFichaAnamneseService,
   obterFichaAnamneseService,
+  registrarLiberacaoMedicaService,
 } from './modules/anamnese/anamnese-service.js';
 export type { AnamneseRepository } from './modules/anamnese/anamnese-repository.js';
 import {
@@ -339,6 +341,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
     const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
+    const anamneseRepo = new FirestoreAnamneseRepository(firestore);
 
     const agendamento = await solicitarNovoAgendamento(
       request.body,
@@ -350,6 +353,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       horariosFixosRepo,
       undefined,
       profissionaisRepo,
+      anamneseRepo,
     );
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
@@ -469,12 +473,15 @@ export const atualizarStatusAgendamento = onRequest({ cors: true }, async (reque
     const firestore = getFirestore();
     const repo = new FirestoreAgendamentosRepository(firestore);
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const anamneseRepo = new FirestoreAnamneseRepository(firestore);
 
     const agendamento = await atualizarStatusAgendamentoService(
       request.body,
       user,
       repo,
       notifRepo,
+      undefined,
+      anamneseRepo,
     );
 
     response.status(200).json({
@@ -1792,7 +1799,19 @@ export const salvarFichaAnamnese = onRequest({ cors: true }, async (request, res
     const dados = payload.dados || payload;
 
     const fichaSalva = await salvarFichaAnamneseService({
-      input: { clienteId, dados },
+      input: {
+        clienteId,
+        dados,
+        ...(typeof payload.exigeLiberacaoMedica === 'boolean'
+          ? { exigeLiberacaoMedica: payload.exigeLiberacaoMedica }
+          : {}),
+        ...(typeof payload.liberacaoMedicaAprovada === 'boolean'
+          ? { liberacaoMedicaAprovada: payload.liberacaoMedicaAprovada }
+          : {}),
+        ...(typeof payload.liberacaoMedicaObservacoes === 'string'
+          ? { liberacaoMedicaObservacoes: payload.liberacaoMedicaObservacoes }
+          : {}),
+      },
       usuarioAutenticado: user,
       repo,
       notifRepo,
@@ -1809,6 +1828,45 @@ export const salvarFichaAnamnese = onRequest({ cors: true }, async (request, res
     }
     console.error('Erro ao salvar ficha de anamnese:', error);
     response.status(500).json({ error: 'Erro interno ao salvar ficha de anamnese.' });
+  }
+});
+
+/**
+ * Endpoint administrativo para registrar ou revogar a liberação médica na ficha de anamnese.
+ * Operação restrita exclusivamente à administradora autenticada.
+ */
+export const atualizarLiberacaoMedica = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreAnamneseRepository(firestore);
+
+    const fichaAtualizada = await registrarLiberacaoMedicaService({
+      input: request.body,
+      usuarioAutenticado: user,
+      repo,
+    });
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: fichaAtualizada.liberacaoMedicaAprovada
+        ? 'Liberação médica registrada com sucesso.'
+        : 'Status de liberação médica atualizado com sucesso.',
+      dados: fichaAtualizada,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao atualizar liberação médica:', error);
+    response.status(500).json({ error: 'Erro interno ao atualizar liberação médica.' });
   }
 });
 
