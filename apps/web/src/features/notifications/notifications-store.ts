@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ClientNotification, ClientNotificationType } from '@clinica/shared';
+import {
+  buscarNotificacoesRemotas,
+  marcarNotificacaoLidaBackend,
+  mesclarNotificacoes,
+  ouvirNotificacoesClienteEmTempoReal,
+} from '@/services/notificacoes-service';
 
 const STORAGE_PREFIX = 'clinica:notificacoes:v2:';
 
@@ -159,6 +165,7 @@ export function markClientNotificationAsRead(
     item.id === notificationId ? { ...item, lida: true } : item,
   );
   saveClientNotifications(normalized, updated);
+  void marcarNotificacaoLidaBackend(notificationId, normalized);
 }
 
 export function useClientNotifications(userUid?: string | null) {
@@ -166,11 +173,28 @@ export function useClientNotifications(userUid?: string | null) {
   const [notifications, setNotifications] = useState<ClientNotification[]>(() =>
     loadClientNotifications(userUid),
   );
+  const [isSyncing, setIsSyncing] = useState(false);
 
   if (userUid !== prevUid) {
     setPrevUid(userUid);
     setNotifications(loadClientNotifications(userUid));
   }
+
+  const sync = useCallback(async () => {
+    if (!userUid) return;
+    setIsSyncing(true);
+    try {
+      const remotas = await buscarNotificacoesRemotas(userUid);
+      if (remotas.length > 0) {
+        const locais = loadClientNotifications(userUid);
+        const mescladas = mesclarNotificacoes(locais, remotas);
+        saveClientNotifications(userUid, mescladas);
+        setNotifications(mescladas);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [userUid]);
 
   useEffect(() => {
     const handleSync = () => {
@@ -186,6 +210,33 @@ export function useClientNotifications(userUid?: string | null) {
     };
   }, [userUid]);
 
+  useEffect(() => {
+    if (!userUid) return;
+
+    let ativo = true;
+
+    void buscarNotificacoesRemotas(userUid).then((remotas) => {
+      if (!ativo || remotas.length === 0) return;
+      const locais = loadClientNotifications(userUid);
+      const mescladas = mesclarNotificacoes(locais, remotas);
+      saveClientNotifications(userUid, mescladas);
+      setNotifications(mescladas);
+    });
+
+    const unsubscribe = ouvirNotificacoesClienteEmTempoReal(userUid, (remotas) => {
+      if (!ativo || remotas.length === 0) return;
+      const locais = loadClientNotifications(userUid);
+      const mescladas = mesclarNotificacoes(locais, remotas);
+      saveClientNotifications(userUid, mescladas);
+      setNotifications(mescladas);
+    });
+
+    return () => {
+      ativo = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [userUid]);
+
   const unreadCount = notifications.filter((item) => !item.lida).length;
 
   const markAsRead = (notificationId: string) => {
@@ -194,12 +245,21 @@ export function useClientNotifications(userUid?: string | null) {
     );
     setNotifications(updated);
     saveClientNotifications(userUid, updated);
+    if (userUid) {
+      void marcarNotificacaoLidaBackend(notificationId, userUid);
+    }
   };
 
   const markAllAsRead = () => {
+    const unread = notifications.filter((item) => !item.lida);
     const updated = notifications.map((item) => ({ ...item, lida: true }));
     setNotifications(updated);
     saveClientNotifications(userUid, updated);
+    if (userUid) {
+      for (const item of unread) {
+        void marcarNotificacaoLidaBackend(item.id, userUid);
+      }
+    }
   };
 
   const clearNotification = (notificationId: string) => {
@@ -214,5 +274,7 @@ export function useClientNotifications(userUid?: string | null) {
     markAsRead,
     markAllAsRead,
     clearNotification,
+    isSyncing,
+    sync,
   };
 }

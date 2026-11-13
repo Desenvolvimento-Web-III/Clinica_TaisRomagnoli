@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NotificationsPage } from './NotificationsPage';
@@ -9,6 +9,13 @@ const mockUseOptionalAuth = vi.fn();
 vi.mock('@/features/auth/auth-context', () => ({
   useOptionalAuth: () => mockUseOptionalAuth(),
   useAuth: () => mockUseOptionalAuth(),
+}));
+
+vi.mock('@/services/notificacoes-service', () => ({
+  buscarNotificacoesRemotas: vi.fn().mockResolvedValue([]),
+  marcarNotificacaoLidaBackend: vi.fn().mockResolvedValue({ sucesso: true }),
+  mesclarNotificacoes: (locais: unknown[], remotas: unknown[]) => [...remotas, ...locais],
+  ouvirNotificacoesClienteEmTempoReal: vi.fn().mockReturnValue(() => {}),
 }));
 
 describe('NotificationsPage', () => {
@@ -74,10 +81,14 @@ describe('NotificationsPage', () => {
 
     // Marca a primeira como lida
     const markReadBtns = screen.getAllByRole('button', { name: 'Marcar como lida' });
-    fireEvent.click(markReadBtns[0]!);
+    await act(async () => {
+      fireEvent.click(markReadBtns[0]!);
+    });
 
     const tabNaoLidas = screen.getByRole('button', { name: 'Não lidas (1)' });
-    fireEvent.click(tabNaoLidas);
+    await act(async () => {
+      fireEvent.click(tabNaoLidas);
+    });
 
     expect(screen.queryByText('Preencha sua Ficha de Anamnese')).not.toBeInTheDocument();
     expect(screen.getByText('Bem-vindo(a) à Clínica!')).toBeInTheDocument();
@@ -99,7 +110,9 @@ describe('NotificationsPage', () => {
     const [markAllBtn] = screen.getAllByRole('button', { name: /marcar todas como lidas/i });
     expect(markAllBtn).toBeDefined();
     if (markAllBtn) {
-      fireEvent.click(markAllBtn);
+      await act(async () => {
+        fireEvent.click(markAllBtn);
+      });
     }
 
     expect(screen.getByRole('button', { name: 'Não lidas (0)' })).toBeInTheDocument();
@@ -118,13 +131,43 @@ describe('NotificationsPage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Remover notificação: Preencha sua Ficha de Anamnese' }),
-    );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Remover notificação: Bem-vindo(a) à Clínica!' }),
-    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Remover notificação: Preencha sua Ficha de Anamnese' }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Remover notificação: Bem-vindo(a) à Clínica!' }),
+      );
+    });
 
     expect(screen.getByText('Nenhuma notificação no momento')).toBeInTheDocument();
+  });
+
+  it('exibe o botao de sincronizacao manual e permite atualizar as notificacoes', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/notificacoes']}>
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+
+    const syncBtn = await screen.findByTestId('sync-notifications-btn');
+    expect(syncBtn).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(syncBtn).toHaveTextContent('Atualizar');
+    });
+
+    await act(async () => {
+      fireEvent.click(syncBtn);
+    });
+    expect(syncBtn).toBeInTheDocument();
   });
 });

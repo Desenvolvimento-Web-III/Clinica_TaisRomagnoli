@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import * as notificacoesService from '@/services/notificacoes-service';
 import {
   ANAMNESE_NOTIFICATION_ID,
   WELCOME_NOTIFICATION_ID,
@@ -8,11 +10,20 @@ import {
   loadClientNotifications,
   markClientNotificationAsRead,
   saveClientNotifications,
+  useClientNotifications,
 } from './notifications-store';
+
+vi.mock('@/services/notificacoes-service', () => ({
+  buscarNotificacoesRemotas: vi.fn().mockResolvedValue([]),
+  marcarNotificacaoLidaBackend: vi.fn().mockResolvedValue({ sucesso: true }),
+  mesclarNotificacoes: (locais: unknown[], remotas: unknown[]) => [...remotas, ...locais],
+  ouvirNotificacoesClienteEmTempoReal: vi.fn().mockReturnValue(() => {}),
+}));
 
 describe('notifications-store', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
   });
 
   it('gera apenas as notificações iniciais de boas-vindas e ficha de anamnese para um novo perfil', () => {
@@ -92,5 +103,44 @@ describe('notifications-store', () => {
     saveClientNotifications('user-1', []);
 
     expect(loadClientNotifications('user-1')).toEqual([]);
+  });
+
+  it('markClientNotificationAsRead aciona a sincronização com o backend', () => {
+    initializeProfileNotifications('user-sync', 'Fernanda');
+
+    markClientNotificationAsRead('user-sync', ANAMNESE_NOTIFICATION_ID);
+
+    expect(notificacoesService.marcarNotificacaoLidaBackend).toHaveBeenCalledWith(
+      ANAMNESE_NOTIFICATION_ID,
+      'user-sync',
+    );
+  });
+
+  it('useClientNotifications escuta em tempo real e sincroniza notificações remotas', async () => {
+    const mockRemotas = [
+      {
+        id: 'notif-remota-1',
+        tipo: 'agendamento' as const,
+        titulo: 'Sessão Confirmada',
+        mensagem: 'Terapeuta confirmou.',
+        lida: false,
+        createdAt: '2026-10-25T10:00:00.000Z',
+      },
+    ];
+
+    vi.mocked(notificacoesService.buscarNotificacoesRemotas).mockResolvedValue(mockRemotas);
+
+    const { result } = renderHook(() => useClientNotifications('user-hook'));
+
+    expect(notificacoesService.ouvirNotificacoesClienteEmTempoReal).toHaveBeenCalledWith(
+      'user-hook',
+      expect.any(Function),
+    );
+
+    await act(async () => {
+      await result.current.sync();
+    });
+
+    expect(result.current.notifications.some((item) => item.id === 'notif-remota-1')).toBe(true);
   });
 });
