@@ -39,6 +39,10 @@ export interface UserProfile {
   ultimoAtendimento?: string;
   /** Total histórico de atendimentos concluídos */
   totalAtendimentosConcluidos?: number;
+  /** Identificador da sessão única ativa atual */
+  activeSessionId?: string;
+  /** Timestamp ISO de quando a sessão única ativa foi criada */
+  activeSessionCreatedAt?: string;
 }
 
 export interface RecorrenciaClienteOutput {

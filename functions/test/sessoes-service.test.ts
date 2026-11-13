@@ -152,7 +152,7 @@ describe('SessoesService - Revogação de sessões e política de sessão única
   });
 
   describe('aplicarPoliticaSessaoUnica', () => {
-    it('aplica a política de sessão única invalidando tokens anteriores', async () => {
+    it('aplica a política de sessão única invalidando tokens anteriores e gerando sessionId', async () => {
       const result = await aplicarPoliticaSessaoUnica(
         mockClienteUser,
         mockAuth,
@@ -162,8 +162,36 @@ describe('SessoesService - Revogação de sessões e política de sessão única
 
       expect(result.uid).toBe(mockClienteUser.uid);
       expect(result.politicaSessaoUnica).toBe(true);
+      expect(result.sessionId).toBeDefined();
+      expect(typeof result.sessionId).toBe('string');
       expect(result.mensagem).toContain('Política de sessão única aplicada');
       expect(mockRevokeRefreshTokens).toHaveBeenCalledWith(mockClienteUser.uid);
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activeSessionId: result.sessionId,
+          activeSessionCreatedAt: expect.any(String),
+          motivoUltimaRevogacao: 'Novo login em dispositivo móvel',
+        }),
+        { merge: true },
+      );
+    });
+
+    it('aceita sessionId customizado fornecido pelo chamador', async () => {
+      const result = await aplicarPoliticaSessaoUnica(
+        mockClienteUser,
+        mockAuth,
+        mockFirestore,
+        'Login customizado',
+        'sessao-custom-12345',
+      );
+
+      expect(result.sessionId).toBe('sessao-custom-12345');
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activeSessionId: 'sessao-custom-12345',
+        }),
+        { merge: true },
+      );
     });
   });
 
@@ -174,6 +202,29 @@ describe('SessoesService - Revogação de sessões e política de sessão única
       expect(status.uid).toBe(mockClienteUser.uid);
       expect(status.tokensValidAfterTime).toBe('Thu, 07 Nov 2026 01:00:00 GMT');
       expect(status.disabled).toBe(false);
+      expect(status.activeSessionId).toBeUndefined();
+    });
+
+    it('recupera activeSessionId do Firestore quando fornecido', async () => {
+      const mockFirestoreWithDoc = {
+        collection: vi.fn(() => ({
+          doc: vi.fn(() => ({
+            get: vi.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ activeSessionId: 'sessao-ativa-recuperada' }),
+            }),
+          })),
+        })),
+      } as unknown as SessoesFirestoreAdapter;
+
+      const status = await consultarStatusSessao(
+        mockClienteUser.uid,
+        mockClienteUser,
+        mockAuth,
+        mockFirestoreWithDoc,
+      );
+
+      expect(status.activeSessionId).toBe('sessao-ativa-recuperada');
     });
 
     it('permite que a administradora consulte o status da sessão de terceiros', async () => {

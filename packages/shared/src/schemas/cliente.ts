@@ -69,6 +69,8 @@ export const perfilClienteSchema = z.object({
     .optional(),
   ultimoAtendimento: z.string().datetime().optional(),
   totalAtendimentosConcluidos: z.number().int().nonnegative().optional(),
+  activeSessionId: z.string().optional(),
+  activeSessionCreatedAt: z.string().datetime().optional(),
 });
 
 export type PerfilClienteModel = z.infer<typeof perfilClienteSchema>;

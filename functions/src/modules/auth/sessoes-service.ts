@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Auth } from 'firebase-admin/auth';
 import type { Firestore } from 'firebase-admin/firestore';
 import {
@@ -25,6 +26,7 @@ export interface StatusSessaoResult {
   email?: string;
   tokensValidAfterTime?: string;
   disabled: boolean;
+  activeSessionId?: string;
 }
 
 /**
@@ -73,22 +75,46 @@ export async function revogarSessoesUsuario(
   // 4. Revogação de refresh tokens via Firebase Admin SDK
   await auth.revokeRefreshTokens(targetUid);
   const agoraIso = new Date().toISOString();
+  const sessionId = parsed.politicaSessaoUnica
+    ? parsed.sessionId || randomUUID()
+    : parsed.sessionId;
 
-  // 5. Registro de auditoria no Firestore (se fornecido)
+  // 5. Registro de auditoria e persistência de sessão única no Firestore (se fornecido)
   if (firestore) {
     try {
       const userDocRef = firestore.collection('usuarios').doc(targetUid);
-      await userDocRef.set(
-        {
-          ultimaRevogacaoSessoesEm: agoraIso,
-          motivoUltimaRevogacao:
-            parsed.motivo ||
-            (parsed.politicaSessaoUnica ? 'Sessão única iniciada' : 'Revogação manual'),
-          revogadoPor: caller.uid,
-          updatedAt: agoraIso,
-        },
-        { merge: true },
-      );
+      const userUpdatePayload: Record<string, unknown> = {
+        ultimaRevogacaoSessoesEm: agoraIso,
+        motivoUltimaRevogacao:
+          parsed.motivo ||
+          (parsed.politicaSessaoUnica ? 'Sessão única iniciada' : 'Revogação manual'),
+        revogadoPor: caller.uid,
+        updatedAt: agoraIso,
+      };
+
+      if (sessionId) {
+        userUpdatePayload.activeSessionId = sessionId;
+        userUpdatePayload.activeSessionCreatedAt = agoraIso;
+      }
+
+      await userDocRef.set(userUpdatePayload, { merge: true });
+
+      // Atualiza também no perfil do cliente se a coleção existir
+      if (sessionId) {
+        try {
+          const clienteDocRef = firestore.collection('clientes').doc(targetUid);
+          await clienteDocRef.set(
+            {
+              activeSessionId: sessionId,
+              activeSessionCreatedAt: agoraIso,
+              updatedAt: agoraIso,
+            },
+            { merge: true },
+          );
+        } catch {
+          // Ignora silenciosamente se o documento do cliente não estiver presente
+        }
+      }
 
       await firestore.collection('auditoria_sessoes').add({
         targetUid,
@@ -99,6 +125,7 @@ export async function revogarSessoesUsuario(
             ? 'Início de nova sessão sob política de sessão única'
             : 'Invalidação de acessos antigos'),
         politicaSessaoUnica: Boolean(parsed.politicaSessaoUnica),
+        sessionId: sessionId ?? null,
         dataHora: agoraIso,
       });
     } catch (auditError) {
@@ -115,6 +142,7 @@ export async function revogarSessoesUsuario(
 
   return {
     uid: targetUid,
+    sessionId: parsed.politicaSessaoUnica ? sessionId : parsed.sessionId,
     revogadoEm: agoraIso,
     mensagem,
     motivo: parsed.motivo,
@@ -131,12 +159,14 @@ export async function aplicarPoliticaSessaoUnica(
   auth: SessoesAuthAdapter,
   firestore?: SessoesFirestoreAdapter,
   motivo?: string,
+  sessionId?: string,
 ): Promise<ResultadoRevogacaoSessao> {
   return await revogarSessoesUsuario(
     {
       targetUid: caller?.uid,
       politicaSessaoUnica: true,
-      motivo: motivo || 'Início de nova sessão única',
+      motivo: motivo || 'Início de nova sessão sob política de sessão única',
+      sessionId,
     },
     caller,
     auth,
@@ -145,12 +175,13 @@ export async function aplicarPoliticaSessaoUnica(
 }
 
 /**
- * Consulta metadados de sessão de um usuário (tokensValidAfterTime).
+ * Consulta metadados de sessão de um usuário (tokensValidAfterTime e activeSessionId).
  */
 export async function consultarStatusSessao(
   targetUid: string,
   caller: UserContext | null | undefined,
   auth: SessoesAuthAdapter,
+  firestore?: SessoesFirestoreAdapter,
 ): Promise<StatusSessaoResult> {
   if (!caller || !caller.uid) {
     throw new SessaoBusinessError('Acesso não autenticado. Forneça o token Bearer.', 401);
@@ -165,11 +196,32 @@ export async function consultarStatusSessao(
 
   try {
     const user = await auth.getUser(targetUid);
+    let activeSessionId: string | undefined;
+
+    if (firestore) {
+      try {
+        const userDocRef = firestore.collection('usuarios').doc(targetUid);
+        if ('get' in userDocRef && typeof (userDocRef as { get: unknown }).get === 'function') {
+          const snap = await (
+            userDocRef as {
+              get: () => Promise<{ exists: boolean; data: () => Record<string, unknown> }>;
+            }
+          ).get();
+          if (snap?.exists) {
+            activeSessionId = snap.data()?.activeSessionId as string | undefined;
+          }
+        }
+      } catch {
+        // Ignora silenciosamente indisponibilidade do documento do Firestore
+      }
+    }
+
     return {
       uid: user.uid,
       email: user.email,
       tokensValidAfterTime: user.tokensValidAfterTime,
       disabled: Boolean(user.disabled),
+      activeSessionId,
     };
   } catch (error: unknown) {
     const errObj = error as { code?: string };

@@ -232,7 +232,36 @@ describe('Endpoints HTTP de Revogação de Sessão e Sessão Única', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body?.sucesso).toBe(true);
       expect(res.body?.mensagem).toContain('sessão única');
+      expect((res.body?.dados as { sessionId?: string })?.sessionId).toBeDefined();
       expect(mockRevokeRefreshTokens).toHaveBeenCalledWith('cliente-1');
+    });
+
+    it('recebe sessionId customizado no body e persiste', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce({
+        uid: 'cliente-1',
+        role: 'client',
+        client: true,
+      });
+      mockGetUser.mockResolvedValueOnce({ uid: 'cliente-1' });
+
+      const req = createMockRequest({
+        method: 'POST',
+        headers: { authorization: 'Bearer token-cliente' },
+        body: { motivo: 'Novo acesso web', sessionId: 'sessao-device-b' },
+      });
+      const res = createMockResponse();
+
+      await (iniciarSessaoUnica as HttpHandler)(req, res);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body?.sucesso).toBe(true);
+      expect((res.body?.dados as { sessionId?: string })?.sessionId).toBe('sessao-device-b');
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activeSessionId: 'sessao-device-b',
+        }),
+        { merge: true },
+      );
     });
   });
 

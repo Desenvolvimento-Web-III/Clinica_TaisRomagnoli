@@ -273,4 +273,19 @@ describe('LoginPage', () => {
     expect(forgotPasswordLink).toBeInTheDocument();
     expect(forgotPasswordLink).toHaveAttribute('href', '/recuperar-senha');
   });
+
+  it('exibe alerta quando a sessão anterior foi encerrada por conexão em outro dispositivo', () => {
+    localStorage.setItem('clinica:session_terminated_reason', 'outro_dispositivo');
+
+    renderWithRouter(<LoginPage />);
+
+    expect(screen.getByTestId('session-terminated-alert')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /sua sessão foi encerrada porque sua conta foi conectada em outro dispositivo/i,
+      ),
+    ).toBeInTheDocument();
+    // Garante que o motivo foi limpo do storage após a leitura
+    expect(localStorage.getItem('clinica:session_terminated_reason')).toBeNull();
+  });
 });

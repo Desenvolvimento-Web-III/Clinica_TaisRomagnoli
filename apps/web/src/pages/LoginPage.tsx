@@ -6,6 +6,13 @@ import { AuthLayout } from '@/components/ui/AuthLayout';
 import { auth } from '@/lib/firebase';
 import { getFirebaseErrorCode } from '@/lib/firebase-error';
 import { isAdministratorEmail } from '@/routes/admin-access';
+import {
+  clearSessionTerminatedReason,
+  getSessionTerminatedReason,
+  iniciarSessaoUnicaNoBackend,
+  MENSAGEM_DESCONEXAO_OUTRO_DISPOSITIVO,
+  MOTIVO_OUTRO_DISPOSITIVO,
+} from '@/services/sessoes-service';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'O e-mail é obrigatório').email('Insira um e-mail válido'),
@@ -50,6 +57,14 @@ export function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>({ email: '', senha: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [sessionWarning] = useState<string | null>(() => {
+    const reason = getSessionTerminatedReason();
+    if (reason === MOTIVO_OUTRO_DISPOSITIVO) {
+      clearSessionTerminatedReason();
+      return MENSAGEM_DESCONEXAO_OUTRO_DISPOSITIVO;
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
 
@@ -86,6 +101,19 @@ export function LoginPage() {
     try {
       const cleanEmail = formData.email.trim();
       const credential = await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
+
+      // Inicia sessão única no backend, invalidando acessos de outros dispositivos
+      if (credential?.user && typeof credential.user.getIdToken === 'function') {
+        try {
+          const token = await credential.user.getIdToken();
+          await iniciarSessaoUnicaNoBackend(token);
+        } catch (sessError) {
+          console.warn(
+            'Aviso: falha não bloqueante ao registrar sessão única no login:',
+            sessError,
+          );
+        }
+      }
 
       let isAdmin = isAdministratorEmail(cleanEmail);
       if (!isAdmin && credential?.user) {
@@ -148,6 +176,33 @@ export function LoginPage() {
       title="Entre na sua conta"
       description="Consulte seus horários e acompanhe cada sessão com tranquilidade."
     >
+      {sessionWarning && (
+        <div
+          role="alert"
+          data-testid="session-terminated-alert"
+          className="mb-6 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <svg
+            aria-hidden="true"
+            className="mt-0.5 h-5 w-5 shrink-0 text-amber-600"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+            />
+          </svg>
+          <div>
+            <p className="font-semibold text-amber-900">Sessão desconectada</p>
+            <p className="text-amber-800">{sessionWarning}</p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
         {generalError && (
           <div

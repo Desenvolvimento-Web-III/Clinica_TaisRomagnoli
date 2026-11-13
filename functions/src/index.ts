@@ -1180,7 +1180,8 @@ export const iniciarSessaoUnica = onRequest({ cors: true }, async (request, resp
 
     const motivo =
       (request.body?.motivo as string) || 'Início de nova sessão sob política de sessão única';
-    const resultado = await aplicarPoliticaSessaoUnica(caller, auth, firestore, motivo);
+    const sessionId = (request.body?.sessionId as string) || undefined;
+    const resultado = await aplicarPoliticaSessaoUnica(caller, auth, firestore, motivo, sessionId);
 
     response.status(200).json({
       sucesso: true,
@@ -1209,8 +1210,9 @@ export const consultarSessao = onRequest({ cors: true }, async (request, respons
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
     const targetUid = (request.query['uid'] as string) || caller.uid;
     const auth = getAuth();
+    const firestore = getFirestore();
 
-    const resultado = await consultarStatusSessao(targetUid, caller, auth);
+    const resultado = await consultarStatusSessao(targetUid, caller, auth, firestore);
     response.status(200).json({ dados: resultado });
   } catch (error: unknown) {
     if (responderErroNegocio(response, error)) {
