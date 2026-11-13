@@ -80,8 +80,15 @@ export function NotificationsPage() {
   const currentUser = authContext?.currentUser ?? null;
   const isAuthReady = authContext?.isAuthReady ?? true;
 
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotification } =
-    useClientNotifications(currentUser?.uid);
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearNotification,
+    isSyncing,
+    sync,
+  } = useClientNotifications(currentUser?.uid);
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>('todas');
 
@@ -102,25 +109,51 @@ export function NotificationsPage() {
       title="Minhas Notificações"
       description="Fique por dentro das atualizações dos seus agendamentos, dicas e comunicados da clínica."
       headerAside={
-        unreadCount > 0 ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <button
             type="button"
-            onClick={markAllAsRead}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[var(--color-brand-deep)] shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--color-brand-soft)] md:w-auto"
+            onClick={() => void sync()}
+            disabled={isSyncing}
+            data-testid="sync-notifications-btn"
+            aria-label="Atualizar notificações"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-3 text-sm font-semibold text-[var(--color-brand-deep)] shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--color-brand-soft)] disabled:opacity-60 sm:w-auto"
           >
             <svg
               aria-hidden="true"
-              className="h-4 w-4"
+              className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
               strokeWidth="2"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+              />
             </svg>
-            Marcar todas como lidas
+            {isSyncing ? 'Atualizando...' : 'Atualizar'}
           </button>
-        ) : undefined
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={markAllAsRead}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[var(--color-brand-deep)] shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--color-brand-soft)] sm:w-auto"
+            >
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Marcar todas como lidas
+            </button>
+          )}
+        </div>
       }
     >
       <div className="mx-auto max-w-3xl space-y-6">

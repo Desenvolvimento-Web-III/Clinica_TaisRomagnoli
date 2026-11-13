@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  avaliarBloqueioContraindicacao,
+  MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
+  MENSAGEM_ERRO_DATA_PASSADA,
+  verificarDataHoraNoPassado,
+  type Agendamento as SharedAgendamento,
+  type ResultadoAvaliacaoContraindicacao,
+} from '@clinica/shared';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { useAuth } from '@/features/auth/auth-context';
 import { getUserDisplayName } from '@/features/auth/user-display';
@@ -17,24 +25,34 @@ import {
 import type { Service } from '@/features/services/types';
 import { AdminConfiguracoesGerais } from '@/features/admin-dashboard/components/AdminConfiguracoesGerais';
 import { AdminClientsList } from '@/features/admin-dashboard/components/AdminClientsList';
+import {
+  atualizarStatusAgendamentoBackend,
+  buscarAgendamentosAdmin,
+  getAuthToken,
+  solicitarAgendamentoBackend,
+} from '@/services/agendamentos-service';
+import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { buscarClientesAdmin, CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
 import type { AdminClientListItem } from '@/features/admin-dashboard/types';
 
-interface AgendamentoDemo {
+interface AgendamentoAgendaItem {
   id: string;
+  clienteId?: string;
   horario: string;
   clienteNome: string;
   clienteTelefone: string;
   servicoNome: string;
   duracao: string;
   valor: number;
-  status: 'confirmado' | 'pendente' | 'concluido';
+  status:
+    'confirmado' | 'pendente' | 'concluido' | 'cancelado' | 'em_andamento' | 'reagendado' | 'falta';
   sinalPago: boolean;
 }
 
-const AGENDAMENTOS_DEMO: AgendamentoDemo[] = [
+const AGENDAMENTOS_DEMO: AgendamentoAgendaItem[] = [
   {
     id: 'ag-1',
+    clienteId: 'demo-client-1',
     horario: '09:00 - 10:00',
     clienteNome: 'Mariana Silva',
     clienteTelefone: '(11) 98765-4321',
@@ -46,6 +64,7 @@ const AGENDAMENTOS_DEMO: AgendamentoDemo[] = [
   },
   {
     id: 'ag-2',
+    clienteId: 'demo-client-2',
     horario: '10:30 - 12:00',
     clienteNome: 'Ana Carolina Santos',
     clienteTelefone: '(11) 97654-3210',
@@ -57,6 +76,7 @@ const AGENDAMENTOS_DEMO: AgendamentoDemo[] = [
   },
   {
     id: 'ag-3',
+    clienteId: 'demo-client-3',
     horario: '14:00 - 15:00',
     clienteNome: 'Juliana Lima',
     clienteTelefone: '(11) 96543-2109',
@@ -68,6 +88,7 @@ const AGENDAMENTOS_DEMO: AgendamentoDemo[] = [
   },
   {
     id: 'ag-4',
+    clienteId: 'demo-client-4',
     horario: '15:30 - 16:30',
     clienteNome: 'Carlos Eduardo',
     clienteTelefone: '(11) 95432-1098',
@@ -78,6 +99,30 @@ const AGENDAMENTOS_DEMO: AgendamentoDemo[] = [
     sinalPago: false,
   },
 ];
+
+function mapSharedAgendamentoToAgendaItem(item: SharedAgendamento): AgendamentoAgendaItem {
+  const inicio = new Date(item.dataHoraInicio);
+  const fim = new Date(item.dataHoraFim);
+  const horaInicio = Number.isNaN(inicio.getTime())
+    ? '09:00'
+    : inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const horaFim = Number.isNaN(fim.getTime())
+    ? '10:00'
+    : fim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  return {
+    id: item.id,
+    clienteId: item.clienteId,
+    horario: `${horaInicio} - ${horaFim}`,
+    clienteNome: item.clienteNome || 'Cliente presencial',
+    clienteTelefone: item.clienteTelefone || '—',
+    servicoNome: item.servicoNome,
+    duracao: `${item.duracaoMinutos} min`,
+    valor: item.valorTotalEmCentavos / 100,
+    status: item.status,
+    sinalPago: !item.sinalIsento && item.valorSinalEmCentavos > 0,
+  };
+}
 
 const SERVICOS_INICIAIS: Service[] = [
   {
@@ -194,6 +239,16 @@ const VALID_SECTIONS: AdminSection[] = [
   'configuracoes',
 ];
 
+function obterDataHoraPresencialInicial(): string {
+  const agora = new Date();
+  const amanha = new Date(agora);
+  amanha.setDate(amanha.getDate() + 1);
+  const ano = amanha.getFullYear();
+  const mes = String(amanha.getMonth() + 1).padStart(2, '0');
+  const dia = String(amanha.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}T10:00`;
+}
+
 export function AdminDashboardPage() {
   const { section } = useParams<{ section?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -207,6 +262,26 @@ export function AdminDashboardPage() {
 
   const [activeSection, setActiveSection] = useState<AdminSection>(resolvedSection);
   const [modalPresencialAberto, setModalPresencialAberto] = useState(false);
+
+  // Estados da Agenda e Agendamento Presencial
+  const [agendaItems, setAgendaItems] = useState<AgendamentoAgendaItem[]>(AGENDAMENTOS_DEMO);
+  const [confirmingAgendaId, setConfirmingAgendaId] = useState<string | null>(null);
+  const [agendaFeedback, setAgendaFeedback] = useState<{
+    tipo: 'sucesso' | 'erro';
+    texto: string;
+    clienteId?: string;
+  } | null>(null);
+  const [presencialClienteId, setPresencialClienteId] = useState('');
+  const [presencialClienteNome, setPresencialClienteNome] = useState('');
+  const [presencialServicoId, setPresencialServicoId] = useState(
+    SERVICOS_INICIAIS[0]?.id ?? 'srv-1',
+  );
+  const [presencialDataHora, setPresencialDataHora] = useState(obterDataHoraPresencialInicial);
+  const [presencialIsencaoSinal, setPresencialIsencaoSinal] = useState(true);
+  const [presencialAvaliacaoBloqueio, setPresencialAvaliacaoBloqueio] =
+    useState<ResultadoAvaliacaoContraindicacao | null>(null);
+  const [presencialErro, setPresencialErro] = useState<string | null>(null);
+  const [submittingPresencial, setSubmittingPresencial] = useState(false);
 
   // Estados de Gerenciamento de Clientes
   const [clientes, setClientes] = useState<AdminClientListItem[]>(CLIENTES_DEMO_INICIAIS);
@@ -227,6 +302,11 @@ export function AdminDashboardPage() {
     void buscarClientesAdmin().then((lista) => {
       if (ativo && lista && lista.length > 0) {
         setClientes(lista);
+      }
+    });
+    void buscarAgendamentosAdmin().then((lista) => {
+      if (ativo && lista && lista.length > 0) {
+        setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
       }
     });
     return () => {
@@ -328,6 +408,178 @@ export function AdminDashboardPage() {
     }
   };
 
+  const handleAbrirModalPresencial = () => {
+    setPresencialErro(null);
+    setPresencialAvaliacaoBloqueio(null);
+    setPresencialClienteId('');
+    setPresencialClienteNome('');
+    setPresencialServicoId(servicos[0]?.id ?? 'srv-1');
+    setPresencialDataHora(obterDataHoraPresencialInicial());
+    setPresencialIsencaoSinal(true);
+    setModalPresencialAberto(true);
+  };
+
+  const handleSelecionarClientePresencial = async (selectedId: string) => {
+    setPresencialClienteId(selectedId);
+    setPresencialErro(null);
+    setPresencialAvaliacaoBloqueio(null);
+
+    if (!selectedId) {
+      return;
+    }
+
+    const clienteEncontrado = clientes.find((c) => c.id === selectedId);
+    if (clienteEncontrado) {
+      setPresencialClienteNome(clienteEncontrado.nome);
+    }
+
+    const fichaRes = await obterFichaAnamneseApi(selectedId);
+    if (fichaRes.sucesso && fichaRes.dados) {
+      setPresencialAvaliacaoBloqueio(avaliarBloqueioContraindicacao(fichaRes.dados));
+    }
+  };
+
+  const handleConfirmarAgendamentoAgenda = async (item: AgendamentoAgendaItem) => {
+    setAgendaFeedback(null);
+    setConfirmingAgendaId(item.id);
+
+    try {
+      if (item.clienteId) {
+        const fichaRes = await obterFichaAnamneseApi(item.clienteId);
+        if (fichaRes.sucesso && fichaRes.dados) {
+          const avaliacao = avaliarBloqueioContraindicacao(fichaRes.dados);
+          if (avaliacao.bloqueado) {
+            setAgendaFeedback({
+              tipo: 'erro',
+              texto: avaliacao.motivoBloqueio || MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
+              clienteId: item.clienteId,
+            });
+            return;
+          }
+        }
+      }
+
+      const resposta = await atualizarStatusAgendamentoBackend({
+        agendamentoId: item.id,
+        novoStatus: 'confirmado',
+      });
+
+      if (!resposta.sucesso) {
+        setAgendaFeedback({
+          tipo: 'erro',
+          texto: resposta.erro || 'Não foi possível confirmar o agendamento.',
+          clienteId: item.clienteId,
+        });
+        return;
+      }
+
+      setAgendaItems((prev) =>
+        prev.map((ag) => (ag.id === item.id ? { ...ag, status: 'confirmado' } : ag)),
+      );
+      setAgendaFeedback({
+        tipo: 'sucesso',
+        texto: `Agendamento de ${item.clienteNome} confirmado com sucesso.`,
+      });
+    } finally {
+      setConfirmingAgendaId(null);
+    }
+  };
+
+  const handleCriarAgendamentoPresencial = async (e: FormEvent) => {
+    e.preventDefault();
+    setPresencialErro(null);
+
+    if (presencialIsencaoSinal && presencialAvaliacaoBloqueio?.bloqueado) {
+      setPresencialErro(
+        presencialAvaliacaoBloqueio.motivoBloqueio || MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
+      );
+      return;
+    }
+
+    const servicoSelecionado =
+      servicos.find((s) => s.id === presencialServicoId) ?? servicos[0] ?? SERVICOS_INICIAIS[0]!;
+    const nomeClienteFinal = presencialClienteNome.trim() || 'Cliente presencial';
+    const dataHoraNormalizada =
+      presencialDataHora.length === 16 ? `${presencialDataHora}:00.000Z` : presencialDataHora;
+
+    if (verificarDataHoraNoPassado(dataHoraNormalizada)) {
+      setPresencialErro(MENSAGEM_ERRO_DATA_PASSADA);
+      return;
+    }
+
+    setSubmittingPresencial(true);
+    try {
+      const token = await getAuthToken();
+
+      if (token) {
+        const resposta = await solicitarAgendamentoBackend(
+          {
+            ...(presencialClienteId ? { clienteId: presencialClienteId } : {}),
+            clienteNome: nomeClienteFinal,
+            servicoId: servicoSelecionado.id,
+            servicoNome: servicoSelecionado.name,
+            duracaoMinutos: servicoSelecionado.durationMinutes,
+            valorTotalEmCentavos: servicoSelecionado.priceInCents,
+            dataHoraInicio: dataHoraNormalizada,
+            metodoPagamento: 'presencial',
+            profissionalId: 'prof-tais-romagnoli',
+            profissionalNome: 'Tais Romagnoli',
+            isencaoSinalAdmin: presencialIsencaoSinal,
+          },
+          token,
+        );
+
+        if (!resposta.sucesso) {
+          if (!resposta.networkError) {
+            setPresencialErro(resposta.erro || 'Não foi possível criar o agendamento presencial.');
+            return;
+          }
+        } else if (resposta.dados) {
+          setAgendaItems((prev) => [mapSharedAgendamentoToAgendaItem(resposta.dados!), ...prev]);
+          setAgendaFeedback({
+            tipo: 'sucesso',
+            texto: `Agendamento presencial de ${nomeClienteFinal} criado com sucesso.`,
+          });
+          setModalPresencialAberto(false);
+          return;
+        }
+      }
+
+      const inicio = new Date(dataHoraNormalizada);
+      const fim = new Date(inicio.getTime() + servicoSelecionado.durationMinutes * 60 * 1000);
+      const horaIni = Number.isNaN(inicio.getTime())
+        ? '10:00'
+        : inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const horaFim = Number.isNaN(fim.getTime())
+        ? '11:00'
+        : fim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+      const clienteLista = clientes.find((c) => c.id === presencialClienteId);
+      setAgendaItems((prev) => [
+        {
+          id: `ag-${Date.now()}`,
+          clienteId: presencialClienteId || undefined,
+          horario: `${horaIni} - ${horaFim}`,
+          clienteNome: nomeClienteFinal,
+          clienteTelefone: clienteLista?.telefone || 'Presencial',
+          servicoNome: servicoSelecionado.name,
+          duracao: `${servicoSelecionado.durationMinutes} min`,
+          valor: servicoSelecionado.priceInCents / 100,
+          status: presencialIsencaoSinal ? 'confirmado' : 'pendente',
+          sinalPago: false,
+        },
+        ...prev,
+      ]);
+      setAgendaFeedback({
+        tipo: 'sucesso',
+        texto: `Agendamento presencial de ${nomeClienteFinal} registrado com sucesso.`,
+      });
+      setModalPresencialAberto(false);
+    } finally {
+      setSubmittingPresencial(false);
+    }
+  };
+
   return (
     <div className="min-h-dvh bg-[var(--color-canvas-neutral)] text-[var(--color-text-primary)]">
       {/* Top Header do Painel */}
@@ -403,8 +655,8 @@ export function AdminDashboardPage() {
 
               <button
                 type="button"
-                onClick={() => setModalPresencialAberto(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
+                onClick={handleAbrirModalPresencial}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
               >
                 <svg
                   aria-hidden="true"
@@ -426,11 +678,43 @@ export function AdminDashboardPage() {
               cadastrados pela administradora não exigem sinal obrigatório de 30%.
             </div>
 
+            {agendaFeedback && (
+              <div
+                role={agendaFeedback.tipo === 'erro' ? 'alert' : 'status'}
+                data-testid="agenda-feedback-banner"
+                className={`flex flex-col gap-3 rounded-2xl border p-4 text-xs/5 sm:flex-row sm:items-center sm:justify-between sm:text-sm/6 ${
+                  agendaFeedback.tipo === 'erro'
+                    ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
+                    : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
+                }`}
+              >
+                <div className="space-y-1 font-medium">
+                  <p>{agendaFeedback.texto}</p>
+                  {agendaFeedback.clienteId && (
+                    <Link
+                      to={`/admin/clientes/${agendaFeedback.clienteId}`}
+                      className="inline-block font-semibold underline underline-offset-4"
+                    >
+                      Revisar ficha e liberação médica
+                    </Link>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAgendaFeedback(null)}
+                  className="self-start text-xs font-bold underline-offset-4 hover:underline sm:self-center"
+                >
+                  Fechar
+                </button>
+              </div>
+            )}
+
             {/* Lista de Atendimentos */}
             <div className="grid gap-4">
-              {AGENDAMENTOS_DEMO.map((item) => (
+              {agendaItems.map((item) => (
                 <div
                   key={item.id}
+                  data-testid={`agenda-item-${item.id}`}
                   className="flex flex-col gap-3 rounded-2xl border border-[var(--color-border-default)] bg-white p-4 shadow-sm transition-all hover:border-[var(--color-brand-deep)]/40 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex items-start gap-4">
@@ -452,7 +736,7 @@ export function AdminDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-default)] pt-2 sm:border-0 sm:pt-0">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border-default)] pt-2 sm:border-0 sm:pt-0">
                     <div className="text-right sm:text-left">
                       <p className="font-bold text-[var(--color-text-primary)]">
                         R$ {item.valor.toFixed(2).replace('.', ',')}
@@ -462,13 +746,27 @@ export function AdminDashboardPage() {
                       </span>
                     </div>
 
+                    {item.status === 'pendente' && (
+                      <button
+                        type="button"
+                        data-testid={`confirmar-agendamento-btn-${item.id}`}
+                        disabled={confirmingAgendaId === item.id}
+                        onClick={() => void handleConfirmarAgendamentoAgenda(item)}
+                        className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {confirmingAgendaId === item.id ? 'Confirmando…' : 'Confirmar agendamento'}
+                      </button>
+                    )}
+
                     <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
                         item.status === 'concluido'
-                          ? 'bg-emerald-100 text-emerald-800'
+                          ? 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
                           : item.status === 'confirmado'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'border-[var(--color-info-border)] bg-[var(--color-info-bg)] text-[var(--color-info-text)]'
+                            : item.status === 'cancelado' || item.status === 'falta'
+                              ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
+                              : 'border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]'
                       }`}
                     >
                       {item.status.toUpperCase()}
@@ -732,30 +1030,85 @@ export function AdminDashboardPage() {
             </div>
 
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setModalPresencialAberto(false);
-              }}
+              onSubmit={(e) => void handleCriarAgendamentoPresencial(e)}
               className="flex flex-col flex-1 min-h-0 overflow-hidden"
             >
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                  <label
+                    htmlFor="presencial-cliente-select"
+                    className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
+                  >
+                    Cliente cadastrado (opcional)
+                  </label>
+                  <select
+                    id="presencial-cliente-select"
+                    value={presencialClienteId}
+                    onChange={(e) => void handleSelecionarClientePresencial(e.target.value)}
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden"
+                  >
+                    <option value="">Atendimento avulso (sem vínculo prévio)</option>
+                    {clientes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {presencialAvaliacaoBloqueio?.bloqueado && (
+                  <div
+                    role="status"
+                    data-testid="modal-presencial-bloqueio-alerta"
+                    className="space-y-2 rounded-xl border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-3.5 text-xs/5 text-[var(--color-warning-text)]"
+                  >
+                    <p className="font-bold">Ficha exige liberação médica</p>
+                    <p>
+                      A confirmação direta está bloqueada enquanto não houver liberação médica
+                      aprovada na ficha do cliente.
+                    </p>
+                    {presencialClienteId && (
+                      <Link
+                        to={`/admin/clientes/${presencialClienteId}`}
+                        className="inline-block font-semibold underline underline-offset-4"
+                      >
+                        Abrir ficha para avaliar liberação médica
+                      </Link>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label
+                    htmlFor="presencial-cliente-nome"
+                    className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
+                  >
                     Nome do Cliente
                   </label>
                   <input
+                    id="presencial-cliente-nome"
                     type="text"
                     required
+                    value={presencialClienteNome}
+                    onChange={(e) => setPresencialClienteNome(e.target.value)}
                     placeholder="Nome do cliente"
-                    className="mt-1.5 w-full rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+                  <label
+                    htmlFor="presencial-servico-select"
+                    className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
+                  >
                     Procedimento
                   </label>
-                  <select className="mt-1.5 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden">
+                  <select
+                    id="presencial-servico-select"
+                    value={presencialServicoId}
+                    onChange={(e) => setPresencialServicoId(e.target.value)}
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden"
+                  >
                     {servicos.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} — R$ {(s.priceInCents / 100).toFixed(2).replace('.', ',')}
@@ -763,21 +1116,65 @@ export function AdminDashboardPage() {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label
+                    htmlFor="presencial-data-hora"
+                    className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
+                  >
+                    Data e horário
+                  </label>
+                  <input
+                    id="presencial-data-hora"
+                    type="datetime-local"
+                    required
+                    min={new Date().toISOString().slice(0, 16)}
+                    value={presencialDataHora}
+                    onChange={(e) => setPresencialDataHora(e.target.value)}
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
+                  />
+                </div>
+
+                <label
+                  htmlFor="presencial-isencao-sinal"
+                  className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] px-3.5 py-2 text-xs font-medium text-[var(--color-text-primary)]"
+                >
+                  <input
+                    id="presencial-isencao-sinal"
+                    type="checkbox"
+                    checked={presencialIsencaoSinal}
+                    onChange={(e) => setPresencialIsencaoSinal(e.target.checked)}
+                    className="h-4 w-4 rounded border-[var(--color-border-default)] text-[var(--color-brand-deep)]"
+                  />
+                  <span>Isentar sinal de 30% (confirmar atendimento presencial)</span>
+                </label>
+
+                {presencialErro && (
+                  <div
+                    role="alert"
+                    data-testid="modal-presencial-erro"
+                    className="rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-3 text-xs/5 font-medium text-[var(--color-error-text)]"
+                  >
+                    {presencialErro}
+                  </div>
+                )}
               </div>
 
               <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 p-4 sm:p-6 pt-3 sm:pt-4 border-t border-[var(--color-border-default)] bg-gray-50/70 sm:bg-white">
                 <button
                   type="button"
+                  disabled={submittingPresencial}
                   onClick={() => setModalPresencialAberto(false)}
-                  className="w-full sm:w-auto rounded-xl border border-[var(--color-border-default)] px-4 py-2.5 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-zinc-100 hover:text-zinc-950 hover:border-zinc-300"
+                  className="min-h-11 w-full sm:w-auto rounded-xl border border-[var(--color-border-default)] px-4 py-2.5 text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-zinc-100 hover:text-zinc-950 hover:border-zinc-300"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto rounded-xl bg-[var(--color-brand-deep)] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)]"
+                  disabled={submittingPresencial}
+                  className="min-h-11 w-full sm:w-auto rounded-xl bg-[var(--color-brand-deep)] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)] disabled:cursor-wait disabled:opacity-60"
                 >
-                  Confirmar Agendamento
+                  {submittingPresencial ? 'Salvando…' : 'Confirmar Agendamento'}
                 </button>
               </div>
             </form>

@@ -1,19 +1,30 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, act } from '@testing-library/react';
 import { getIdTokenResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { onSnapshot } from 'firebase/firestore';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { AuthProvider } from './AuthProvider';
 import { useAuth, useOptionalAuth } from './auth-context';
+import {
+  ACTIVE_SESSION_STORAGE_KEY,
+  SESSION_TERMINATED_REASON_KEY,
+  MOTIVO_OUTRO_DISPOSITIVO,
+} from '@/services/sessoes-service';
 
 const { authMock } = vi.hoisted(() => ({
   authMock: { currentUser: null },
 }));
 
-vi.mock('@/lib/firebase', () => ({ auth: authMock }));
+vi.mock('@/lib/firebase', () => ({ auth: authMock, db: {} }));
 
 vi.mock('firebase/auth', () => ({
   getIdTokenResult: vi.fn(),
   onAuthStateChanged: vi.fn(),
   signOut: vi.fn(),
+}));
+
+vi.mock('firebase/firestore', () => ({
+  doc: vi.fn().mockReturnValue({ id: 'user-doc' }),
+  onSnapshot: vi.fn().mockReturnValue(vi.fn()),
 }));
 
 function FullSessionProbe() {
@@ -168,5 +179,67 @@ describe('AuthProvider e Estado Global de Autenticação', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  describe('Política de Sessão Única e Detecção de Login Concorrente', () => {
+    it('desconecta a sessão local quando o snapshot remoto indica login em outro dispositivo', async () => {
+      let snapshotCallback: ((snap: unknown) => void) | null = null;
+      vi.mocked(onSnapshot).mockImplementation((_ref, cb) => {
+        snapshotCallback = cb as (snap: unknown) => void;
+        return vi.fn();
+      });
+
+      localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, 'sessao-dispositivo-a');
+
+      render(
+        <AuthProvider>
+          <FullSessionProbe />
+        </AuthProvider>,
+      );
+
+      expect(await screen.findByText('cliente@exemplo.com')).toBeInTheDocument();
+      expect(snapshotCallback).not.toBeNull();
+
+      // Dispositivo B logou e atualizou a sessão remota no Firestore
+      await act(async () => {
+        snapshotCallback?.({
+          exists: () => true,
+          data: () => ({ activeSessionId: 'sessao-dispositivo-b' }),
+        });
+      });
+
+      // Dispositivo A deve ter caído (signOut invocado e motivo registrado)
+      expect(signOut).toHaveBeenCalled();
+      expect(localStorage.getItem(SESSION_TERMINATED_REASON_KEY)).toBe(MOTIVO_OUTRO_DISPOSITIVO);
+      expect(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY)).toBeNull();
+    });
+
+    it('mantém a sessão quando o snapshot remoto coincide com a sessão local', async () => {
+      let snapshotCallback: ((snap: unknown) => void) | null = null;
+      vi.mocked(onSnapshot).mockImplementation((_ref, cb) => {
+        snapshotCallback = cb as (snap: unknown) => void;
+        return vi.fn();
+      });
+
+      localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, 'sessao-dispositivo-a');
+
+      render(
+        <AuthProvider>
+          <FullSessionProbe />
+        </AuthProvider>,
+      );
+
+      expect(await screen.findByText('cliente@exemplo.com')).toBeInTheDocument();
+
+      await act(async () => {
+        snapshotCallback?.({
+          exists: () => true,
+          data: () => ({ activeSessionId: 'sessao-dispositivo-a' }),
+        });
+      });
+
+      expect(signOut).not.toHaveBeenCalled();
+      expect(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY)).toBe('sessao-dispositivo-a');
+    });
   });
 });

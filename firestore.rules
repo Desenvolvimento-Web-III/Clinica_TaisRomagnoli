@@ -83,6 +83,30 @@ service cloud.firestore {
       ));
       }
 
+    function hasNoRestrictedAnamneseFieldsOnCreate(data) {
+      return !(
+        'exigeLiberacaoMedica' in data ||
+        'contraindicacoes' in data ||
+        'motivosLiberacaoMedica' in data ||
+        'liberacaoMedicaAprovada' in data ||
+        'liberacaoMedicaObservacoes' in data ||
+        'liberacaoMedicaAprovadaEm' in data ||
+        'liberacaoMedicaAprovadaPor' in data
+      );
+    }
+
+    function doesNotModifyRestrictedAnamneseFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'exigeLiberacaoMedica',
+        'contraindicacoes',
+        'motivosLiberacaoMedica',
+        'liberacaoMedicaAprovada',
+        'liberacaoMedicaObservacoes',
+        'liberacaoMedicaAprovadaEm',
+        'liberacaoMedicaAprovadaPor'
+      ]);
+    }
+
     // Coleções raiz de anamneses e fichas de avaliação
     match /anamneses/{anamnesisId} {
       allow get: if isAdmin() || isDocOwner(resource.data);
@@ -90,8 +114,15 @@ service cloud.firestore {
         resource.data.clienteId == request.auth.uid ||
         resource.data.uid == request.auth.uid
       ));
-      allow create: if isAdmin() || isDocOwner(request.resource.data);
-      allow update: if isAdmin() || isDocOwner(resource.data);
+      allow create: if isAdmin() || (
+        isDocOwner(request.resource.data) &&
+        hasNoRestrictedAnamneseFieldsOnCreate(request.resource.data)
+      );
+      allow update: if isAdmin() || (
+        isDocOwner(resource.data) &&
+        isDocOwner(request.resource.data) &&
+        doesNotModifyRestrictedAnamneseFields()
+      );
       allow delete: if isAdmin();
     }
 
@@ -101,8 +132,15 @@ service cloud.firestore {
         resource.data.clienteId == request.auth.uid ||
         resource.data.uid == request.auth.uid
       ));
-      allow create: if isAdmin() || isDocOwner(request.resource.data);
-      allow update: if isAdmin() || isDocOwner(resource.data);
+      allow create: if isAdmin() || (
+        isDocOwner(request.resource.data) &&
+        hasNoRestrictedAnamneseFieldsOnCreate(request.resource.data)
+      );
+      allow update: if isAdmin() || (
+        isDocOwner(resource.data) &&
+        isDocOwner(request.resource.data) &&
+        doesNotModifyRestrictedAnamneseFields()
+      );
       allow delete: if isAdmin();
     }
 

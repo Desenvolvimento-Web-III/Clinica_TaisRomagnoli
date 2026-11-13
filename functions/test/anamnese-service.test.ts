@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   salvarFichaAnamneseService,
   obterFichaAnamneseService,
+  registrarLiberacaoMedicaService,
   AnamneseBusinessError,
 } from '../src/modules/anamnese/anamnese-service.js';
 import { InMemoryAnamneseRepository } from '../src/modules/anamnese/anamnese-repository.js';
@@ -280,6 +281,189 @@ describe('Anamnese Service (Functions Backend)', () => {
       });
 
       expect(ficha).toBeNull();
+    });
+  });
+
+  describe('Contraindicações e Controle de Liberação Médica', () => {
+    it('marca exigeLiberacaoMedica = true ao salvar ficha com contraindicação clínica', async () => {
+      const fichaSalva = await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...dadosValidos,
+            tratamentoOncologico: {
+              resposta: true,
+              detalhes: 'Quimioterapia concluída há 3 meses',
+            },
+          },
+        },
+        usuarioAutenticado: clienteTitular,
+        repo,
+      });
+
+      expect(fichaSalva.exigeLiberacaoMedica).toBe(true);
+      expect(fichaSalva.liberacaoMedicaAprovada).toBe(false);
+      expect(fichaSalva.contraindicacoes).toEqual([
+        'Tratamento Oncológico: Quimioterapia concluída há 3 meses',
+      ]);
+    });
+
+    it('mantém exigeLiberacaoMedica = false para condições sem contraindicação médica obrigatória', async () => {
+      const fichaSalva = await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...dadosValidos,
+            gestanteOuLactante: { resposta: true, detalhes: '20 semanas de gestação' },
+            alergiasProdutos: { resposta: true, detalhes: 'Alergia a essência cítrica' },
+          },
+        },
+        usuarioAutenticado: clienteTitular,
+        repo,
+      });
+
+      expect(fichaSalva.exigeLiberacaoMedica).toBe(false);
+      expect(fichaSalva.contraindicacoes).toEqual([]);
+      expect(fichaSalva.pontosAtencao).toHaveLength(2);
+    });
+
+    it('bloqueia com HTTP 403 quando cliente tenta autoaprovar liberação médica ou burlar exigência', async () => {
+      await expect(
+        salvarFichaAnamneseService({
+          input: {
+            dados: {
+              ...dadosValidos,
+              doencasCardiacas: { resposta: true, detalhes: 'Uso de marca-passo' },
+            },
+            liberacaoMedicaAprovada: true,
+          },
+          usuarioAutenticado: clienteTitular,
+          repo,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+
+      await expect(
+        salvarFichaAnamneseService({
+          input: {
+            dados: {
+              ...dadosValidos,
+              problemasCirculatorios: { resposta: true, detalhes: 'Histórico de trombose' },
+            },
+            exigeLiberacaoMedica: false,
+          },
+          usuarioAutenticado: clienteTitular,
+          repo,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('permite que administradora registre e revogue aprovação da liberação médica via registrarLiberacaoMedicaService', async () => {
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...dadosValidos,
+            problemasCirculatorios: { resposta: true, detalhes: 'Trombose tratada em 2025' },
+          },
+        },
+        usuarioAutenticado: clienteTitular,
+        repo,
+      });
+
+      const aprovada = await registrarLiberacaoMedicaService({
+        input: {
+          clienteId: 'cliente_123',
+          aprovada: true,
+          observacoes: 'Atestado cardiológico/vascular anexado ao prontuário.',
+        },
+        usuarioAutenticado: administradora,
+        repo,
+      });
+
+      expect(aprovada.exigeLiberacaoMedica).toBe(true);
+      expect(aprovada.liberacaoMedicaAprovada).toBe(true);
+      expect(aprovada.liberacaoMedicaAprovadaPor).toBe('admin_tais');
+      expect(aprovada.liberacaoMedicaAprovadaEm).toBeDefined();
+      expect(aprovada.liberacaoMedicaObservacoes).toContain('Atestado');
+
+      const revogada = await registrarLiberacaoMedicaService({
+        input: {
+          clienteId: 'cliente_123',
+          aprovada: false,
+          observacoes: 'Necessário laudo atualizado.',
+        },
+        usuarioAutenticado: administradora,
+        repo,
+      });
+
+      expect(revogada.liberacaoMedicaAprovada).toBe(false);
+      expect(revogada.liberacaoMedicaAprovadaEm).toBeUndefined();
+      expect(revogada.liberacaoMedicaAprovadaPor).toBeUndefined();
+    });
+
+    it('bloqueia registrarLiberacaoMedicaService para cliente comum (HTTP 403) e ficha inexistente (HTTP 404)', async () => {
+      await expect(
+        registrarLiberacaoMedicaService({
+          input: { clienteId: 'cliente_123', aprovada: true },
+          usuarioAutenticado: clienteTitular,
+          repo,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+
+      await expect(
+        registrarLiberacaoMedicaService({
+          input: { clienteId: 'cliente_sem_ficha', aprovada: true },
+          usuarioAutenticado: administradora,
+          repo,
+        }),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('preserva aprovação existente se cliente editar preferência sem nova contraindicação e invalida ao adicionar nova condição crítica', async () => {
+      await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...dadosValidos,
+            tratamentoOncologico: { resposta: true, detalhes: 'Liberação prévia em curso' },
+          },
+        },
+        usuarioAutenticado: clienteTitular,
+        repo,
+      });
+
+      await registrarLiberacaoMedicaService({
+        input: { clienteId: 'cliente_123', aprovada: true, observacoes: 'Atestado oncologista' },
+        usuarioAutenticado: administradora,
+        repo,
+      });
+
+      // Edita apenas preferência de pressão -> mantém aprovação
+      const editadaSemNovaContraindicacao = await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...dadosValidos,
+            tratamentoOncologico: { resposta: true, detalhes: 'Liberação prévia em curso' },
+            preferenciaPressao: 'suave',
+          },
+        },
+        usuarioAutenticado: clienteTitular,
+        repo,
+      });
+
+      expect(editadaSemNovaContraindicacao.liberacaoMedicaAprovada).toBe(true);
+
+      // Adiciona nova contraindicação cardíaca -> invalida aprovação anterior e exige nova avaliação
+      const comNovaContraindicacao = await salvarFichaAnamneseService({
+        input: {
+          dados: {
+            ...dadosValidos,
+            tratamentoOncologico: { resposta: true, detalhes: 'Liberação prévia em curso' },
+            doencasCardiacas: { resposta: true, detalhes: 'Diagnóstico recente de arritmia' },
+          },
+        },
+        usuarioAutenticado: clienteTitular,
+        repo,
+      });
+
+      expect(comNovaContraindicacao.exigeLiberacaoMedica).toBe(true);
+      expect(comNovaContraindicacao.liberacaoMedicaAprovada).toBe(false);
     });
   });
 });

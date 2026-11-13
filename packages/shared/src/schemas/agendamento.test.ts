@@ -9,6 +9,8 @@ import {
   calcularDataHoraFim,
   verificarConflitoHorarios,
   verificarAntecedenciaCancelamento,
+  verificarDataHoraNoPassado,
+  obterDataAtualIso,
 } from './agendamento.js';
 
 describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
@@ -30,6 +32,32 @@ describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
         expect(resultado.data.profissionalNome).toBe('Tais Romagnoli');
         expect(resultado.data.isencaoSinalAdmin).toBe(false);
       }
+    });
+
+    it('aceita clienteId e clienteNome opcionais e rejeita clienteId vazio', () => {
+      const valido = solicitarAgendamentoInputSchema.safeParse({
+        clienteId: 'cliente-presencial-1',
+        clienteNome: 'Ana Paula',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'presencial',
+        isencaoSinalAdmin: true,
+      });
+      expect(valido.success).toBe(true);
+
+      const invalido = solicitarAgendamentoInputSchema.safeParse({
+        clienteId: '',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'presencial',
+      });
+      expect(invalido.success).toBe(false);
     });
 
     it('rejeita payload com duração inválida ou valor negativo', () => {
@@ -297,6 +325,31 @@ describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
           }).success,
         ).toBe(false);
       });
+    });
+  });
+
+  describe('verificarDataHoraNoPassado e obterDataAtualIso', () => {
+    const dataRef = new Date('2026-11-13T15:00:00.000Z');
+
+    it('identifica corretamente data/hora no passado', () => {
+      expect(verificarDataHoraNoPassado('2026-11-13T14:59:59.000Z', dataRef)).toBe(true);
+      expect(verificarDataHoraNoPassado('2026-10-08T10:00:00.000Z', dataRef)).toBe(true);
+      expect(verificarDataHoraNoPassado('2025-12-31T23:59:59.000Z', dataRef)).toBe(true);
+    });
+
+    it('identifica data/hora presente ou futura como válida (não no passado)', () => {
+      expect(verificarDataHoraNoPassado('2026-11-13T15:00:00.000Z', dataRef)).toBe(false);
+      expect(verificarDataHoraNoPassado('2026-11-13T15:01:00.000Z', dataRef)).toBe(false);
+      expect(verificarDataHoraNoPassado('2026-11-14T10:00:00.000Z', dataRef)).toBe(false);
+      expect(verificarDataHoraNoPassado('2027-01-01T08:00:00.000Z', dataRef)).toBe(false);
+    });
+
+    it('trata datas inválidas como no passado por segurança defensiva', () => {
+      expect(verificarDataHoraNoPassado('data-invalida', dataRef)).toBe(true);
+    });
+
+    it('retorna data no formato YYYY-MM-DD em obterDataAtualIso', () => {
+      expect(obterDataAtualIso(dataRef)).toBe('2026-11-13');
     });
   });
 });

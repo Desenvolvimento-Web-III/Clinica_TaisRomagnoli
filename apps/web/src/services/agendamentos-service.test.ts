@@ -3,6 +3,7 @@ import {
   mapBackendAgendamentoToUi,
   getFunctionsBaseUrl,
   solicitarAgendamentoBackend,
+  atualizarStatusAgendamentoBackend,
   cancelarAgendamentoBackend,
   alterarAgendamentoBackend,
   listarAgendamentosBackend,
@@ -180,5 +181,83 @@ describe('agendamentos-service', () => {
     const carregados = await carregarAgendamentos('user-inexistente');
     expect(carregados.agendamentos).toEqual([]);
     expect(carregados.sincronizadoComBackend).toBe(false);
+  });
+
+  it('solicitarAgendamentoBackend repassa statusCode 422 e marca networkError apenas em falha de rede', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({ error: 'Liberação médica obrigatória.' }),
+    } as Response);
+
+    const res422 = await solicitarAgendamentoBackend(
+      {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'presencial',
+        isencaoSinalAdmin: true,
+      },
+      'fake-jwt-token',
+    );
+
+    expect(res422.sucesso).toBe(false);
+    expect(res422.statusCode).toBe(422);
+    expect(res422.networkError).toBeUndefined();
+
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+    const resNetwork = await solicitarAgendamentoBackend(
+      {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix',
+      },
+      'fake-jwt-token',
+    );
+
+    expect(resNetwork.sucesso).toBe(false);
+    expect(resNetwork.networkError).toBe(true);
+  });
+
+  it('atualizarStatusAgendamentoBackend envia POST e repassa erro 422 de contraindicação', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        error: 'Não é possível confirmar o agendamento sem liberação médica.',
+      }),
+    } as Response);
+
+    const resultadoBloqueio = await atualizarStatusAgendamentoBackend(
+      { agendamentoId: 'ag-123', novoStatus: 'confirmado' },
+      'admin-jwt',
+    );
+
+    expect(resultadoBloqueio.sucesso).toBe(false);
+    expect(resultadoBloqueio.statusCode).toBe(422);
+    expect(resultadoBloqueio.erro).toContain('liberação médica');
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/atualizarStatusAgendamento'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('listarAgendamentosBackend inclui clienteId na querystring quando informado', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ dados: [agendamentoMock] }),
+    } as Response);
+
+    await listarAgendamentosBackend('admin-jwt', 'user-456');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/listarMeusAgendamentos?clienteId=user-456'),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 });

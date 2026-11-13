@@ -33,6 +33,10 @@ vi.mock('firebase/firestore', () => ({
   setDoc: vi.fn(),
 }));
 
+vi.mock('@/services/cliente-perfil-service', () => ({
+  consultarRecorrenciaCliente: vi.fn().mockResolvedValue(null),
+}));
+
 describe('ClientProfilePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -230,5 +234,79 @@ describe('ClientProfilePage', () => {
     expect(notifLinks.length).toBeGreaterThanOrEqual(1);
     expect(notifLinks[0]).toHaveAttribute('href', '/notificacoes');
     expect(screen.getAllByRole('button', { name: /sair/i }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('exibe badge e seção de cliente recorrente quando a condição de pelo menos duas sessões no mês é atendida', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: {
+        uid: 'client-recorrente-1',
+        displayName: 'Camila Pitanga',
+        email: 'camila@exemplo.com',
+      },
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    vi.mocked(getDoc).mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({
+        nome: 'Camila Pitanga',
+        telefone: '11977778888',
+        recorrente: true,
+        totalAtendimentosMes: 2,
+        mesReferenciaRecorrencia: '2026-11',
+      }),
+    } as unknown as ReturnType<typeof getDoc> extends Promise<infer U> ? U : never);
+
+    render(
+      <MemoryRouter initialEntries={['/perfil']}>
+        <ClientProfilePage />
+      </MemoryRouter>,
+    );
+
+    const badgeRecorrente = await screen.findByTestId('badge-cliente-recorrente');
+    expect(badgeRecorrente).toBeInTheDocument();
+    expect(badgeRecorrente).toHaveTextContent('Cliente Recorrente');
+
+    const secaoRecorrente = screen.getByTestId('secao-cliente-recorrente');
+    expect(secaoRecorrente).toBeInTheDocument();
+    expect(secaoRecorrente).toHaveTextContent('2 sessões concluídas no mês');
+    expect(secaoRecorrente).toHaveTextContent(
+      'Você atingiu o critério de recorrência mensal da clínica ao concluir pelo menos duas sessões neste mês.',
+    );
+  });
+
+  it('não exibe badge nem seção de recorrência quando a condição não foi atendida', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: {
+        uid: 'client-comum-1',
+        displayName: 'Rodrigo Santoro',
+        email: 'rodrigo@exemplo.com',
+      },
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    vi.mocked(getDoc).mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({
+        nome: 'Rodrigo Santoro',
+        telefone: '11966665555',
+        recorrente: false,
+        totalAtendimentosMes: 1,
+        mesReferenciaRecorrencia: '2026-11',
+      }),
+    } as unknown as ReturnType<typeof getDoc> extends Promise<infer U> ? U : never);
+
+    render(
+      <MemoryRouter initialEntries={['/perfil']}>
+        <ClientProfilePage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByDisplayValue('Rodrigo Santoro');
+
+    expect(screen.queryByTestId('badge-cliente-recorrente')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('secao-cliente-recorrente')).not.toBeInTheDocument();
   });
 });

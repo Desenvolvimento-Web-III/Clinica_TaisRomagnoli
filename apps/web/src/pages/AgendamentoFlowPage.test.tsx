@@ -1,10 +1,28 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
+import * as anamneseService from '@/services/anamnese-service';
+import * as agendamentosService from '@/services/agendamentos-service';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
+
+const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
+
+vi.mock('@/features/auth/auth-context', () => ({
+  useOptionalAuth: () => mockUseOptionalAuth(),
+}));
 
 describe('AgendamentoFlowPage', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
     localStorage.clear();
+    mockUseOptionalAuth.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const renderFlow = (initialRoute = '/agendar/massagem-relaxante') => {
@@ -15,6 +33,7 @@ describe('AgendamentoFlowPage', () => {
           <Route path="/agendar" element={<AgendamentoFlowPage />} />
           <Route path="/servicos" element={<div>Página de Serviços</div>} />
           <Route path="/agendamentos" element={<div>Página de Meus Agendamentos</div>} />
+          <Route path="/anamnese" element={<div>Página de Anamnese</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -157,5 +176,120 @@ describe('AgendamentoFlowPage', () => {
     // Finaliza com sucesso
     fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
     expect(screen.getByText('Agendamento Concluído!')).toBeInTheDocument();
+  });
+
+  it('exibe aviso de liberação médica pendente na confirmação e no resumo concluído para cliente bloqueado', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-blocked', displayName: 'Ana Clara' },
+    });
+
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        tratamentoOncologico: { resposta: true, detalhes: 'Em tratamento' },
+        clienteId: 'cli-blocked',
+        submittedAt: '2026-10-10T10:00:00.000Z',
+        updatedAt: '2026-10-10T10:00:00.000Z',
+        pontosAtencao: ['Tratamento Oncológico: Em tratamento'],
+        exigeLiberacaoMedica: true,
+        contraindicacoes: ['Tratamento Oncológico: Em tratamento'],
+        liberacaoMedicaAprovada: false,
+      },
+    });
+    vi.spyOn(agendamentosService, 'getAuthToken').mockResolvedValue(null);
+
+    renderFlow('/agendar/massagem-relaxante');
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+
+    const aviso = await screen.findByTestId('aviso-liberacao-medica-agendamento');
+    expect(aviso).toHaveTextContent(/liberação médica necessária antes da confirmação/i);
+    expect(aviso).toHaveTextContent(/tratamento oncológico: em tratamento/i);
+    expect(screen.getByRole('link', { name: /revisar ficha de anamnese/i })).toHaveAttribute(
+      'href',
+      '/anamnese',
+    );
+
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aviso-concluido-liberacao-medica')).toHaveTextContent(
+        /confirmação condicionada à liberação médica/i,
+      );
+    });
+  });
+
+  it('exibe erro e impede conclusão quando backend retorna falha de negócio ao finalizar', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana' },
+    });
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: undefined,
+    });
+    vi.spyOn(agendamentosService, 'getAuthToken').mockResolvedValue('jwt-token');
+    vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend').mockResolvedValue({
+      sucesso: false,
+      statusCode: 422,
+      erro: 'Agendamento recusado pela regra de liberação médica.',
+    });
+
+    renderFlow('/agendar/massagem-relaxante');
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    const erro = await screen.findByTestId('erro-finalizar-agendamento');
+    expect(erro).toHaveTextContent('Agendamento recusado pela regra de liberação médica.');
+    expect(screen.queryByText('Agendamento Concluído!')).not.toBeInTheDocument();
+  });
+
+  it('desabilita navegação para meses anteriores ao mês atual', () => {
+    renderFlow('/agendar/massagem-relaxante');
+
+    const btnMesAnterior = screen.getByTestId('mes-anterior-btn');
+    expect(btnMesAnterior).toBeDisabled();
+  });
+
+  it('marca dias que já passaram como desabilitados no calendário', () => {
+    renderFlow('/agendar/massagem-relaxante');
+
+    // 2026-10-08 é anterior à data de referência 2026-10-20
+    const diaPassado = screen.getByTestId('dia-passado-2026-10-08');
+    expect(diaPassado).toBeInTheDocument();
+    expect(diaPassado).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('permite agendar para horários futuros no próprio dia atual e oculta horários que já passaram', () => {
+    // Quarta-feira às 16:40
+    vi.setSystemTime(new Date('2026-10-21T16:40:00.000'));
+    renderFlow('/agendar/massagem-relaxante');
+
+    // Seleciona o dia de hoje (2026-10-21)
+    const diaHoje = screen.getByTestId('dia-disponivel-2026-10-21');
+    fireEvent.click(diaHoje);
+
+    // Horários anteriores às 16:40 não devem ser exibidos
+    expect(screen.queryByTestId('slot-hora-10:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-14:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-16:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-16:30')).not.toBeInTheDocument();
+
+    // Horário futuro (17:00) deve estar disponível e ser selecionável
+    const slot17 = screen.getByTestId('slot-hora-17:00');
+    expect(slot17).toBeInTheDocument();
+    fireEvent.click(slot17);
+
+    // Permite confirmar agendamento para o mesmo dia em horário futuro
+    const btnConfirmar = screen.getByTestId('confirmar-agendamento-btn');
+    expect(btnConfirmar).not.toBeDisabled();
+    fireEvent.click(btnConfirmar);
+
+    expect(screen.getByText('Confirmação do Agendamento')).toBeInTheDocument();
+    expect(screen.getByText(/17:00 às 18:00/i)).toBeInTheDocument();
   });
 });

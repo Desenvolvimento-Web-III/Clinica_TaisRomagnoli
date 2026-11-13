@@ -26,8 +26,12 @@ vi.mock('firebase-admin/firestore', () => ({
   getFirestore: () => mockFirestore,
 }));
 
-import { salvarFichaAnamnese, obterFichaAnamnese } from '../src/index.js';
-import { INITIAL_ANAMNESE_DATA, type FichaAnamneseData } from '@clinica/shared';
+import { salvarFichaAnamnese, obterFichaAnamnese, atualizarLiberacaoMedica } from '../src/index.js';
+import {
+  INITIAL_ANAMNESE_DATA,
+  type FichaAnamneseData,
+  type FichaAnamneseRecord,
+} from '@clinica/shared';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
 
@@ -104,6 +108,7 @@ function createMockResponse(): MockResponse {
 describe('Anamnese Endpoints HTTP Cloud Functions', () => {
   const handlerSalvar = salvarFichaAnamnese as unknown as HttpHandler;
   const handlerObter = obterFichaAnamnese as unknown as HttpHandler;
+  const handlerLiberacaoMedica = atualizarLiberacaoMedica as unknown as HttpHandler;
 
   const dadosValidos: FichaAnamneseData = {
     ...INITIAL_ANAMNESE_DATA,
@@ -347,6 +352,107 @@ describe('Anamnese Endpoints HTTP Cloud Functions', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body?.sucesso).toBe(true);
       expect((res.body?.dados as { clienteId: string })?.clienteId).toBe('cliente_123');
+    });
+  });
+
+  describe('POST /atualizarLiberacaoMedica e bloqueio na ficha HTTP', () => {
+    it('rejeita com HTTP 403 quando cliente tenta enviar liberacaoMedicaAprovada=true em salvarFichaAnamnese', async () => {
+      mockDocGet.mockResolvedValue({ exists: false });
+
+      const res = createMockResponse();
+      await handlerSalvar(
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${clientToken}` },
+          body: {
+            dados: {
+              ...dadosValidos,
+              tratamentoOncologico: { resposta: true, detalhes: 'Quimioterapia em 2026' },
+            },
+            liberacaoMedicaAprovada: true,
+          },
+        },
+        res,
+      );
+
+      expect(res.statusCode).toBe(403);
+      expect(res.body?.error).toMatch(/administradora/i);
+    });
+
+    it('rejeita atualizarLiberacaoMedica com HTTP 405 em método GET e HTTP 401 sem token', async () => {
+      const resGet = createMockResponse();
+      await handlerLiberacaoMedica({ method: 'GET', headers: {} }, resGet);
+      expect(resGet.statusCode).toBe(405);
+
+      const resUnauth = createMockResponse();
+      await handlerLiberacaoMedica(
+        { method: 'POST', headers: {}, body: { clienteId: 'cliente_123', aprovada: true } },
+        resUnauth,
+      );
+      expect(resUnauth.statusCode).toBe(401);
+    });
+
+    it('rejeita atualizarLiberacaoMedica com HTTP 403 para cliente comum e HTTP 404 para ficha inexistente', async () => {
+      const resForbidden = createMockResponse();
+      await handlerLiberacaoMedica(
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${clientToken}` },
+          body: { clienteId: 'cliente_123', aprovada: true },
+        },
+        resForbidden,
+      );
+      expect(resForbidden.statusCode).toBe(403);
+
+      mockDocGet.mockResolvedValue({ exists: false });
+      const resNotFound = createMockResponse();
+      await handlerLiberacaoMedica(
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${adminToken}` },
+          body: { clienteId: 'cliente_inexistente', aprovada: true },
+        },
+        resNotFound,
+      );
+      expect(resNotFound.statusCode).toBe(404);
+    });
+
+    it('permite que a administradora registre aprovação de liberação médica com HTTP 200', async () => {
+      mockDocGet.mockResolvedValue({
+        exists: true,
+        data: () => ({
+          ...dadosValidos,
+          clienteId: 'cliente_123',
+          tratamentoOncologico: { resposta: true, detalhes: 'Laudo em validação' },
+          pontosAtencao: ['Tratamento Oncológico: Laudo em validação'],
+          exigeLiberacaoMedica: true,
+          contraindicacoes: ['Tratamento Oncológico: Laudo em validação'],
+          liberacaoMedicaAprovada: false,
+          submittedAt: '2026-11-08T10:00:00Z',
+          updatedAt: '2026-11-08T10:00:00Z',
+        }),
+      });
+
+      const res = createMockResponse();
+      await handlerLiberacaoMedica(
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${adminToken}` },
+          body: {
+            clienteId: 'cliente_123',
+            aprovada: true,
+            observacoes: 'Atestado médico aprovado para sessões adaptadas.',
+          },
+        },
+        res,
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body?.sucesso).toBe(true);
+      const dados = res.body?.dados as FichaAnamneseRecord;
+      expect(dados.liberacaoMedicaAprovada).toBe(true);
+      expect(dados.liberacaoMedicaAprovadaPor).toBe('admin_tais');
+      expect(mockDocSet).toHaveBeenCalled();
     });
   });
 });

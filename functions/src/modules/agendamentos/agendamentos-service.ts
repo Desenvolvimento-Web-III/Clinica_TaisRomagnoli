@@ -12,6 +12,9 @@ import {
   validarEncaixeHorariosFuncionamento,
   CONFIGURACAO_HORARIOS_PADRAO,
   verificarProfissionalHabilitadoParaServico,
+  avaliarBloqueioContraindicacao,
+  verificarDataHoraNoPassado,
+  MENSAGEM_ERRO_DATA_PASSADA,
   type HorariosFuncionamento,
   type Agendamento,
 } from '@clinica/shared';
@@ -21,11 +24,14 @@ import type { ServicosRepository } from '../servicos/servicos-repository.js';
 import type { BloqueiosRepository } from '../agenda/bloqueios-repository.js';
 import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repository.js';
 import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
+import type { AnamneseRepository } from '../anamnese/anamnese-repository.js';
+import type { ClientesRepository } from '../clientes/clientes-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
   criarNotificacaoCancelamento,
 } from '../notificacoes/notificacoes-service.js';
+import { calcularRecorrenciaMensalCliente } from '../clientes/clientes-service.js';
 
 export interface UserContext {
   uid: string;
@@ -46,6 +52,29 @@ export class AgendamentoBusinessError extends Error {
 }
 
 /**
+ * Impede confirmação de agendamento quando a ficha de anamnese do cliente
+ * exigir liberação médica prévia sem aprovação registrada.
+ */
+async function verificarBloqueioConfirmacaoPorAnamnese(
+  clienteId: string,
+  anamneseRepo?: AnamneseRepository,
+): Promise<void> {
+  if (!anamneseRepo) {
+    return;
+  }
+
+  const ficha = await anamneseRepo.obterPorClienteId(clienteId);
+  const avaliacao = avaliarBloqueioContraindicacao(ficha);
+  if (avaliacao.bloqueado) {
+    throw new AgendamentoBusinessError(
+      avaliacao.motivoBloqueio ||
+        'Não é possível confirmar o agendamento porque a ficha de anamnese indica contraindicação que exige liberação médica prévia.',
+      422,
+    );
+  }
+}
+
+/**
  * Cria uma nova solicitação de agendamento validando regras de negócio,
  * folgas, concorrência e o sinal de 30%, disparando notificação interna de confirmação.
  */
@@ -59,8 +88,30 @@ export async function solicitarNovoAgendamento(
   horariosFixosRepo?: HorariosFixosRepository,
   configuracaoHorarios?: HorariosFuncionamento,
   profissionaisRepo?: ProfissionaisRepository,
+  anamneseRepo?: AnamneseRepository,
+  dataReferenciaParam?: Date,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
+
+  // Validação de Data/Hora no passado
+  const dataReferencia =
+    dataReferenciaParam ?? (process.env.NODE_ENV === 'test' ? undefined : new Date());
+  if (dataReferencia && verificarDataHoraNoPassado(parsed.dataHoraInicio, dataReferencia)) {
+    throw new AgendamentoBusinessError(MENSAGEM_ERRO_DATA_PASSADA, 422);
+  }
+
+  if (parsed.clienteId && parsed.clienteId !== user.uid && !user.isAdmin) {
+    throw new AgendamentoBusinessError(
+      'Acesso negado: apenas a administradora pode registrar agendamento para outro cliente.',
+      403,
+    );
+  }
+
+  const clienteIdAlvo = user.isAdmin && parsed.clienteId ? parsed.clienteId : user.uid;
+  const clienteNomeAlvo =
+    user.isAdmin && parsed.clienteId && parsed.clienteId !== user.uid
+      ? parsed.clienteNome || 'Cliente presencial'
+      : user.nome;
 
   let profissionalNomeFinal = parsed.profissionalNome;
 
@@ -155,7 +206,7 @@ export async function solicitarNovoAgendamento(
     const checagemBloqueios = verificarConflitoBloqueioOuHorarioFixo({
       dataHoraInicioIso: parsed.dataHoraInicio,
       dataHoraFimIso: dataHoraFim,
-      clienteIdSolicitante: user.uid,
+      clienteIdSolicitante: clienteIdAlvo,
       bloqueios,
       horariosFixos,
     });
@@ -191,14 +242,21 @@ export async function solicitarNovoAgendamento(
 
   // 5. Regra de Negócio de Isenção de Sinal (apenas administradora em agendamento presencial)
   const isencaoSinal = user.isAdmin && parsed.isencaoSinalAdmin === true;
+  const statusInicial = isencaoSinal ? 'confirmado' : 'pendente';
+
+  // 6. Bloqueio por contraindicação clínica sem liberação médica quando o agendamento já nasce confirmado
+  if (statusInicial === 'confirmado') {
+    await verificarBloqueioConfirmacaoPorAnamnese(clienteIdAlvo, anamneseRepo);
+  }
+
   const valores = calcularValoresAgendamento(parsed.valorTotalEmCentavos, 30, isencaoSinal);
 
   const novoAgendamento: Agendamento = {
     id: `ag-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    clienteId: user.uid,
-    clienteNome: user.nome,
-    clienteEmail: user.email,
-    clienteTelefone: user.telefone,
+    clienteId: clienteIdAlvo,
+    clienteNome: clienteNomeAlvo,
+    clienteEmail: clienteIdAlvo === user.uid ? user.email : undefined,
+    clienteTelefone: clienteIdAlvo === user.uid ? user.telefone : undefined,
     servicoId: parsed.servicoId,
     servicoNome: parsed.servicoNome,
     duracaoMinutos: parsed.duracaoMinutos,
@@ -210,7 +268,7 @@ export async function solicitarNovoAgendamento(
     intervaloAposMinutos: 30,
     profissionalId: parsed.profissionalId,
     profissionalNome: profissionalNomeFinal,
-    status: isencaoSinal ? 'confirmado' : 'pendente',
+    status: statusInicial,
     metodoPagamento: parsed.metodoPagamento,
     origem: user.isAdmin ? 'presencial_admin' : 'app_cliente',
     sinalIsento: valores.sinalIsento,
@@ -254,6 +312,26 @@ export async function alterarAgendamentoExistente(
         : new Date();
 
   const parsed = alterarAgendamentoInputSchema.parse(input);
+
+  // Validação: Não permitir reagendamento para data/hora no passado
+  const dataReferenciaPassado =
+    notificacoesRepoOuDataRef instanceof Date
+      ? notificacoesRepoOuDataRef
+      : dataReferenciaParam instanceof Date
+        ? dataReferenciaParam
+        : process.env.NODE_ENV === 'test'
+          ? undefined
+          : new Date();
+
+  if (
+    dataReferenciaPassado &&
+    verificarDataHoraNoPassado(parsed.novaDataHoraInicio, dataReferenciaPassado)
+  ) {
+    throw new AgendamentoBusinessError(
+      'Não é possível reagendar para uma data ou horário que já passou.',
+      422,
+    );
+  }
 
   const agendamento = await repo.buscarPorId(parsed.agendamentoId);
   if (!agendamento) {
@@ -526,6 +604,8 @@ export async function atualizarStatusAgendamento(
   repo: AgendamentosRepository,
   notificacoesRepo?: NotificacoesRepository,
   dataReferenciaParam?: Date,
+  anamneseRepo?: AnamneseRepository,
+  clientesRepo?: ClientesRepository,
 ): Promise<Agendamento> {
   if (!user.isAdmin) {
     throw new AgendamentoBusinessError(
@@ -554,6 +634,10 @@ export async function atualizarStatusAgendamento(
         `Transição de status inválida: não é permitido alterar de '${agendamento.status}' para '${parsed.novoStatus}'.`,
       422,
     );
+  }
+
+  if (parsed.novoStatus === 'confirmado') {
+    await verificarBloqueioConfirmacaoPorAnamnese(agendamento.clienteId, anamneseRepo);
   }
 
   const atualizado: Agendamento = {
@@ -628,6 +712,18 @@ export async function atualizarStatusAgendamento(
         notificacoesRepo,
         parsed.motivo || 'Falta registrada pela administração da clínica',
         'tardio',
+      );
+    }
+  }
+
+  // Recalcula a recorrência mensal do cliente sempre que uma sessão é concluída ou revertida
+  if (clientesRepo && (parsed.novoStatus === 'concluido' || agendamento.status === 'concluido')) {
+    try {
+      await calcularRecorrenciaMensalCliente(salvo.clienteId, clientesRepo, repo, dataReferencia);
+    } catch (err) {
+      console.warn(
+        'Aviso: Falha ao atualizar recorrência do cliente após conclusão do agendamento:',
+        err,
       );
     }
   }

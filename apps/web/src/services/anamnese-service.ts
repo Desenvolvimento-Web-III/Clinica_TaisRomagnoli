@@ -1,11 +1,20 @@
-import type { FichaAnamneseData, FichaAnamneseRecord } from '@clinica/shared';
+import type {
+  FichaAnamneseData,
+  FichaAnamneseRecord,
+  RegistrarLiberacaoMedicaInput,
+} from '@clinica/shared';
 import { getFunctionsBaseUrl, getAuthToken } from './agendamentos-service';
 
 export async function salvarFichaAnamneseApi(
   dados: FichaAnamneseData,
   clienteId?: string,
   token?: string | null,
-): Promise<{ sucesso: boolean; dados?: FichaAnamneseRecord; erro?: string }> {
+): Promise<{
+  sucesso: boolean;
+  dados?: FichaAnamneseRecord;
+  erro?: string;
+  statusCode?: number;
+}> {
   const authToken = token ?? (await getAuthToken());
   if (!authToken) {
     return { sucesso: false, erro: 'Usuário não autenticado.' };
@@ -27,6 +36,7 @@ export async function salvarFichaAnamneseApi(
       return {
         sucesso: false,
         erro: body.error || 'Erro ao salvar ficha de anamnese no servidor.',
+        statusCode: response.status,
       };
     }
 
@@ -42,7 +52,12 @@ export async function salvarFichaAnamneseApi(
 export async function obterFichaAnamneseApi(
   clienteId?: string,
   token?: string | null,
-): Promise<{ sucesso: boolean; dados?: FichaAnamneseRecord; erro?: string }> {
+): Promise<{
+  sucesso: boolean;
+  dados?: FichaAnamneseRecord;
+  erro?: string;
+  statusCode?: number;
+}> {
   const authToken = token ?? (await getAuthToken());
   if (!authToken) {
     return { sucesso: false, erro: 'Usuário não autenticado.' };
@@ -67,6 +82,50 @@ export async function obterFichaAnamneseApi(
       return {
         sucesso: false,
         erro: body.error || 'Erro ao consultar ficha de anamnese no servidor.',
+        statusCode: response.status,
+      };
+    }
+
+    return { sucesso: true, dados: body.dados };
+  } catch (error) {
+    return {
+      sucesso: false,
+      erro: error instanceof Error ? error.message : 'Falha na comunicação com o servidor.',
+    };
+  }
+}
+
+export async function atualizarLiberacaoMedicaApi(
+  input: RegistrarLiberacaoMedicaInput,
+  token?: string | null,
+): Promise<{
+  sucesso: boolean;
+  dados?: FichaAnamneseRecord;
+  erro?: string;
+  statusCode?: number;
+}> {
+  const authToken = token ?? (await getAuthToken());
+  if (!authToken) {
+    return { sucesso: false, erro: 'Usuário não autenticado.' };
+  }
+
+  try {
+    const url = `${getFunctionsBaseUrl()}/atualizarLiberacaoMedica`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    const body = await response.json();
+    if (!response.ok) {
+      return {
+        sucesso: false,
+        erro: body.error || 'Erro ao atualizar liberação médica no servidor.',
+        statusCode: response.status,
       };
     }
 

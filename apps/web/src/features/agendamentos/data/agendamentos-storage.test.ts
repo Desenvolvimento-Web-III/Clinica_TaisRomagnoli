@@ -3,6 +3,7 @@ import {
   addAgendamentoStorage,
   getAgendamentosStorage,
   getAgendamentosStorageKey,
+  getTodosAgendamentosStorage,
   saveAgendamentosStorage,
 } from './agendamentos-storage';
 
@@ -54,5 +55,18 @@ describe('agendamentos-storage', () => {
 
     expect(localStorage.length).toBe(0);
     expect(getAgendamentosStorage(null)).toEqual([]);
+  });
+
+  it('armazena e recupera agendamentos de todos os clientes no storage global', () => {
+    const ag1 = MOCK_AGENDAMENTOS[0]!;
+    const ag2 = MOCK_AGENDAMENTOS[1]!;
+
+    addAgendamentoStorage(ag1, 'user-1');
+    addAgendamentoStorage(ag2, 'user-2');
+
+    const todos = getTodosAgendamentosStorage();
+    expect(todos).toHaveLength(2);
+    expect(todos.some((item) => item.id === ag1.id)).toBe(true);
+    expect(todos.some((item) => item.id === ag2.id)).toBe(true);
   });
 });

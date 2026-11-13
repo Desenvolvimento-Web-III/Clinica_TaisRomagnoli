@@ -6,6 +6,8 @@ import type {
   FrequenciaAtividadeFisica,
   ExperienciaMassoterapia,
   FichaAnamneseData,
+  FichaAnamneseRecord,
+  ResultadoAvaliacaoContraindicacao,
 } from '../types/anamnese.js';
 
 export const REGIOES_CORPO_OPCOES: ReadonlyArray<{
@@ -145,9 +147,110 @@ export const fichaAnamneseSchema = z.object({
 export const salvarFichaAnamneseInputSchema = z.object({
   clienteId: z.string().min(1, 'O identificador do cliente é obrigatório.').optional(),
   dados: fichaAnamneseSchema,
+  exigeLiberacaoMedica: z.boolean().optional(),
+  liberacaoMedicaAprovada: z.boolean().optional(),
+  liberacaoMedicaObservacoes: z
+    .string()
+    .max(1000, 'As observações da liberação médica devem ter no máximo 1000 caracteres.')
+    .optional(),
 });
 
 export type SalvarFichaAnamneseInput = z.infer<typeof salvarFichaAnamneseInputSchema>;
+
+export const registrarLiberacaoMedicaInputSchema = z.object({
+  clienteId: z.string().min(1, 'O identificador do cliente é obrigatório.'),
+  aprovada: z.boolean(),
+  observacoes: z
+    .string()
+    .max(1000, 'As observações da liberação médica devem ter no máximo 1000 caracteres.')
+    .optional(),
+  exigeLiberacaoMedica: z.boolean().optional(),
+});
+
+export type RegistrarLiberacaoMedicaInput = z.infer<typeof registrarLiberacaoMedicaInputSchema>;
+
+export const CONDICOES_LIBERACAO_MEDICA = [
+  'tratamentoOncologico',
+  'problemasCirculatorios',
+  'doencasCardiacas',
+] as const;
+
+export type CondicaoContraindicacaoKey = (typeof CONDICOES_LIBERACAO_MEDICA)[number];
+
+export const MENSAGEM_BLOQUEIO_CONTRAINDICACAO =
+  'Não é possível confirmar o agendamento porque a ficha de anamnese indica contraindicação que exige liberação médica prévia. Aprove a liberação médica na ficha após receber o aval médico.';
+
+export function listarChavesContraindicacao(
+  data?: Partial<FichaAnamneseData> | null,
+): CondicaoContraindicacaoKey[] {
+  if (!data) {
+    return [];
+  }
+
+  return CONDICOES_LIBERACAO_MEDICA.filter((chave) => data[chave]?.resposta === true);
+}
+
+export function calcularContraindicacoesLiberacaoMedica(
+  data?: Partial<FichaAnamneseData> | null,
+): string[] {
+  if (!data) {
+    return [];
+  }
+
+  const contraindicacoes: string[] = [];
+
+  if (data.tratamentoOncologico?.resposta === true) {
+    contraindicacoes.push(
+      `Tratamento Oncológico: ${data.tratamentoOncologico.detalhes?.trim() || 'Requer liberação médica'}`,
+    );
+  }
+
+  if (data.doencasCardiacas?.resposta === true) {
+    contraindicacoes.push(
+      `Cardíaco: ${data.doencasCardiacas.detalhes?.trim() || 'Condição cardíaca ou uso de marca-passo requer liberação médica'}`,
+    );
+  }
+
+  if (data.problemasCirculatorios?.resposta === true) {
+    contraindicacoes.push(
+      `Circulatório/Trombose: ${data.problemasCirculatorios.detalhes?.trim() || 'Condição circulatória ou vascular requer liberação médica'}`,
+    );
+  }
+
+  return contraindicacoes;
+}
+
+export function avaliarBloqueioContraindicacao(
+  ficha?: Partial<FichaAnamneseRecord> | null,
+): ResultadoAvaliacaoContraindicacao {
+  if (!ficha) {
+    return {
+      exigeLiberacaoMedica: false,
+      contraindicacoes: [],
+      liberacaoMedicaAprovada: false,
+      bloqueado: false,
+    };
+  }
+
+  const clinicas = calcularContraindicacoesLiberacaoMedica(ficha);
+  const registradas = Array.isArray(ficha.contraindicacoes)
+    ? ficha.contraindicacoes.filter(
+        (item): item is string => typeof item === 'string' && item.trim().length > 0,
+      )
+    : [];
+  const contraindicacoes = Array.from(new Set([...clinicas, ...registradas]));
+  const exigeLiberacaoMedica = ficha.exigeLiberacaoMedica === true || contraindicacoes.length > 0;
+  const liberacaoMedicaAprovada = ficha.liberacaoMedicaAprovada === true;
+  const bloqueado = exigeLiberacaoMedica && !liberacaoMedicaAprovada;
+
+  return {
+    exigeLiberacaoMedica,
+    contraindicacoes,
+    liberacaoMedicaAprovada,
+    bloqueado,
+    ...(bloqueado ? { motivoBloqueio: MENSAGEM_BLOQUEIO_CONTRAINDICACAO } : {}),
+  };
+}
 
 export function calcularPontosAtencao(data: FichaAnamneseData): string[] {
   const pontos: string[] = [];

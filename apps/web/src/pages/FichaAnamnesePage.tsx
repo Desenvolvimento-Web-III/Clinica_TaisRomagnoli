@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
@@ -18,10 +18,13 @@ import { AnamneseSummaryCard } from '@/features/anamnese/components/AnamneseSumm
 import {
   INITIAL_ANAMNESE_DATA,
   OBJETIVOS_MASSAGEM,
+  avaliarBloqueioContraindicacao,
+  calcularContraindicacoesLiberacaoMedica,
   calcularPontosAtencao,
+  listarChavesContraindicacao,
 } from '@/features/anamnese/data/initial-anamnese';
 import { fichaAnamneseSchema } from '@/features/anamnese/schemas/anamnese-schema';
-import { salvarFichaAnamneseApi } from '@/services/anamnese-service';
+import { obterFichaAnamneseApi, salvarFichaAnamneseApi } from '@/services/anamnese-service';
 import type {
   FichaAnamneseData,
   CondicaoSaudeItem,
@@ -34,9 +37,33 @@ import type {
 
 const STORAGE_KEY_PREFIX = 'clinica_anamnese_data_';
 
-function loadSavedAnamnese(uid?: string | null) {
+interface LiberacaoState {
+  exigeLiberacaoMedica: boolean;
+  contraindicacoes: string[];
+  liberacaoMedicaAprovada: boolean;
+  liberacaoMedicaAprovadaEm?: string;
+  liberacaoMedicaObservacoes?: string;
+}
+
+function loadSavedAnamnese(uid?: string | null): {
+  data: FichaAnamneseData;
+  updatedAt?: string;
+  pontosAtencao: string[];
+  liberacao: LiberacaoState;
+} {
+  const defaultLiberacao: LiberacaoState = {
+    exigeLiberacaoMedica: false,
+    contraindicacoes: [],
+    liberacaoMedicaAprovada: false,
+  };
+
   if (typeof window === 'undefined') {
-    return { data: INITIAL_ANAMNESE_DATA, updatedAt: undefined, pontosAtencao: [] };
+    return {
+      data: INITIAL_ANAMNESE_DATA,
+      updatedAt: undefined,
+      pontosAtencao: [],
+      liberacao: defaultLiberacao,
+    };
   }
   const storageKey = uid ? `${STORAGE_KEY_PREFIX}${uid}` : `${STORAGE_KEY_PREFIX}guest`;
   try {
@@ -44,17 +71,36 @@ function loadSavedAnamnese(uid?: string | null) {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed && typeof parsed === 'object') {
+        const mergedData = { ...INITIAL_ANAMNESE_DATA, ...parsed.data } as FichaAnamneseData;
+        const avaliacao = avaliarBloqueioContraindicacao({
+          ...mergedData,
+          exigeLiberacaoMedica: parsed.exigeLiberacaoMedica,
+          contraindicacoes: parsed.contraindicacoes,
+          liberacaoMedicaAprovada: parsed.liberacaoMedicaAprovada,
+        });
         return {
-          data: { ...INITIAL_ANAMNESE_DATA, ...parsed.data },
+          data: mergedData,
           updatedAt: parsed.updatedAt as string | undefined,
           pontosAtencao: (parsed.pontosAtencao as string[]) || [],
+          liberacao: {
+            exigeLiberacaoMedica: avaliacao.exigeLiberacaoMedica,
+            contraindicacoes: avaliacao.contraindicacoes,
+            liberacaoMedicaAprovada: avaliacao.liberacaoMedicaAprovada,
+            liberacaoMedicaAprovadaEm: parsed.liberacaoMedicaAprovadaEm as string | undefined,
+            liberacaoMedicaObservacoes: parsed.liberacaoMedicaObservacoes as string | undefined,
+          },
         };
       }
     }
   } catch {
     // fallback
   }
-  return { data: INITIAL_ANAMNESE_DATA, updatedAt: undefined, pontosAtencao: [] };
+  return {
+    data: INITIAL_ANAMNESE_DATA,
+    updatedAt: undefined,
+    pontosAtencao: [],
+    liberacao: defaultLiberacao,
+  };
 }
 
 export function FichaAnamnesePage() {
@@ -70,6 +116,79 @@ export function FichaAnamnesePage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [savedUpdatedAt, setSavedUpdatedAt] = useState<string | undefined>(initialSaved.updatedAt);
   const [pontosAtencao, setPontosAtencao] = useState<string[]>(initialSaved.pontosAtencao);
+  const [liberacaoState, setLiberacaoState] = useState<LiberacaoState>(initialSaved.liberacao);
+  const [previousContraindicationKeys, setPreviousContraindicationKeys] = useState<string[]>(() =>
+    listarChavesContraindicacao(initialSaved.data),
+  );
+
+  useEffect(() => {
+    const uid = currentUser?.uid;
+    if (!uid) {
+      return;
+    }
+
+    let ativo = true;
+    void obterFichaAnamneseApi(uid).then((res) => {
+      if (!ativo || !res.sucesso || !res.dados) {
+        return;
+      }
+
+      const ficha = res.dados;
+      const syncedData: FichaAnamneseData = {
+        objetivoPrincipal: ficha.objetivoPrincipal,
+        regioesFoco: ficha.regioesFoco,
+        intensidadeDor: ficha.intensidadeDor,
+        descricaoQueixa: ficha.descricaoQueixa ?? '',
+        gestanteOuLactante: ficha.gestanteOuLactante,
+        problemasCirculatorios: ficha.problemasCirculatorios,
+        doencasCardiacas: ficha.doencasCardiacas,
+        lesoesOuCirurgias: ficha.lesoesOuCirurgias,
+        alergiasProdutos: ficha.alergiasProdutos,
+        problemasPele: ficha.problemasPele,
+        tratamentoOncologico: ficha.tratamentoOncologico,
+        usoMedicamentos: ficha.usoMedicamentos,
+        preferenciaPressao: ficha.preferenciaPressao,
+        experienciaMassagem: ficha.experienciaMassagem,
+        atividadeFisica: ficha.atividadeFisica,
+        observacoesAdicionais: ficha.observacoesAdicionais ?? '',
+        consentimentoConfirmado: ficha.consentimentoConfirmado,
+      };
+      const avaliacao = avaliarBloqueioContraindicacao(ficha);
+      const nextLiberacao: LiberacaoState = {
+        exigeLiberacaoMedica: avaliacao.exigeLiberacaoMedica,
+        contraindicacoes: avaliacao.contraindicacoes,
+        liberacaoMedicaAprovada: avaliacao.liberacaoMedicaAprovada,
+        liberacaoMedicaAprovadaEm: ficha.liberacaoMedicaAprovadaEm,
+        liberacaoMedicaObservacoes: ficha.liberacaoMedicaObservacoes,
+      };
+      const pontos =
+        Array.isArray(ficha.pontosAtencao) && ficha.pontosAtencao.length > 0
+          ? ficha.pontosAtencao
+          : calcularPontosAtencao(syncedData);
+
+      setFormData(syncedData);
+      setPontosAtencao(pontos);
+      setSavedUpdatedAt(ficha.updatedAt);
+      setLiberacaoState(nextLiberacao);
+      setPreviousContraindicationKeys(listarChavesContraindicacao(syncedData));
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          `${STORAGE_KEY_PREFIX}${uid}`,
+          JSON.stringify({
+            data: syncedData,
+            updatedAt: ficha.updatedAt,
+            pontosAtencao: pontos,
+            ...nextLiberacao,
+          }),
+        );
+      }
+    });
+
+    return () => {
+      ativo = false;
+    };
+  }, [currentUser?.uid]);
 
   // Atualiza campo de condição de saúde
   const handleCondicaoChange = (campo: keyof FichaAnamneseData, valor: CondicaoSaudeItem) => {
@@ -138,12 +257,63 @@ export function FichaAnamnesePage() {
     setSubmitting(true);
 
     try {
-      // Calcula pontos de atenção para a profissional
+      // Calcula pontos de atenção e contraindicações para a profissional
       const pontos = calcularPontosAtencao(formData);
       setPontosAtencao(pontos);
 
-      const now = new Date().toISOString();
-      setSavedUpdatedAt(now);
+      const contraindicacoesLocais = calcularContraindicacoesLiberacaoMedica(formData);
+      const chavesAtuais = listarChavesContraindicacao(formData);
+      const adicionouNovaContraindicacao = chavesAtuais.some(
+        (chave) => !previousContraindicationKeys.includes(chave),
+      );
+      const restricaoManualAnteriorSemClinica = Boolean(
+        liberacaoState.exigeLiberacaoMedica &&
+        liberacaoState.contraindicacoes.length === 0 &&
+        previousContraindicationKeys.length === 0,
+      );
+      const exigeLocal = contraindicacoesLocais.length > 0 || restricaoManualAnteriorSemClinica;
+      const aprovadaLocal =
+        exigeLocal && liberacaoState.liberacaoMedicaAprovada && !adicionouNovaContraindicacao;
+
+      let nextLiberacao: LiberacaoState = {
+        exigeLiberacaoMedica: exigeLocal,
+        contraindicacoes: contraindicacoesLocais,
+        liberacaoMedicaAprovada: aprovadaLocal,
+        liberacaoMedicaAprovadaEm: aprovadaLocal
+          ? liberacaoState.liberacaoMedicaAprovadaEm
+          : undefined,
+        liberacaoMedicaObservacoes: liberacaoState.liberacaoMedicaObservacoes,
+      };
+
+      let finalUpdatedAt = new Date().toISOString();
+      let finalPontos = pontos;
+
+      if (currentUser?.uid) {
+        try {
+          const apiRes = await salvarFichaAnamneseApi(formData, currentUser.uid);
+          if (apiRes.sucesso && apiRes.dados) {
+            const avaliacaoApi = avaliarBloqueioContraindicacao(apiRes.dados);
+            nextLiberacao = {
+              exigeLiberacaoMedica: avaliacaoApi.exigeLiberacaoMedica,
+              contraindicacoes: avaliacaoApi.contraindicacoes,
+              liberacaoMedicaAprovada: avaliacaoApi.liberacaoMedicaAprovada,
+              liberacaoMedicaAprovadaEm: apiRes.dados.liberacaoMedicaAprovadaEm,
+              liberacaoMedicaObservacoes: apiRes.dados.liberacaoMedicaObservacoes,
+            };
+            finalUpdatedAt = apiRes.dados.updatedAt || finalUpdatedAt;
+            if (Array.isArray(apiRes.dados.pontosAtencao)) {
+              finalPontos = apiRes.dados.pontosAtencao;
+              setPontosAtencao(finalPontos);
+            }
+          }
+        } catch {
+          // Mantém persistência local caso ocorra falha de rede ou backend indisponível
+        }
+      }
+
+      setSavedUpdatedAt(finalUpdatedAt);
+      setLiberacaoState(nextLiberacao);
+      setPreviousContraindicationKeys(chavesAtuais);
 
       // Salva localmente
       const storageKey = currentUser
@@ -154,18 +324,11 @@ export function FichaAnamnesePage() {
         storageKey,
         JSON.stringify({
           data: formData,
-          updatedAt: now,
-          pontosAtencao: pontos,
+          updatedAt: finalUpdatedAt,
+          pontosAtencao: finalPontos,
+          ...nextLiberacao,
         }),
       );
-
-      if (currentUser?.uid) {
-        try {
-          await salvarFichaAnamneseApi(formData, currentUser.uid);
-        } catch {
-          // Mantém persistência local caso ocorra falha de rede ou backend indisponível
-        }
-      }
 
       markClientNotificationAsRead(currentUser?.uid, ANAMNESE_NOTIFICATION_ID);
 
@@ -179,6 +342,8 @@ export function FichaAnamnesePage() {
       setSubmitting(false);
     }
   };
+
+  const contraindicacoesDetectadas = calcularContraindicacoesLiberacaoMedica(formData);
 
   return (
     <AppShell
@@ -219,6 +384,11 @@ export function FichaAnamnesePage() {
             data={formData}
             pontosAtencao={pontosAtencao}
             updatedAt={savedUpdatedAt}
+            exigeLiberacaoMedica={liberacaoState.exigeLiberacaoMedica}
+            contraindicacoes={liberacaoState.contraindicacoes}
+            liberacaoMedicaAprovada={liberacaoState.liberacaoMedicaAprovada}
+            liberacaoMedicaAprovadaEm={liberacaoState.liberacaoMedicaAprovadaEm}
+            liberacaoMedicaObservacoes={liberacaoState.liberacaoMedicaObservacoes}
             onEdit={() => {
               setIsSuccess(false);
               setCurrentSection('queixa');
@@ -462,6 +632,36 @@ export function FichaAnamnesePage() {
                       error={errors['usoMedicamentos.detalhes']}
                     />
                   </div>
+
+                  {contraindicacoesDetectadas.length > 0 && (
+                    <aside
+                      role="status"
+                      data-testid="aviso-contraindicacao-saude"
+                      className="flex items-start gap-3 rounded-xl border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-4 text-xs/5 text-[var(--color-warning-text)] sm:text-sm/6"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-warning-text)]"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="font-semibold">Liberação médica necessária</p>
+                        <p className="mt-1">
+                          As condições marcadas exigem aprovação da liberação médica na ficha antes
+                          que novos agendamentos sejam confirmados pela clínica.
+                        </p>
+                      </div>
+                    </aside>
+                  )}
 
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                     <button

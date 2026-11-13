@@ -41,6 +41,7 @@ import { FirestoreClientesRepository } from './modules/clientes/clientes-reposit
 import {
   registrarPerfilCliente,
   obterPerfilCliente,
+  calcularRecorrenciaMensalCliente,
   listarClientes as listarClientesService,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
@@ -63,6 +64,7 @@ import {
   AnamneseBusinessError,
   salvarFichaAnamneseService,
   obterFichaAnamneseService,
+  registrarLiberacaoMedicaService,
 } from './modules/anamnese/anamnese-service.js';
 
 initializeApp();
@@ -118,6 +120,7 @@ export {
 export {
   registrarPerfilCliente,
   obterPerfilCliente,
+  calcularRecorrenciaMensalCliente,
   listarClientes,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
@@ -129,6 +132,7 @@ export {
   AnamneseBusinessError,
   salvarFichaAnamneseService,
   obterFichaAnamneseService,
+  registrarLiberacaoMedicaService,
 } from './modules/anamnese/anamnese-service.js';
 export type { AnamneseRepository } from './modules/anamnese/anamnese-repository.js';
 import {
@@ -339,6 +343,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
     const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
+    const anamneseRepo = new FirestoreAnamneseRepository(firestore);
 
     const agendamento = await solicitarNovoAgendamento(
       request.body,
@@ -350,6 +355,8 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       horariosFixosRepo,
       undefined,
       profissionaisRepo,
+      anamneseRepo,
+      new Date(),
     );
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
@@ -393,7 +400,7 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
       user,
       repo,
       notifRepo,
-      undefined,
+      new Date(),
       bloqueiosRepo,
       horariosFixosRepo,
       undefined,
@@ -469,12 +476,17 @@ export const atualizarStatusAgendamento = onRequest({ cors: true }, async (reque
     const firestore = getFirestore();
     const repo = new FirestoreAgendamentosRepository(firestore);
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const anamneseRepo = new FirestoreAnamneseRepository(firestore);
+    const clientesRepo = new FirestoreClientesRepository(firestore);
 
     const agendamento = await atualizarStatusAgendamentoService(
       request.body,
       user,
       repo,
       notifRepo,
+      undefined,
+      anamneseRepo,
+      clientesRepo,
     );
 
     response.status(200).json({
@@ -905,8 +917,9 @@ export const obterPerfil = onRequest({ cors: true }, async (request, response) =
 
     const firestore = getFirestore();
     const repo = new FirestoreClientesRepository(firestore);
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
 
-    const perfil = await obterPerfilCliente(targetUid, user, repo);
+    const perfil = await obterPerfilCliente(targetUid, user, repo, agendamentosRepo);
     response.status(200).json({ dados: perfil });
   } catch (error: unknown) {
     if (responderErroNegocio(response, error)) {
@@ -914,6 +927,63 @@ export const obterPerfil = onRequest({ cors: true }, async (request, response) =
     }
     console.error('Erro ao consultar perfil do cliente:', error);
     response.status(500).json({ error: 'Erro interno ao consultar perfil do cliente.' });
+  }
+});
+
+/**
+ * Endpoint para cálculo e consulta da recorrência mensal do cliente.
+ * Marca como recorrente quem concluir pelo menos duas sessões no mês.
+ * Clientes podem consultar sua própria recorrência; administradores podem consultar qualquer cliente.
+ */
+export const calcularRecorrenciaCliente = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use GET ou POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const targetUid =
+      (request.query['uid'] as string) ||
+      (request.body && typeof request.body === 'object' && 'uid' in request.body
+        ? String(request.body.uid)
+        : user.uid);
+
+    if (targetUid !== user.uid && !user.isAdmin) {
+      response.status(403).json({
+        error:
+          'Acesso negado. Você só tem permissão para calcular a recorrência da sua própria conta.',
+      });
+      return;
+    }
+
+    const mesReferencia =
+      (request.query['mesReferencia'] as string) ||
+      (request.body && typeof request.body === 'object' && 'mesReferencia' in request.body
+        ? String(request.body.mesReferencia)
+        : undefined);
+
+    const firestore = getFirestore();
+    const clientesRepo = new FirestoreClientesRepository(firestore);
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+
+    const recorrencia = await calcularRecorrenciaMensalCliente(
+      targetUid,
+      clientesRepo,
+      agendamentosRepo,
+      mesReferencia,
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      dados: recorrencia,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao calcular recorrência do cliente:', error);
+    response.status(500).json({ error: 'Erro interno ao calcular recorrência do cliente.' });
   }
 });
 
@@ -1111,7 +1181,8 @@ export const iniciarSessaoUnica = onRequest({ cors: true }, async (request, resp
 
     const motivo =
       (request.body?.motivo as string) || 'Início de nova sessão sob política de sessão única';
-    const resultado = await aplicarPoliticaSessaoUnica(caller, auth, firestore, motivo);
+    const sessionId = (request.body?.sessionId as string) || undefined;
+    const resultado = await aplicarPoliticaSessaoUnica(caller, auth, firestore, motivo, sessionId);
 
     response.status(200).json({
       sucesso: true,
@@ -1140,8 +1211,9 @@ export const consultarSessao = onRequest({ cors: true }, async (request, respons
     const caller = await extrairUsuarioAutenticado(request.headers.authorization);
     const targetUid = (request.query['uid'] as string) || caller.uid;
     const auth = getAuth();
+    const firestore = getFirestore();
 
-    const resultado = await consultarStatusSessao(targetUid, caller, auth);
+    const resultado = await consultarStatusSessao(targetUid, caller, auth, firestore);
     response.status(200).json({ dados: resultado });
   } catch (error: unknown) {
     if (responderErroNegocio(response, error)) {
@@ -1528,6 +1600,7 @@ export const obterHorariosDisponiveis = onRequest({ cors: true }, async (request
       servicosRepo,
       caller?.uid,
       profissionaisRepo,
+      new Date(),
     );
 
     response.status(200).json({
@@ -1792,7 +1865,19 @@ export const salvarFichaAnamnese = onRequest({ cors: true }, async (request, res
     const dados = payload.dados || payload;
 
     const fichaSalva = await salvarFichaAnamneseService({
-      input: { clienteId, dados },
+      input: {
+        clienteId,
+        dados,
+        ...(typeof payload.exigeLiberacaoMedica === 'boolean'
+          ? { exigeLiberacaoMedica: payload.exigeLiberacaoMedica }
+          : {}),
+        ...(typeof payload.liberacaoMedicaAprovada === 'boolean'
+          ? { liberacaoMedicaAprovada: payload.liberacaoMedicaAprovada }
+          : {}),
+        ...(typeof payload.liberacaoMedicaObservacoes === 'string'
+          ? { liberacaoMedicaObservacoes: payload.liberacaoMedicaObservacoes }
+          : {}),
+      },
       usuarioAutenticado: user,
       repo,
       notifRepo,
@@ -1809,6 +1894,45 @@ export const salvarFichaAnamnese = onRequest({ cors: true }, async (request, res
     }
     console.error('Erro ao salvar ficha de anamnese:', error);
     response.status(500).json({ error: 'Erro interno ao salvar ficha de anamnese.' });
+  }
+});
+
+/**
+ * Endpoint administrativo para registrar ou revogar a liberação médica na ficha de anamnese.
+ * Operação restrita exclusivamente à administradora autenticada.
+ */
+export const atualizarLiberacaoMedica = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(user);
+
+    const firestore = getFirestore();
+    const repo = new FirestoreAnamneseRepository(firestore);
+
+    const fichaAtualizada = await registrarLiberacaoMedicaService({
+      input: request.body,
+      usuarioAutenticado: user,
+      repo,
+    });
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: fichaAtualizada.liberacaoMedicaAprovada
+        ? 'Liberação médica registrada com sucesso.'
+        : 'Status de liberação médica atualizado com sucesso.',
+      dados: fichaAtualizada,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao atualizar liberação médica:', error);
+    response.status(500).json({ error: 'Erro interno ao atualizar liberação médica.' });
   }
 });
 

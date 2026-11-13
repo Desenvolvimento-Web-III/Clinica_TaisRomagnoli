@@ -610,4 +610,84 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
       await assertFails(adminDb.doc('agendamentos/ag-joao-1').delete());
     });
   });
+
+  describe('Proteção de campos administrativos de liberação médica em /anamneses e /fichas', () => {
+    it('bloqueia cliente de definir ou alterar campos de liberação médica diretamente no Firestore', async () => {
+      const ownerDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      await testEnvironment.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc('anamneses/cliente-joao')
+          .set({
+            clienteId: 'cliente-joao',
+            objetivoPrincipal: 'Alívio de dor lombar',
+            exigeLiberacaoMedica: true,
+            contraindicacoes: ['Tratamento Oncológico: Em acompanhamento'],
+            liberacaoMedicaAprovada: false,
+          });
+      });
+
+      // Bloqueia criação direta tentando burlar liberação médica
+      await assertFails(
+        ownerDb.doc('anamneses/cliente-joao-bypass').set({
+          clienteId: 'cliente-joao',
+          objetivoPrincipal: 'Relaxamento',
+          liberacaoMedicaAprovada: true,
+        }),
+      );
+
+      // Bloqueia update tentando aprovar liberação médica ou desligar exigência clínica
+      await assertFails(
+        ownerDb.doc('anamneses/cliente-joao').update({
+          liberacaoMedicaAprovada: true,
+        }),
+      );
+      await assertFails(
+        ownerDb.doc('anamneses/cliente-joao').update({
+          exigeLiberacaoMedica: false,
+        }),
+      );
+      await assertFails(
+        ownerDb.doc('anamneses/cliente-joao').update({
+          contraindicacoes: [],
+        }),
+      );
+
+      // Permite atualização comum do próprio cliente sem tocar campos restritos
+      await assertSucceeds(
+        ownerDb.doc('anamneses/cliente-joao').update({
+          observacoesAdicionais: 'Preferência por ambiente aquecido',
+        }),
+      );
+    });
+
+    it('permite que a administradora registre e aprove a liberação médica em /anamneses', async () => {
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+
+      await testEnvironment.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc('anamneses/cliente-maria')
+          .set({
+            clienteId: 'cliente-maria',
+            objetivoPrincipal: 'Drenagem linfática',
+            exigeLiberacaoMedica: true,
+            contraindicacoes: ['Cardíaco: Uso de marca-passo'],
+            liberacaoMedicaAprovada: false,
+          });
+      });
+
+      await assertSucceeds(
+        adminDb.doc('anamneses/cliente-maria').update({
+          liberacaoMedicaAprovada: true,
+          liberacaoMedicaObservacoes: 'Atestado médico apresentado presencialmente.',
+        }),
+      );
+    });
+  });
 });

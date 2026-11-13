@@ -21,7 +21,8 @@ describe('ReagendamentoPage', () => {
   beforeEach(() => {
     localStorage.clear();
     saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
   });
 
   afterEach(() => {
@@ -55,8 +56,8 @@ describe('ReagendamentoPage', () => {
     const dataOption = screen.getByTestId('data-option-2026-10-23');
     fireEvent.click(dataOption);
 
-    // Seleciona horário 11:00
-    const horarioOption = screen.getByTestId('horario-option-11:00');
+    // Seleciona horário 11:30
+    const horarioOption = screen.getByTestId('horario-option-11:30');
     fireEvent.click(horarioOption);
 
     // Digita motivo
@@ -94,5 +95,23 @@ describe('ReagendamentoPage', () => {
     fireEvent.click(btnVoltarTopo);
 
     expect(screen.getByText('Lista de Agendamentos')).toBeInTheDocument();
+  });
+
+  it('gera opções dinâmicas da semana seguinte excluindo as folgas da dona da clínica (domingos e terças)', () => {
+    // Definimos a data do sistema como 2026-10-20 (terça-feira)
+    vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
+    renderPage('ag-101');
+
+    // Dias úteis seguintes gerados dinamicamente
+    expect(screen.getByTestId('data-option-2026-10-21')).toBeInTheDocument(); // Quarta
+    expect(screen.getByTestId('data-option-2026-10-22')).toBeInTheDocument(); // Quinta
+    expect(screen.getByTestId('data-option-2026-10-23')).toBeInTheDocument(); // Sexta
+    expect(screen.getByTestId('data-option-2026-10-24')).toBeInTheDocument(); // Sábado
+    expect(screen.getByTestId('data-option-2026-10-26')).toBeInTheDocument(); // Segunda
+    expect(screen.getByTestId('data-option-2026-10-28')).toBeInTheDocument(); // Quarta
+
+    // Folgas da dona da clínica não devem aparecer na seleção rápida
+    expect(screen.queryByTestId('data-option-2026-10-25')).not.toBeInTheDocument(); // Domingo
+    expect(screen.queryByTestId('data-option-2026-10-27')).not.toBeInTheDocument(); // Terça
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   criarPerfilClienteInputSchema,
   perfilClienteSchema,
+  recorrenciaClienteSchema,
   PREFERENCIAS_CONTATO_PADRAO,
 } from './cliente.js';
 
@@ -121,6 +122,62 @@ describe('Schemas de Perfil de Cliente (@clinica/shared)', () => {
       };
 
       expect(() => perfilClienteSchema.parse(doc)).toThrow();
+    });
+
+    it('valida documento com campos opcionais de recorrência mensal', () => {
+      const doc = {
+        uid: 'user-123',
+        nome: 'Tais Romagnoli',
+        email: 'tais@clinica.com',
+        telefone: '(11) 99999-8888',
+        role: 'cliente' as const,
+        status: 'ativo' as const,
+        createdAt: new Date().toISOString(),
+        recorrente: true,
+        totalAtendimentosMes: 3,
+        mesReferenciaRecorrencia: '2026-11',
+        totalAtendimentosConcluidos: 12,
+        ultimoAtendimento: new Date().toISOString(),
+      };
+
+      const validado = perfilClienteSchema.parse(doc);
+      expect(validado.recorrente).toBe(true);
+      expect(validado.totalAtendimentosMes).toBe(3);
+      expect(validado.mesReferenciaRecorrencia).toBe('2026-11');
+      expect(validado.totalAtendimentosConcluidos).toBe(12);
+    });
+  });
+
+  describe('recorrenciaClienteSchema', () => {
+    it('valida payload de recorrência mensal', () => {
+      const payload = {
+        clienteId: 'cliente-abc',
+        recorrente: true,
+        totalAtendimentosMes: 2,
+        totalAtendimentosConcluidos: 4,
+        mesReferencia: '2026-11',
+        criterioMinimo: 2,
+        ultimoAtendimento: new Date().toISOString(),
+      };
+
+      const validado = recorrenciaClienteSchema.parse(payload);
+      expect(validado.clienteId).toBe('cliente-abc');
+      expect(validado.recorrente).toBe(true);
+      expect(validado.totalAtendimentosMes).toBe(2);
+      expect(validado.criterioMinimo).toBe(2);
+    });
+
+    it('rejeita formato de mês inválido', () => {
+      const payload = {
+        clienteId: 'cliente-abc',
+        recorrente: false,
+        totalAtendimentosMes: 0,
+        totalAtendimentosConcluidos: 0,
+        mesReferencia: 'novembro-2026',
+        criterioMinimo: 2,
+      };
+
+      expect(() => recorrenciaClienteSchema.parse(payload)).toThrow();
     });
   });
 });

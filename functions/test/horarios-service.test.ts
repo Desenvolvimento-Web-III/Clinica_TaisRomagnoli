@@ -293,5 +293,54 @@ describe('horarios-service', () => {
       // Às 15:30 já pode haver novo atendimento
       expect(resultado.horarios).toContain('15:30');
     });
+
+    it('retorna lista vazia de horários quando a data consultada for no passado', async () => {
+      const dataRef = new Date('2026-11-13T10:00:00.000Z');
+      const resultado = await consultarGradeHorariosDisponiveis(
+        {
+          data: '2026-10-08',
+          duracaoMinutos: 60,
+        },
+        mockFirestore,
+        agendamentosRepo,
+        bloqueiosRepo,
+        horariosFixosRepo,
+        servicosRepo,
+        undefined,
+        undefined,
+        dataRef,
+      );
+
+      expect(resultado.data).toBe('2026-10-08');
+      expect(resultado.slots).toEqual([]);
+      expect(resultado.horarios).toEqual([]);
+    });
+
+    it('filtra horários que já passaram quando a data consultada for o dia atual', async () => {
+      const dataRef = new Date('2026-11-16T10:15:00.000Z');
+      const resultado = await consultarGradeHorariosDisponiveis(
+        {
+          data: '2026-11-16',
+          duracaoMinutos: 60,
+        },
+        mockFirestore,
+        agendamentosRepo,
+        bloqueiosRepo,
+        horariosFixosRepo,
+        servicosRepo,
+        undefined,
+        undefined,
+        dataRef,
+      );
+
+      expect(resultado.horarios).not.toContain('08:00');
+      expect(resultado.horarios).not.toContain('08:30');
+      expect(resultado.horarios).not.toContain('09:00');
+      expect(resultado.horarios).not.toContain('09:30');
+      expect(resultado.horarios).not.toContain('10:00');
+      expect(resultado.horarios).toContain('10:30');
+      expect(resultado.horarios).toContain('11:00');
+      expect(resultado.horarios).toContain('14:00');
+    });
   });
 });

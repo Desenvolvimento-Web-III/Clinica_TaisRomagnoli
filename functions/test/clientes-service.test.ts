@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   registrarPerfilCliente,
   obterPerfilCliente,
+  calcularRecorrenciaMensalCliente,
+  extrairMesReferencia,
   listarClientes,
   ClienteBusinessError,
 } from '../src/modules/clientes/clientes-service.js';
 import { InMemoryClientesRepository } from '../src/modules/clientes/clientes-repository.js';
 import { InMemoryNotificacoesRepository } from '../src/modules/notificacoes/notificacoes-repository.js';
+import { InMemoryAgendamentosRepository } from '../src/modules/agendamentos/agendamentos-repository.js';
 import type { UserContext } from '../src/modules/agendamentos/agendamentos-service.js';
+import type { Agendamento } from '@clinica/shared';
 
 describe('Serviço de Perfil de Clientes (Backend)', () => {
   let clientesRepo: InMemoryClientesRepository;
@@ -337,6 +341,191 @@ describe('Serviço de Perfil de Clientes (Backend)', () => {
       await expect(listarClientes(unauth, clientesRepo)).rejects.toThrowError(
         /Acesso não autenticado/,
       );
+    });
+  });
+
+  describe('calcularRecorrenciaMensalCliente', () => {
+    let agendamentosRepo: InMemoryAgendamentosRepository;
+
+    beforeEach(async () => {
+      agendamentosRepo = new InMemoryAgendamentosRepository();
+      await clientesRepo.salvar({
+        uid: 'cli-recorrente-1',
+        nome: 'Juliana Paes',
+        email: 'juliana@exemplo.com',
+        telefone: '(11) 98888-7777',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: '2026-01-01T10:00:00.000Z',
+      });
+    });
+
+    const criarAgendamentoHelper = (
+      id: string,
+      dataHoraInicio: string,
+      status: Agendamento['status'] = 'concluido',
+    ): Agendamento => ({
+      id,
+      clienteId: 'cli-recorrente-1',
+      clienteNome: 'Juliana Paes',
+      servicoId: 'massagem-relaxante',
+      servicoNome: 'Massagem Relaxante',
+      duracaoMinutos: 60,
+      valorTotalEmCentavos: 17000,
+      valorSinalEmCentavos: 5100,
+      saldoRestanteEmCentavos: 11900,
+      dataHoraInicio,
+      dataHoraFim: new Date(new Date(dataHoraInicio).getTime() + 60 * 60 * 1000).toISOString(),
+      intervaloAposMinutos: 30,
+      profissionalId: 'prof-tais',
+      profissionalNome: 'Tais Romagnoli',
+      status,
+      metodoPagamento: 'pix',
+      origem: 'app_cliente',
+      sinalIsento: false,
+      concluidoEm: status === 'concluido' ? dataHoraInicio : undefined,
+      createdAt: dataHoraInicio,
+      updatedAt: dataHoraInicio,
+    });
+
+    it('extrairMesReferencia identifica corretamente formatos string e Date', () => {
+      expect(extrairMesReferencia('2026-11')).toBe('2026-11');
+      expect(extrairMesReferencia('2026-11-20T10:00:00.000Z')).toBe('2026-11');
+      expect(extrairMesReferencia(new Date('2026-08-15T12:00:00.000Z'))).toBe('2026-08');
+    });
+
+    it('cliente sem sessões concluídas no mês não é classificado como recorrente', async () => {
+      const resultado = await calcularRecorrenciaMensalCliente(
+        'cli-recorrente-1',
+        clientesRepo,
+        agendamentosRepo,
+        '2026-11',
+      );
+
+      expect(resultado.recorrente).toBe(false);
+      expect(resultado.totalAtendimentosMes).toBe(0);
+      expect(resultado.totalAtendimentosConcluidos).toBe(0);
+      expect(resultado.mesReferencia).toBe('2026-11');
+
+      const clienteSalvo = await clientesRepo.buscarPorUid('cli-recorrente-1');
+      expect(clienteSalvo?.recorrente).toBe(false);
+      expect(clienteSalvo?.totalAtendimentosMes).toBe(0);
+    });
+
+    it('cliente com apenas 1 sessão concluída no mês não atinge o critério mínimo de recorrência', async () => {
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-1', '2026-11-05T10:00:00.000Z', 'concluido'),
+      );
+
+      const resultado = await calcularRecorrenciaMensalCliente(
+        'cli-recorrente-1',
+        clientesRepo,
+        agendamentosRepo,
+        '2026-11',
+      );
+
+      expect(resultado.recorrente).toBe(false);
+      expect(resultado.totalAtendimentosMes).toBe(1);
+      expect(resultado.totalAtendimentosConcluidos).toBe(1);
+    });
+
+    it('marca como recorrente quem concluir pelo menos duas sessões no mês', async () => {
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-1', '2026-11-05T10:00:00.000Z', 'concluido'),
+      );
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-2', '2026-11-19T14:00:00.000Z', 'concluido'),
+      );
+
+      const resultado = await calcularRecorrenciaMensalCliente(
+        'cli-recorrente-1',
+        clientesRepo,
+        agendamentosRepo,
+        '2026-11',
+      );
+
+      expect(resultado.recorrente).toBe(true);
+      expect(resultado.totalAtendimentosMes).toBe(2);
+      expect(resultado.totalAtendimentosConcluidos).toBe(2);
+      expect(resultado.ultimoAtendimento).toBe('2026-11-19T14:00:00.000Z');
+
+      const clienteSalvo = await clientesRepo.buscarPorUid('cli-recorrente-1');
+      expect(clienteSalvo?.recorrente).toBe(true);
+      expect(clienteSalvo?.totalAtendimentosMes).toBe(2);
+      expect(clienteSalvo?.mesReferenciaRecorrencia).toBe('2026-11');
+    });
+
+    it('não considera sessões canceladas ou de meses distintos para a recorrência do mês alvo', async () => {
+      // 1 sessão concluída em novembro
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-1', '2026-11-05T10:00:00.000Z', 'concluido'),
+      );
+      // 1 sessão cancelada em novembro
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-2', '2026-11-12T14:00:00.000Z', 'cancelado'),
+      );
+      // 2 sessões concluídas em outubro
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-3', '2026-10-10T10:00:00.000Z', 'concluido'),
+      );
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-4', '2026-10-24T10:00:00.000Z', 'concluido'),
+      );
+
+      // Em novembro: apenas 1 concluída -> recorrente false
+      const resNovembro = await calcularRecorrenciaMensalCliente(
+        'cli-recorrente-1',
+        clientesRepo,
+        agendamentosRepo,
+        '2026-11',
+      );
+      expect(resNovembro.recorrente).toBe(false);
+      expect(resNovembro.totalAtendimentosMes).toBe(1);
+      expect(resNovembro.totalAtendimentosConcluidos).toBe(3);
+
+      // Em outubro: 2 concluídas -> recorrente true
+      const resOutubro = await calcularRecorrenciaMensalCliente(
+        'cli-recorrente-1',
+        clientesRepo,
+        agendamentosRepo,
+        '2026-10',
+      );
+      expect(resOutubro.recorrente).toBe(true);
+      expect(resOutubro.totalAtendimentosMes).toBe(2);
+    });
+
+    it('obterPerfilCliente recalcula e injeta os dados de recorrência quando agendamentosRepo é fornecido', async () => {
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-1', '2026-11-01T10:00:00.000Z', 'concluido'),
+      );
+      await agendamentosRepo.salvar(
+        criarAgendamentoHelper('ag-2', '2026-11-15T10:00:00.000Z', 'concluido'),
+      );
+
+      const userContext: UserContext = {
+        uid: 'cli-recorrente-1',
+        nome: 'Juliana Paes',
+        email: 'juliana@exemplo.com',
+        isAdmin: false,
+      };
+
+      const perfil = await obterPerfilCliente(
+        'cli-recorrente-1',
+        userContext,
+        clientesRepo,
+        agendamentosRepo,
+        '2026-11',
+      );
+
+      expect(perfil.recorrente).toBe(true);
+      expect(perfil.totalAtendimentosMes).toBe(2);
+      expect(perfil.mesReferenciaRecorrencia).toBe('2026-11');
+    });
+
+    it('lança erro 404 se o cliente não existir para cálculo de recorrência', async () => {
+      await expect(
+        calcularRecorrenciaMensalCliente('cli-fantasma', clientesRepo, agendamentosRepo),
+      ).rejects.toThrowError(/Cliente não encontrado/);
     });
   });
 });

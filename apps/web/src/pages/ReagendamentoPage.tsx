@@ -4,105 +4,15 @@ import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 import {
   getAgendamentosStorage,
+  getTodosAgendamentosStorage,
   saveAgendamentosStorage,
 } from '@/features/agendamentos/data/agendamentos-storage';
 import { alterarAgendamentoBackend } from '@/services/agendamentos-service';
+import {
+  gerarDiasReagendamento,
+  gerarHorariosParaData,
+} from '@/features/agendamentos/utils/reagendamento-utils';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
-
-interface DiaDisponivel {
-  isoDate: string;
-  diaSemanaFormatado: string;
-  dataCurta: string;
-  isDisponivel: boolean;
-  motivoIndisponivel?: string;
-}
-
-interface HorarioSlot {
-  hora: string;
-  isDisponivel: boolean;
-}
-
-const DATAS_OPCOES_EXEMPLO: DiaDisponivel[] = [
-  {
-    isoDate: '2026-10-21',
-    diaSemanaFormatado: 'Quarta-feira',
-    dataCurta: '21 Out',
-    isDisponivel: true,
-  },
-  {
-    isoDate: '2026-10-22',
-    diaSemanaFormatado: 'Quinta-feira',
-    dataCurta: '22 Out',
-    isDisponivel: true,
-  },
-  {
-    isoDate: '2026-10-23',
-    diaSemanaFormatado: 'Sexta-feira',
-    dataCurta: '23 Out',
-    isDisponivel: true,
-  },
-  {
-    isoDate: '2026-10-24',
-    diaSemanaFormatado: 'Sábado',
-    dataCurta: '24 Out',
-    isDisponivel: true,
-  },
-  {
-    isoDate: '2026-10-25',
-    diaSemanaFormatado: 'Domingo',
-    dataCurta: '25 Out',
-    isDisponivel: false,
-    motivoIndisponivel: 'Sem expediente',
-  },
-  {
-    isoDate: '2026-10-26',
-    diaSemanaFormatado: 'Segunda-feira',
-    dataCurta: '26 Out',
-    isDisponivel: true,
-  },
-  {
-    isoDate: '2026-10-27',
-    diaSemanaFormatado: 'Terça-feira',
-    dataCurta: '27 Out',
-    isDisponivel: false,
-    motivoIndisponivel: 'Folga da profissional',
-  },
-];
-
-const HORARIOS_POR_DATA: Record<string, HorarioSlot[]> = {
-  '2026-10-21': [
-    { hora: '09:00', isDisponivel: true },
-    { hora: '10:30', isDisponivel: true },
-    { hora: '14:00', isDisponivel: false },
-    { hora: '15:30', isDisponivel: true },
-    { hora: '17:00', isDisponivel: true },
-  ],
-  '2026-10-22': [
-    { hora: '08:30', isDisponivel: true },
-    { hora: '10:00', isDisponivel: true },
-    { hora: '11:30', isDisponivel: true },
-    { hora: '14:00', isDisponivel: true },
-    { hora: '16:00', isDisponivel: false },
-  ],
-  '2026-10-23': [
-    { hora: '09:00', isDisponivel: true },
-    { hora: '11:00', isDisponivel: true },
-    { hora: '13:30', isDisponivel: true },
-    { hora: '15:00', isDisponivel: true },
-    { hora: '16:30', isDisponivel: true },
-  ],
-  '2026-10-24': [
-    { hora: '08:00', isDisponivel: true },
-    { hora: '09:30', isDisponivel: true },
-    { hora: '11:00', isDisponivel: true },
-  ],
-  '2026-10-26': [
-    { hora: '10:00', isDisponivel: true },
-    { hora: '11:30', isDisponivel: true },
-    { hora: '14:30', isDisponivel: true },
-    { hora: '16:00', isDisponivel: true },
-  ],
-};
 
 export function ReagendamentoPage() {
   const auth = useOptionalAuth();
@@ -122,16 +32,51 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>(() =>
     getAgendamentosStorage(userId),
   );
-  const [dataSelecionada, setDataSelecionada] = useState<string>('2026-10-22');
-  const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
-  const [motivo, setMotivo] = useState<string>('');
-  const [isSucesso, setIsSucesso] = useState<boolean>(false);
-  const [submitting, setSubmitting] = useState<boolean>(false);
+  const todosAgendamentos = useMemo(() => getTodosAgendamentosStorage(), []);
+  const agora = useMemo(() => new Date(), []);
+  const hojeIso = useMemo(() => {
+    const y = agora.getFullYear();
+    const m = String(agora.getMonth() + 1).padStart(2, '0');
+    const d = String(agora.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [agora]);
 
   const agendamentoAtual = useMemo(() => {
     if (!userId) return undefined;
     return agendamentosLocais.find((item) => item.id === id) || agendamentosLocais[0];
   }, [agendamentosLocais, id, userId]);
+
+  const opcoesDatasDisponiveis = useMemo(() => {
+    return gerarDiasReagendamento(agendamentoAtual?.dataHoraIso, agora, 6);
+  }, [agendamentoAtual?.dataHoraIso, agora]);
+
+  const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
+    const dias = gerarDiasReagendamento(agendamentoAtual?.dataHoraIso, agora, 6);
+    return dias[0]?.isoDate || '2026-11-18';
+  });
+
+  const horariosDisponiveis = useMemo(() => {
+    return gerarHorariosParaData(
+      dataSelecionada,
+      agendamentoAtual?.duracaoMinutos || 60,
+      todosAgendamentos,
+    );
+  }, [dataSelecionada, agendamentoAtual?.duracaoMinutos, todosAgendamentos]);
+
+  const [horarioSelecionadoRaw, setHorarioSelecionado] = useState<string>('10:00');
+
+  // Horário efetivo selecionado garantindo que seja um dos slots disponíveis
+  const horarioSelecionado = useMemo(() => {
+    const disponiveis = horariosDisponiveis.filter((h) => h.isDisponivel);
+    if (disponiveis.some((h) => h.hora === horarioSelecionadoRaw)) {
+      return horarioSelecionadoRaw;
+    }
+    return disponiveis[0]?.hora || horarioSelecionadoRaw;
+  }, [horariosDisponiveis, horarioSelecionadoRaw]);
+
+  const [motivo, setMotivo] = useState<string>('');
+  const [isSucesso, setIsSucesso] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
 
   if (!agendamentoAtual) {
     return (
@@ -156,14 +101,19 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
     );
   }
 
-  const horariosDisponiveis = HORARIOS_POR_DATA[dataSelecionada] || [];
-  const diaObjeto = DATAS_OPCOES_EXEMPLO.find((d) => d.isoDate === dataSelecionada);
+  const diaObjeto = opcoesDatasDisponiveis.find((d) => d.isoDate === dataSelecionada);
 
   const handleConfirmarReagendamento = () => {
-    if (!agendamentoAtual) return;
+    if (!agendamentoAtual || dataSelecionada < hojeIso) return;
     setSubmitting(true);
 
-    const novaDataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
+    const novaDataHoraInicioIso = new Date(
+      `${dataSelecionada}T${horarioSelecionado}:00`,
+    ).toISOString();
+    if (new Date(novaDataHoraInicioIso).getTime() < Date.now()) {
+      setSubmitting(false);
+      return;
+    }
     alterarAgendamentoBackend({
       agendamentoId: agendamentoAtual.id,
       novaDataHoraInicio: novaDataHoraInicioIso,
@@ -174,7 +124,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
     setTimeout(() => {
       const dataFormatadaNova = diaObjeto
-        ? `${diaObjeto.diaSemanaFormatado.slice(0, 3)}, ${diaObjeto.dataCurta} de Outubro`
+        ? `${diaObjeto.diaSemanaFormatado.slice(0, 3)}, ${diaObjeto.dataCurta}`
         : dataSelecionada;
 
       const [horaInicio] = horarioSelecionado.split(':');
@@ -418,27 +368,30 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                 </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
-                  {DATAS_OPCOES_EXEMPLO.map((dia) => {
+                  {opcoesDatasDisponiveis.map((dia) => {
                     const isSelected = dataSelecionada === dia.isoDate;
                     return (
                       <button
                         key={dia.isoDate}
                         type="button"
                         disabled={!dia.isDisponivel}
+                        title={!dia.isDisponivel ? dia.motivoIndisponivel : undefined}
                         data-testid={`data-option-${dia.isoDate}`}
                         onClick={() => {
                           setDataSelecionada(dia.isoDate);
-                          // Seleciona primeiro horário disponível da data
-                          const disponiveis = (HORARIOS_POR_DATA[dia.isoDate] || []).filter(
-                            (h) => h.isDisponivel,
+                          const novosHorarios = gerarHorariosParaData(
+                            dia.isoDate,
+                            agendamentoAtual?.duracaoMinutos || 60,
+                            todosAgendamentos,
                           );
-                          if (disponiveis.length > 0 && disponiveis[0]) {
-                            setHorarioSelecionado(disponiveis[0].hora);
+                          const disp = novosHorarios.filter((h) => h.isDisponivel);
+                          if (disp.length > 0 && disp[0]) {
+                            setHorarioSelecionado(disp[0].hora);
                           }
                         }}
                         className={`flex min-h-16 flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all ${
                           !dia.isDisponivel
-                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-50'
+                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-40 line-through'
                             : isSelected
                               ? 'border-[var(--color-brand-strong)] bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)] ring-2 ring-[var(--color-brand-strong)] font-bold'
                               : 'border-[var(--color-border-default)] bg-white hover:border-[var(--color-brand-primary)]'
@@ -575,7 +528,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                   <button
                     type="button"
                     data-testid="confirmar-reagendamento-btn"
-                    disabled={submitting || !horarioSelecionado}
+                    disabled={submitting || !horarioSelecionado || dataSelecionada < hojeIso}
                     onClick={handleConfirmarReagendamento}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-strong)] px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[var(--color-brand-deep)] active:scale-95 disabled:opacity-50"
                   >

@@ -1,11 +1,16 @@
 import { Link } from 'react-router-dom';
-import { REGIOES_CORPO_OPCOES } from '../data/initial-anamnese';
+import { avaliarBloqueioContraindicacao, REGIOES_CORPO_OPCOES } from '../data/initial-anamnese';
 import type { FichaAnamneseData } from '../types/anamnese';
 
 interface AnamneseSummaryCardProps {
   data: FichaAnamneseData;
   pontosAtencao: string[];
   updatedAt?: string;
+  exigeLiberacaoMedica?: boolean;
+  contraindicacoes?: readonly string[];
+  liberacaoMedicaAprovada?: boolean;
+  liberacaoMedicaAprovadaEm?: string;
+  liberacaoMedicaObservacoes?: string;
   onEdit: () => void;
 }
 
@@ -18,8 +23,20 @@ export function AnamneseSummaryCard({
   data,
   pontosAtencao,
   updatedAt,
+  exigeLiberacaoMedica,
+  contraindicacoes,
+  liberacaoMedicaAprovada,
+  liberacaoMedicaAprovadaEm,
+  liberacaoMedicaObservacoes,
   onEdit,
 }: AnamneseSummaryCardProps) {
+  const avaliacao = avaliarBloqueioContraindicacao({
+    ...data,
+    exigeLiberacaoMedica,
+    contraindicacoes: contraindicacoes ? [...contraindicacoes] : undefined,
+    liberacaoMedicaAprovada,
+  });
+
   const regioesNomes = data.regioesFoco
     .map((r) => REGIOES_CORPO_OPCOES.find((o) => o.id === r)?.label ?? r)
     .join(', ');
@@ -35,10 +52,16 @@ export function AnamneseSummaryCard({
       {/* Banner de Confirmação e Sucesso */}
       <div
         role="status"
-        className="flex items-start gap-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 sm:p-6"
+        className="flex items-start gap-3.5 rounded-2xl border border-[var(--color-success-border)] bg-[var(--color-success-bg)] p-5 text-[var(--color-success-text)] sm:p-6"
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-success-text)] text-white">
+          <svg
+            aria-hidden="true"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -48,20 +71,106 @@ export function AnamneseSummaryCard({
           </svg>
         </div>
         <div className="flex-1">
-          <h2 className="text-base font-bold text-emerald-900">
+          <h2 className="text-base font-bold text-[var(--color-success-text)]">
             Ficha de Anamnese preenchida com sucesso!
           </h2>
-          <p className="mt-1 text-sm/6 text-emerald-800">
+          <p className="mt-1 text-sm/6 text-[var(--color-success-text)]">
             Suas informações de saúde e preferências foram registradas de forma segura e serão
             consultadas pela terapeuta para a preparação do seu atendimento.
           </p>
           {updatedAt && (
-            <p className="mt-2 text-xs font-semibold text-emerald-700">
+            <p className="mt-2 text-xs font-semibold text-[var(--color-success-text)]">
               Registrado em {dateFormatter.format(new Date(updatedAt))}
             </p>
           )}
         </div>
       </div>
+
+      {/* Status de Liberação Médica */}
+      {avaliacao.bloqueado && (
+        <div
+          role="status"
+          data-testid="anamnese-liberacao-pendente"
+          className="flex items-start gap-3.5 rounded-2xl border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] p-5 text-[var(--color-warning-text)] sm:p-6"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-warning-text)] text-white">
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <div className="flex-1 space-y-2">
+            <h3 className="text-sm font-bold text-[var(--color-warning-text)]">
+              Aguardando liberação médica para confirmação
+            </h3>
+            <p className="text-xs/5 text-[var(--color-warning-text)] sm:text-sm/6">
+              Sua ficha indica condições que requerem aval médico antes da confirmação de novos
+              agendamentos. Após apresentar a liberação médica à clínica, a profissional registrará
+              a aprovação na sua ficha.
+            </p>
+            {avaliacao.contraindicacoes.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-xs font-medium text-[var(--color-warning-text)]">
+                {avaliacao.contraindicacoes.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {avaliacao.exigeLiberacaoMedica && avaliacao.liberacaoMedicaAprovada && (
+        <div
+          role="status"
+          data-testid="anamnese-liberacao-aprovada"
+          className="flex items-start gap-3.5 rounded-2xl border border-[var(--color-success-border)] bg-[var(--color-success-bg)] p-5 text-[var(--color-success-text)] sm:p-6"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-success-text)] text-white">
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.5"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
+          </div>
+          <div className="flex-1 space-y-1">
+            <h3 className="text-sm font-bold text-[var(--color-success-text)]">
+              Liberação médica aprovada
+            </h3>
+            <p className="text-xs/5 text-[var(--color-success-text)] sm:text-sm/6">
+              Seus agendamentos estão liberados para confirmação pela clínica.
+            </p>
+            {liberacaoMedicaAprovadaEm && (
+              <p className="text-xs font-semibold text-[var(--color-success-text)]">
+                Aprovada em {dateFormatter.format(new Date(liberacaoMedicaAprovadaEm))}
+              </p>
+            )}
+            {liberacaoMedicaObservacoes && (
+              <p className="text-xs text-[var(--color-success-text)]">
+                Observação clínica: {liberacaoMedicaObservacoes}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Resumo Consolidado */}
       <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-6 shadow-[var(--shadow-card)] sm:p-7">

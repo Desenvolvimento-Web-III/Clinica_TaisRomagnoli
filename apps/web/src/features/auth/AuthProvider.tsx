@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getIdTokenResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { AuthContext, type AuthStatus, type AuthenticatedState } from './auth-context';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { isAdministratorEmail } from '@/routes/admin-access';
+import {
+  getLocalActiveSessionId,
+  setLocalActiveSessionId,
+  clearLocalActiveSessionId,
+  setSessionTerminatedReason,
+  MOTIVO_OUTRO_DISPOSITIVO,
+  iniciarSessaoUnicaNoBackend,
+} from '@/services/sessoes-service';
 import type { UserRole } from '@/types/user';
 
 export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
@@ -63,11 +72,65 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       throw new Error('Firebase Auth não está configurado.');
     }
 
+    clearLocalActiveSessionId();
     await signOut(auth);
     setCurrentUser(null);
     setIsAdmin(false);
     setRole(null);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser || !db) {
+      return;
+    }
+
+    const uid = currentUser.uid;
+
+    // Assegura que este dispositivo possui um activeSessionId registrado
+    const localSession = getLocalActiveSessionId();
+    if (!localSession) {
+      void iniciarSessaoUnicaNoBackend().then((res) => {
+        if (res?.sessionId) {
+          setLocalActiveSessionId(res.sessionId);
+        }
+      });
+    }
+
+    // Monitora em tempo real alterações na sessão única ativa do usuário
+    try {
+      const userDocRef = doc(db, 'usuarios', uid);
+      const unsubscribe = onSnapshot(
+        userDocRef,
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            return;
+          }
+          const remoteSessionId = snapshot.data()?.activeSessionId as string | undefined;
+          const currentLocalSession = getLocalActiveSessionId();
+
+          // Se a sessão remota foi atualizada para outro ID divergente do local:
+          // Dispositivo A cai imediatamente!
+          if (remoteSessionId && currentLocalSession && remoteSessionId !== currentLocalSession) {
+            console.warn(
+              'Política de sessão única violada: login detectado em outro dispositivo. Desconectando sessão local.',
+            );
+            setSessionTerminatedReason(MOTIVO_OUTRO_DISPOSITIVO);
+            clearLocalActiveSessionId();
+            void logout();
+          }
+        },
+        () => {
+          // Fallback silencioso para erros de leitura ou permissão
+        },
+      );
+
+      return () => {
+        unsubscribe();
+      };
+    } catch {
+      // Ignora silenciosamente se o Firestore não puder anexar o listener
+    }
+  }, [currentUser, logout]);
 
   const isAuthenticated = Boolean(currentUser);
   const isLoading = !isAuthReady;
