@@ -257,6 +257,37 @@ describe('Agendamentos Service (Functions Backend)', () => {
         ),
       ).rejects.toThrow(/ultrapassa os turnos de atendimento/i);
     });
+
+    it('rejeita agendamento para data ou horário no passado (HTTP 422)', async () => {
+      const dataRef = new Date('2026-10-23T10:00:00.000Z');
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 12000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z', // 1 dia antes da dataRef
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          clienteUser,
+          repo,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          dataRef,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(/já passou/i),
+      });
+    });
   });
 
   describe('cancelarAgendamentoExistente', () => {
@@ -666,6 +697,44 @@ describe('Agendamentos Service (Functions Backend)', () => {
           dataRef,
         ),
       ).rejects.toThrow(AgendamentoBusinessError);
+    });
+
+    it('rejeita reagendamento para data ou horário no passado (HTTP 422)', async () => {
+      const agendamento = await repo.salvar({
+        id: 'ag-reagendar-passado',
+        clienteId: clienteUser.uid,
+        clienteNome: 'Mariana',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 12000,
+        valorSinalEmCentavos: 3600,
+        saldoRestanteEmCentavos: 8400,
+        dataHoraInicio: '2026-10-25T10:00:00.000Z',
+        dataHoraFim: '2026-10-25T11:00:00.000Z',
+        status: 'pendente',
+        metodoPagamento: 'pix',
+        profissionalId: 'prof-tais-romagnoli',
+        createdAt: '2026-10-20T08:00:00.000Z',
+        updatedAt: '2026-10-20T08:00:00.000Z',
+      });
+
+      const dataRef = new Date('2026-10-24T12:00:00.000Z');
+      await expect(
+        alterarAgendamentoExistente(
+          {
+            agendamentoId: agendamento.id,
+            novaDataHoraInicio: '2026-10-23T15:00:00.000Z',
+          },
+          clienteUser,
+          repo,
+          undefined,
+          dataRef,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 422,
+        message: expect.stringMatching(/já passou/i),
+      });
     });
 
     it('impede solicitação de agendamento que colide com bloqueio único ativo na agenda', async () => {

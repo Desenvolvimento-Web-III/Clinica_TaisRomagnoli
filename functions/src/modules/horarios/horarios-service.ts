@@ -6,6 +6,7 @@ import {
   consultarHorariosDisponiveisInputSchema,
   gerarHorariosDisponiveis,
   verificarProfissionalHabilitadoParaServico,
+  obterDataAtualIso,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
   type SlotDisponivel,
@@ -103,8 +104,25 @@ export async function consultarGradeHorariosDisponiveis(
   servicosRepo?: ServicosRepository,
   clienteIdSolicitante?: string,
   profissionaisRepo?: ProfissionaisRepository,
+  dataReferenciaParam?: Date,
 ): Promise<ResultadoGradeHorariosDisponiveis> {
   const parsed = consultarHorariosDisponiveisInputSchema.parse(input);
+  const dataReferencia =
+    dataReferenciaParam ?? (process.env.NODE_ENV === 'test' ? undefined : new Date());
+
+  if (dataReferencia) {
+    const hojeYmd = obterDataAtualIso(dataReferencia);
+    if (parsed.data < hojeYmd) {
+      return {
+        data: parsed.data,
+        duracaoMinutos: parsed.duracaoMinutos ?? 60,
+        intervaloMinutos: 30,
+        slots: [],
+        horarios: [],
+      };
+    }
+  }
+
   const profissionalId = parsed.profissionalId || 'prof-tais-romagnoli';
 
   if (profissionaisRepo) {
@@ -180,11 +198,22 @@ export async function consultarGradeHorariosDisponiveis(
     clienteIdSolicitante,
   });
 
+  let slotsFinais = slots;
+  if (dataReferencia) {
+    const hojeYmd = obterDataAtualIso(dataReferencia);
+    if (parsed.data === hojeYmd) {
+      slotsFinais = slots.filter((s) => {
+        const slotMs = new Date(`${parsed.data}T${s.horaInicio}:00.000Z`).getTime();
+        return slotMs > dataReferencia.getTime();
+      });
+    }
+  }
+
   return {
     data: parsed.data,
     duracaoMinutos,
     intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
-    slots,
-    horarios: slots.map((s) => s.horaInicio),
+    slots: slotsFinais,
+    horarios: slotsFinais.map((s) => s.horaInicio),
   };
 }

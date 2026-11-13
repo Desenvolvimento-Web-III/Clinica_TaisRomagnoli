@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   avaliarBloqueioContraindicacao,
   MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
+  MENSAGEM_ERRO_DATA_PASSADA,
+  verificarDataHoraNoPassado,
   type Agendamento as SharedAgendamento,
   type ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';
@@ -237,6 +239,16 @@ const VALID_SECTIONS: AdminSection[] = [
   'configuracoes',
 ];
 
+function obterDataHoraPresencialInicial(): string {
+  const agora = new Date();
+  const amanha = new Date(agora);
+  amanha.setDate(amanha.getDate() + 1);
+  const ano = amanha.getFullYear();
+  const mes = String(amanha.getMonth() + 1).padStart(2, '0');
+  const dia = String(amanha.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}T10:00`;
+}
+
 export function AdminDashboardPage() {
   const { section } = useParams<{ section?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -264,7 +276,7 @@ export function AdminDashboardPage() {
   const [presencialServicoId, setPresencialServicoId] = useState(
     SERVICOS_INICIAIS[0]?.id ?? 'srv-1',
   );
-  const [presencialDataHora, setPresencialDataHora] = useState('2026-10-22T10:00');
+  const [presencialDataHora, setPresencialDataHora] = useState(obterDataHoraPresencialInicial);
   const [presencialIsencaoSinal, setPresencialIsencaoSinal] = useState(true);
   const [presencialAvaliacaoBloqueio, setPresencialAvaliacaoBloqueio] =
     useState<ResultadoAvaliacaoContraindicacao | null>(null);
@@ -402,7 +414,7 @@ export function AdminDashboardPage() {
     setPresencialClienteId('');
     setPresencialClienteNome('');
     setPresencialServicoId(servicos[0]?.id ?? 'srv-1');
-    setPresencialDataHora('2026-10-22T10:00');
+    setPresencialDataHora(obterDataHoraPresencialInicial());
     setPresencialIsencaoSinal(true);
     setModalPresencialAberto(true);
   };
@@ -489,6 +501,11 @@ export function AdminDashboardPage() {
     const nomeClienteFinal = presencialClienteNome.trim() || 'Cliente presencial';
     const dataHoraNormalizada =
       presencialDataHora.length === 16 ? `${presencialDataHora}:00.000Z` : presencialDataHora;
+
+    if (verificarDataHoraNoPassado(dataHoraNormalizada)) {
+      setPresencialErro(MENSAGEM_ERRO_DATA_PASSADA);
+      return;
+    }
 
     setSubmittingPresencial(true);
     try {
@@ -1111,6 +1128,7 @@ export function AdminDashboardPage() {
                     id="presencial-data-hora"
                     type="datetime-local"
                     required
+                    min={new Date().toISOString().slice(0, 16)}
                     value={presencialDataHora}
                     onChange={(e) => setPresencialDataHora(e.target.value)}
                     className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"

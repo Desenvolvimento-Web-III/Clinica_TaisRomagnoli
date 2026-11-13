@@ -122,7 +122,20 @@ export function AgendamentoFlowPage() {
   // Estados do fluxo
   const [step, setStep] = useState<FlowStep>('calendario');
   const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Mariana Souza';
-  const [dataSelecionada, setDataSelecionada] = useState<string>('2026-10-22');
+  const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
+    const agora = new Date();
+    const d = new Date(agora);
+    if (d.getHours() >= 18) {
+      d.setDate(d.getDate() + 1);
+    }
+    while (d.getDay() === 0 || d.getDay() === 2) {
+      d.setDate(d.getDate() + 1);
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dia}`;
+  });
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
   const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([]);
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
@@ -240,6 +253,12 @@ export function AgendamentoFlowPage() {
     }
 
     const dataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
+    if (new Date(dataHoraInicioIso).getTime() < Date.now()) {
+      setErroAgendamento(
+        'Não é permitido realizar agendamento para uma data ou horário que já passou.',
+      );
+      return;
+    }
     const novo: Agendamento = {
       id: generateAppointmentId(),
       clienteId: currentUser?.uid,
@@ -316,7 +335,13 @@ export function AgendamentoFlowPage() {
         horariosDisponiveis={horariosDisponiveis.length > 0 ? horariosDisponiveis : undefined}
         onSelectData={(isoDate) => setDataSelecionada(isoDate)}
         onSelectHorario={(hora) => setHorarioSelecionado(hora)}
-        onConfirmar={() => setStep('confirmacao')}
+        onConfirmar={() => {
+          const hojeIso = new Date().toISOString().slice(0, 10);
+          if (dataSelecionada < hojeIso) {
+            return;
+          }
+          setStep('confirmacao');
+        }}
         onVoltar={() => navigate('/servicos')}
       />
     );

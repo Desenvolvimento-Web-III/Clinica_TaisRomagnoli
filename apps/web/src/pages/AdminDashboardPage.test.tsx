@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { User } from 'firebase/auth';
@@ -6,6 +6,7 @@ import {
   DEFAULT_CLINIC_SETTINGS,
   INITIAL_ANAMNESE_DATA,
   MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
+  MENSAGEM_ERRO_DATA_PASSADA,
   type Agendamento as SharedAgendamento,
 } from '@clinica/shared';
 import * as anamneseService from '@/services/anamnese-service';
@@ -337,7 +338,8 @@ describe('AdminDashboardPage', () => {
     expect(alertaModal).toHaveTextContent(/ficha exige liberação médica/i);
 
     const modal = screen.getByRole('dialog');
-    fireEvent.click(within(modal).getByRole('button', { name: /confirmar agendamento/i }));
+    const form = modal.querySelector('form')!;
+    fireEvent.submit(form);
 
     const erroModal = await screen.findByTestId('modal-presencial-erro');
     expect(erroModal).toHaveTextContent(MENSAGEM_BLOQUEIO_CONTRAINDICACAO);
@@ -345,6 +347,28 @@ describe('AdminDashboardPage', () => {
     expect(spySolicitar).not.toHaveBeenCalled();
 
     spyObterAnamnese.mockRestore();
+    spySolicitar.mockRestore();
+  });
+
+  it('impede criação de agendamento presencial com data ou horário no passado', async () => {
+    const spySolicitar = vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend');
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole('button', { name: /novo agendamento presencial/i }));
+
+    const inputDataHora = screen.getByLabelText(/data e horário/i);
+    fireEvent.change(inputDataHora, { target: { value: '2020-01-01T10:00' } });
+
+    const modal = screen.getByRole('dialog');
+    const form = modal.querySelector('form')!;
+    fireEvent.submit(form);
+
+    const erroModal = await screen.findByTestId('modal-presencial-erro');
+    expect(erroModal).toHaveTextContent(MENSAGEM_ERRO_DATA_PASSADA);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(spySolicitar).not.toHaveBeenCalled();
+
     spySolicitar.mockRestore();
   });
 });

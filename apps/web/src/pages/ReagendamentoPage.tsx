@@ -122,6 +122,25 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>(() =>
     getAgendamentosStorage(userId),
   );
+  const agora = useMemo(() => new Date(), []);
+  const hojeIso = useMemo(() => {
+    const y = agora.getFullYear();
+    const m = String(agora.getMonth() + 1).padStart(2, '0');
+    const d = String(agora.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [agora]);
+
+  const opcoesDatasDisponiveis = useMemo(() => {
+    return DATAS_OPCOES_EXEMPLO.map((dia) => {
+      const isPassado = dia.isoDate < hojeIso;
+      return {
+        ...dia,
+        isDisponivel: dia.isDisponivel && !isPassado,
+        motivoIndisponivel: isPassado ? 'Data no passado' : dia.motivoIndisponivel,
+      };
+    });
+  }, [hojeIso]);
+
   const [dataSelecionada, setDataSelecionada] = useState<string>('2026-10-22');
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
   const [motivo, setMotivo] = useState<string>('');
@@ -160,10 +179,14 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const diaObjeto = DATAS_OPCOES_EXEMPLO.find((d) => d.isoDate === dataSelecionada);
 
   const handleConfirmarReagendamento = () => {
-    if (!agendamentoAtual) return;
+    if (!agendamentoAtual || dataSelecionada < hojeIso) return;
     setSubmitting(true);
 
     const novaDataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
+    if (new Date(novaDataHoraInicioIso).getTime() < Date.now()) {
+      setSubmitting(false);
+      return;
+    }
     alterarAgendamentoBackend({
       agendamentoId: agendamentoAtual.id,
       novaDataHoraInicio: novaDataHoraInicioIso,
@@ -418,13 +441,14 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                 </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
-                  {DATAS_OPCOES_EXEMPLO.map((dia) => {
+                  {opcoesDatasDisponiveis.map((dia) => {
                     const isSelected = dataSelecionada === dia.isoDate;
                     return (
                       <button
                         key={dia.isoDate}
                         type="button"
                         disabled={!dia.isDisponivel}
+                        title={!dia.isDisponivel ? dia.motivoIndisponivel : undefined}
                         data-testid={`data-option-${dia.isoDate}`}
                         onClick={() => {
                           setDataSelecionada(dia.isoDate);
@@ -438,7 +462,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                         }}
                         className={`flex min-h-16 flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all ${
                           !dia.isDisponivel
-                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-50'
+                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-40 line-through'
                             : isSelected
                               ? 'border-[var(--color-brand-strong)] bg-[var(--color-brand-soft)] text-[var(--color-brand-deep)] ring-2 ring-[var(--color-brand-strong)] font-bold'
                               : 'border-[var(--color-border-default)] bg-white hover:border-[var(--color-brand-primary)]'
@@ -575,7 +599,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                   <button
                     type="button"
                     data-testid="confirmar-reagendamento-btn"
-                    disabled={submitting || !horarioSelecionado}
+                    disabled={submitting || !horarioSelecionado || dataSelecionada < hojeIso}
                     onClick={handleConfirmarReagendamento}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-strong)] px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[var(--color-brand-deep)] active:scale-95 disabled:opacity-50"
                   >

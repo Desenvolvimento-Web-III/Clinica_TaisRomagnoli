@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
 import * as anamneseService from '@/services/anamnese-service';
 import * as agendamentosService from '@/services/agendamentos-service';
@@ -15,8 +15,14 @@ vi.mock('@/features/auth/auth-context', () => ({
 describe('AgendamentoFlowPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
     localStorage.clear();
     mockUseOptionalAuth.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const renderFlow = (initialRoute = '/agendar/massagem-relaxante') => {
@@ -240,5 +246,21 @@ describe('AgendamentoFlowPage', () => {
     const erro = await screen.findByTestId('erro-finalizar-agendamento');
     expect(erro).toHaveTextContent('Agendamento recusado pela regra de liberação médica.');
     expect(screen.queryByText('Agendamento Concluído!')).not.toBeInTheDocument();
+  });
+
+  it('desabilita navegação para meses anteriores ao mês atual', () => {
+    renderFlow('/agendar/massagem-relaxante');
+
+    const btnMesAnterior = screen.getByTestId('mes-anterior-btn');
+    expect(btnMesAnterior).toBeDisabled();
+  });
+
+  it('marca dias que já passaram como desabilitados no calendário', () => {
+    renderFlow('/agendar/massagem-relaxante');
+
+    // 2026-10-08 é anterior à data de referência 2026-10-20
+    const diaPassado = screen.getByTestId('dia-passado-2026-10-08');
+    expect(diaPassado).toBeInTheDocument();
+    expect(diaPassado).toHaveAttribute('aria-disabled', 'true');
   });
 });

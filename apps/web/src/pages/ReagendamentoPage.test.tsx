@@ -21,7 +21,8 @@ describe('ReagendamentoPage', () => {
   beforeEach(() => {
     localStorage.clear();
     saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
   });
 
   afterEach(() => {
@@ -94,5 +95,19 @@ describe('ReagendamentoPage', () => {
     fireEvent.click(btnVoltarTopo);
 
     expect(screen.getByText('Lista de Agendamentos')).toBeInTheDocument();
+  });
+
+  it('desabilita opções de datas que já passaram', () => {
+    // Definimos a data do sistema como 2026-10-23
+    vi.setSystemTime(new Date('2026-10-23T10:00:00.000Z'));
+    renderPage('ag-101');
+
+    // 2026-10-22 é anterior a 2026-10-23
+    const dataPassada = screen.getByTestId('data-option-2026-10-22');
+    expect(dataPassada).toBeDisabled();
+
+    // 2026-10-24 é futura
+    const dataFutura = screen.getByTestId('data-option-2026-10-24');
+    expect(dataFutura).not.toBeDisabled();
   });
 });

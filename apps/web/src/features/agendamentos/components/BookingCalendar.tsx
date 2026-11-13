@@ -56,20 +56,36 @@ export function BookingCalendar({
   onConfirmar,
   onVoltar,
 }: BookingCalendarProps) {
+  const agora = useMemo(() => new Date(), []);
+  const hojeIso = useMemo(() => {
+    const y = agora.getFullYear();
+    const m = String(agora.getMonth() + 1).padStart(2, '0');
+    const d = String(agora.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [agora]);
+
   // Inicializa ano e mês a partir da dataSelecionada (ex: '2026-10-22')
   const initialDate = useMemo(() => {
     const parts = dataSelecionada.split('-').map(Number);
-    const ano = parts[0] || 2026;
-    const mes = (parts[1] || 10) - 1;
+    const ano = parts[0] || agora.getFullYear();
+    const mes = (parts[1] || agora.getMonth() + 1) - 1;
     return { ano, mes };
-  }, [dataSelecionada]);
+  }, [dataSelecionada, agora]);
 
   const [anoAtual, setAnoAtual] = useState<number>(initialDate.ano);
   const [mesAtual, setMesAtual] = useState<number>(initialDate.mes);
   const [horariosAbertos, setHorariosAbertos] = useState<boolean>(true);
 
+  // Impede navegação para meses anteriores ao mês atual
+  const podeVoltarMes = useMemo(() => {
+    const anoHoje = agora.getFullYear();
+    const mesHoje = agora.getMonth();
+    return anoAtual > anoHoje || (anoAtual === anoHoje && mesAtual > mesHoje);
+  }, [anoAtual, mesAtual, agora]);
+
   // Navegação de mês
   const handleMesAnterior = () => {
+    if (!podeVoltarMes) return;
     if (mesAtual === 0) {
       setMesAtual(11);
       setAnoAtual((a) => a - 1);
@@ -114,6 +130,8 @@ export function BookingCalendar({
         ano: mesAtual === 0 ? anoAtual - 1 : anoAtual,
         isCurrentMonth: false,
         isDisponivel: false,
+        isPassado: true,
+        isFolga: false,
         isoDate: '',
       });
     }
@@ -123,13 +141,16 @@ export function BookingCalendar({
       const dayOfWeek = new Date(anoAtual, mesAtual, d).getDay();
       const isFolga = diasInativosClinica.has(dayOfWeek);
       const isoDate = `${anoAtual}-${String(mesAtual + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isPassado = isoDate < hojeIso;
 
       grid.push({
         dia: d,
         mes: mesAtual,
         ano: anoAtual,
         isCurrentMonth: true,
-        isDisponivel: !isFolga,
+        isDisponivel: !isFolga && !isPassado,
+        isPassado,
+        isFolga,
         isoDate,
       });
     }
@@ -143,22 +164,52 @@ export function BookingCalendar({
         ano: mesAtual === 11 ? anoAtual + 1 : anoAtual,
         isCurrentMonth: false,
         isDisponivel: false,
+        isPassado: false,
+        isFolga: false,
         isoDate: '',
       });
     }
 
     return grid;
-  }, [anoAtual, mesAtual, diasInativosClinica]);
+  }, [anoAtual, mesAtual, diasInativosClinica, hojeIso]);
+
+  const isDataPassada = dataSelecionada < hojeIso;
+
+  const horaMinutoAtual = useMemo(() => {
+    return `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+  }, [agora]);
+
+  // Horários disponíveis filtrando horários passados caso a data seja hoje
+  const horariosDisponiveisFiltrados = useMemo(() => {
+    const lista = horariosDisponiveis ?? HORARIOS_DISPONIVEIS_PADRAO;
+    if (dataSelecionada === hojeIso) {
+      return lista.filter((h) => h > horaMinutoAtual);
+    }
+    return lista;
+  }, [horariosDisponiveis, dataSelecionada, hojeIso, horaMinutoAtual]);
 
   // Verifica se o dia selecionado é válido
   const diaSelecionadoValido = useMemo(() => {
+    if (isDataPassada) return false;
     const parts = dataSelecionada.split('-').map(Number);
-    const ano = parts[0] || 2026;
-    const mes = (parts[1] || 10) - 1;
+    const ano = parts[0] || agora.getFullYear();
+    const mes = (parts[1] || agora.getMonth() + 1) - 1;
     const dia = parts[2] || 1;
     const dayOfWeek = new Date(ano, mes, dia).getDay();
-    return !diasInativosClinica.has(dayOfWeek);
-  }, [dataSelecionada, diasInativosClinica]);
+    if (diasInativosClinica.has(dayOfWeek)) return false;
+    if (dataSelecionada === hojeIso && horarioSelecionado) {
+      if (horarioSelecionado <= horaMinutoAtual) return false;
+    }
+    return true;
+  }, [
+    dataSelecionada,
+    horarioSelecionado,
+    isDataPassada,
+    diasInativosClinica,
+    hojeIso,
+    horaMinutoAtual,
+    agora,
+  ]);
 
   // Data formatada para visualização
   const dataFormatadaAmigavel = useMemo(() => {
@@ -251,8 +302,13 @@ export function BookingCalendar({
                   type="button"
                   data-testid="mes-anterior-btn"
                   onClick={handleMesAnterior}
+                  disabled={!podeVoltarMes}
                   aria-label="Mês anterior"
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)] shadow-sm transition hover:bg-[var(--color-canvas-neutral)]"
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-white text-[var(--color-text-secondary)] shadow-sm transition ${
+                    podeVoltarMes
+                      ? 'hover:bg-[var(--color-canvas-neutral)] cursor-pointer'
+                      : 'cursor-not-allowed opacity-30'
+                  }`}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
@@ -275,11 +331,15 @@ export function BookingCalendar({
                     onChange={(e) => setMesAtual(Number(e.target.value))}
                     className="rounded-xl border border-[var(--color-border-default)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--color-text-primary)] shadow-sm focus:border-[var(--color-brand-primary)] focus:outline-none"
                   >
-                    {MESES_NOMES.map((m) => (
-                      <option key={m.valor} value={m.valor}>
-                        {m.label}
-                      </option>
-                    ))}
+                    {MESES_NOMES.map((m) => {
+                      const isMesPassado =
+                        anoAtual === agora.getFullYear() && m.valor < agora.getMonth();
+                      return (
+                        <option key={m.valor} value={m.valor} disabled={isMesPassado}>
+                          {m.label}
+                        </option>
+                      );
+                    })}
                   </select>
 
                   <label htmlFor="select-ano" className="sr-only">
@@ -344,6 +404,20 @@ export function BookingCalendar({
                   }
 
                   const isSelected = item.isoDate === dataSelecionada;
+
+                  if (item.isPassado) {
+                    return (
+                      <div
+                        key={`passado-${item.isoDate}`}
+                        data-testid={`dia-passado-${item.isoDate}`}
+                        title="Data passada não disponível para agendamento"
+                        aria-disabled="true"
+                        className="flex h-10 items-center justify-center rounded-xl bg-slate-100 font-medium text-slate-300 line-through cursor-not-allowed select-none"
+                      >
+                        {item.dia}
+                      </div>
+                    );
+                  }
 
                   if (!item.isDisponivel) {
                     return (
@@ -412,9 +486,9 @@ export function BookingCalendar({
               {horariosAbertos && (
                 <div className="mt-4 border-t border-[var(--color-border-default)] pt-4">
                   {diaSelecionadoValido ? (
-                    (horariosDisponiveis ?? HORARIOS_DISPONIVEIS_PADRAO).length > 0 ? (
+                    horariosDisponiveisFiltrados.length > 0 ? (
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        {(horariosDisponiveis ?? HORARIOS_DISPONIVEIS_PADRAO).map((hora) => {
+                        {horariosDisponiveisFiltrados.map((hora) => {
                           const isSelected = hora === horarioSelecionado;
                           return (
                             <button
@@ -435,18 +509,32 @@ export function BookingCalendar({
                       </div>
                     ) : (
                       <div className="rounded-xl bg-[var(--color-canvas-neutral)] p-3 text-center text-xs font-medium text-[var(--color-text-secondary)] border border-[var(--color-border-default)]">
-                        Nenhum horário disponível para a data selecionada.
+                        {dataSelecionada === hojeIso
+                          ? 'Todos os horários de hoje já passaram. Escolha uma data futura.'
+                          : 'Nenhum horário disponível para a data selecionada.'}
                       </div>
                     )
                   ) : (
                     <div className="rounded-xl bg-[var(--color-error-bg)] p-3 text-center text-xs font-medium text-[var(--color-error-text)] border border-[var(--color-error-border)]">
-                      O dia selecionado é uma folga da clínica. Escolha um dia disponível para
-                      visualizar os horários.
+                      {isDataPassada
+                        ? 'A data selecionada já passou. Escolha uma data a partir de hoje para visualizar os horários disponíveis.'
+                        : 'O dia selecionado é uma folga da clínica. Escolha um dia disponível para visualizar os horários.'}
                     </div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* Alerta de Data Passada se aplicável */}
+            {isDataPassada && (
+              <div
+                data-testid="aviso-data-passada"
+                className="rounded-2xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-3.5 text-xs font-semibold text-[var(--color-error-text)] shadow-sm"
+              >
+                ⚠️ A data selecionada ({dataFormatadaAmigavel}) já passou. Não é permitido realizar
+                agendamento para datas que já passaram.
+              </div>
+            )}
 
             {/* Card de Resumo Selecionado (Desktop & Mobile) */}
             <div className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-brand-soft)] p-4 sm:p-5">
@@ -471,10 +559,13 @@ export function BookingCalendar({
               <button
                 type="button"
                 data-testid="confirmar-agendamento-btn"
-                disabled={!diaSelecionadoValido}
+                disabled={!diaSelecionadoValido || isDataPassada}
+                title={
+                  isDataPassada ? 'Não é permitido agendar para datas que já passaram' : undefined
+                }
                 onClick={onConfirmar}
                 className={`inline-flex min-h-12 w-full items-center justify-center rounded-2xl px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all ${
-                  diaSelecionadoValido
+                  diaSelecionadoValido && !isDataPassada
                     ? 'bg-[var(--color-brand-strong)] hover:bg-[var(--color-brand-deep)] active:scale-[0.98]'
                     : 'cursor-not-allowed bg-slate-300 opacity-60'
                 }`}

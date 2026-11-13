@@ -92,4 +92,3 @@ describe('IconButton Component', () => {
     expect(button).toBeInTheDocument();
   });
 });
-

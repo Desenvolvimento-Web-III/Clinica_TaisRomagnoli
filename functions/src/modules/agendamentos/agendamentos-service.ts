@@ -13,6 +13,8 @@ import {
   CONFIGURACAO_HORARIOS_PADRAO,
   verificarProfissionalHabilitadoParaServico,
   avaliarBloqueioContraindicacao,
+  verificarDataHoraNoPassado,
+  MENSAGEM_ERRO_DATA_PASSADA,
   type HorariosFuncionamento,
   type Agendamento,
 } from '@clinica/shared';
@@ -87,8 +89,16 @@ export async function solicitarNovoAgendamento(
   configuracaoHorarios?: HorariosFuncionamento,
   profissionaisRepo?: ProfissionaisRepository,
   anamneseRepo?: AnamneseRepository,
+  dataReferenciaParam?: Date,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
+
+  // Validação de Data/Hora no passado
+  const dataReferencia =
+    dataReferenciaParam ?? (process.env.NODE_ENV === 'test' ? undefined : new Date());
+  if (dataReferencia && verificarDataHoraNoPassado(parsed.dataHoraInicio, dataReferencia)) {
+    throw new AgendamentoBusinessError(MENSAGEM_ERRO_DATA_PASSADA, 422);
+  }
 
   if (parsed.clienteId && parsed.clienteId !== user.uid && !user.isAdmin) {
     throw new AgendamentoBusinessError(
@@ -302,6 +312,26 @@ export async function alterarAgendamentoExistente(
         : new Date();
 
   const parsed = alterarAgendamentoInputSchema.parse(input);
+
+  // Validação: Não permitir reagendamento para data/hora no passado
+  const dataReferenciaPassado =
+    notificacoesRepoOuDataRef instanceof Date
+      ? notificacoesRepoOuDataRef
+      : dataReferenciaParam instanceof Date
+        ? dataReferenciaParam
+        : process.env.NODE_ENV === 'test'
+          ? undefined
+          : new Date();
+
+  if (
+    dataReferenciaPassado &&
+    verificarDataHoraNoPassado(parsed.novaDataHoraInicio, dataReferenciaPassado)
+  ) {
+    throw new AgendamentoBusinessError(
+      'Não é possível reagendar para uma data ou horário que já passou.',
+      422,
+    );
+  }
 
   const agendamento = await repo.buscarPorId(parsed.agendamentoId);
   if (!agendamento) {

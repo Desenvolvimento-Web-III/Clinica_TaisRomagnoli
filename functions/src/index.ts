@@ -356,6 +356,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       undefined,
       profissionaisRepo,
       anamneseRepo,
+      new Date(),
     );
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
@@ -399,7 +400,7 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
       user,
       repo,
       notifRepo,
-      undefined,
+      new Date(),
       bloqueiosRepo,
       horariosFixosRepo,
       undefined,
@@ -1599,6 +1600,7 @@ export const obterHorariosDisponiveis = onRequest({ cors: true }, async (request
       servicosRepo,
       caller?.uid,
       profissionaisRepo,
+      new Date(),
     );
 
     response.status(200).json({

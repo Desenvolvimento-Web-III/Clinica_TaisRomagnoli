@@ -260,6 +260,33 @@ export function verificarAntecedenciaCancelamento(
   };
 }
 
+export const MENSAGEM_ERRO_DATA_PASSADA =
+  'Não é permitido realizar agendamento para uma data ou horário que já passou.';
+
+/**
+ * Verifica se uma data/hora no formato ISO 8601 está no passado em relação à data de referência.
+ */
+export function verificarDataHoraNoPassado(
+  dataHoraIso: string,
+  dataReferencia: Date = new Date(),
+): boolean {
+  const dataHoraMs = new Date(dataHoraIso).getTime();
+  if (isNaN(dataHoraMs)) {
+    return true;
+  }
+  return dataHoraMs < dataReferencia.getTime();
+}
+
+/**
+ * Retorna a data atual no formato 'YYYY-MM-DD' conforme a data de referência.
+ */
+export function obterDataAtualIso(dataReferencia: Date = new Date()): string {
+  const y = dataReferencia.getUTCFullYear();
+  const m = String(dataReferencia.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(dataReferencia.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Alias semântico para classificar um cancelamento conforme a antecedência mínima
  */
