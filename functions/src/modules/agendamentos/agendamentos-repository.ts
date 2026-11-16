@@ -7,6 +7,7 @@ export interface AgendamentosRepository {
   listarPorCliente(clienteId: string): Promise<Agendamento[]>;
   listarPorProfissionalEData(profissionalId: string, dataYmd: string): Promise<Agendamento[]>;
   listarPorServico(servicoId: string): Promise<Agendamento[]>;
+  listarTodos(): Promise<Agendamento[]>;
   atualizar(agendamento: Agendamento): Promise<Agendamento>;
 }
 
@@ -46,6 +47,12 @@ export class InMemoryAgendamentosRepository implements AgendamentosRepository {
 
   async listarPorServico(servicoId: string): Promise<Agendamento[]> {
     return Array.from(this.agendamentos.values()).filter((a) => a.servicoId === servicoId);
+  }
+
+  async listarTodos(): Promise<Agendamento[]> {
+    return Array.from(this.agendamentos.values()).sort(
+      (a, b) => new Date(b.dataHoraInicio).getTime() - new Date(a.dataHoraInicio).getTime(),
+    );
   }
 
   async atualizar(agendamento: Agendamento): Promise<Agendamento> {
@@ -108,6 +115,11 @@ export class FirestoreAgendamentosRepository implements AgendamentosRepository {
 
   async listarPorServico(servicoId: string): Promise<Agendamento[]> {
     const snapshot = await this.collection.where('servicoId', '==', servicoId).get();
+    return snapshot.docs.map((doc) => doc.data() as Agendamento);
+  }
+
+  async listarTodos(): Promise<Agendamento[]> {
+    const snapshot = await this.collection.orderBy('dataHoraInicio', 'desc').get();
     return snapshot.docs.map((doc) => doc.data() as Agendamento);
   }
 
