@@ -171,7 +171,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'GET',
       headers: {},
       query: {
-        data: '2026-11-16', // Segunda-feira
+        data: '2026-11-23', // Próxima segunda-feira futura
         duracaoMinutos: '60',
       },
     };
@@ -191,7 +191,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'POST',
       headers: {},
       body: {
-        data: '2026-11-16',
+        data: '2026-11-23',
         servicoId: 'serv-relaxante',
       },
     };
@@ -208,7 +208,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'POST',
       headers: {},
       body: {
-        data: '2026-11-16',
+        data: '2026-11-23',
         servicoId: 'servico-nao-existe',
       },
     };
@@ -223,7 +223,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'POST',
       headers: {},
       body: {
-        data: '2026-11-16',
+        data: '2026-11-23',
         servicoId: 'serv-desativado',
       },
     };

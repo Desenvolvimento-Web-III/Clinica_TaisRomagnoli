@@ -165,6 +165,15 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText(/6\. Ocupação da Agenda/i)).toBeInTheDocument();
     expect(screen.getByText(/7\. Valores Recebidos e Previstos/i)).toBeInTheDocument();
     expect(screen.getByText(/8\. Serviço Mais Agendado/i)).toBeInTheDocument();
+
+    expect(screen.getByTestId('indicador-agendamentos-dia')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-clientes-cadastrados')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-clientes-recorrentes')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-atendimentos-mes')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-cancelamentos-faltas')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-ocupacao-agenda')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-valores-recebidos')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-servico-mais-agendado')).toBeInTheDocument();
   });
 
   it('permite alternar para a aba Configurações e exibe link para gestor de horários e formulário geral', async () => {

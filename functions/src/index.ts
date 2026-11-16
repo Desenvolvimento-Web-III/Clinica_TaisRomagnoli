@@ -45,6 +45,7 @@ import {
   listarClientes as listarClientesService,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
+import { calcularOitoIndicadoresPainel } from './modules/indicadores/indicadores-service.js';
 import {
   FirestoreProfissionaisRepository,
   InMemoryProfissionaisRepository,
@@ -124,6 +125,10 @@ export {
   listarClientes,
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
+export {
+  calcularOitoIndicadoresPainel,
+  calcularCapacidadeSlotsMes,
+} from './modules/indicadores/indicadores-service.js';
 export {
   FirestoreAnamneseRepository,
   InMemoryAnamneseRepository,
@@ -1987,5 +1992,84 @@ export const obterFichaAnamnese = onRequest({ cors: true }, async (request, resp
     }
     console.error('Erro ao consultar ficha de anamnese:', error);
     response.status(500).json({ error: 'Erro interno ao consultar ficha de anamnese.' });
+  }
+});
+
+/**
+ * Endpoint administrativo para obter os 8 indicadores consolidados do painel:
+ * 1. Agendamentos do dia
+ * 2. Clientes cadastrados
+ * 3. Clientes recorrentes
+ * 4. Atendimentos realizados no mês
+ * 5. Cancelamentos e faltas
+ * 6. Ocupação da agenda
+ * 7. Valores recebidos e previstos
+ * 8. Serviço mais agendado
+ *
+ * Agrupados também nas quatro categorias: operacionais, clientes, financeiras e serviços.
+ * Acesso estritamente restrito à administradora autenticada.
+ */
+export const obterPainelIndicadoresAdmin = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET' && request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use GET ou POST.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
+
+    const dataReferencia =
+      (request.query['dataReferencia'] as string) ||
+      (request.body && typeof request.body === 'object' && 'dataReferencia' in request.body
+        ? String(request.body.dataReferencia)
+        : undefined);
+
+    const mesReferencia =
+      (request.query['mesReferencia'] as string) ||
+      (request.body && typeof request.body === 'object' && 'mesReferencia' in request.body
+        ? String(request.body.mesReferencia)
+        : undefined);
+
+    const criterioMinimoRaw =
+      (request.query['criterioMinimoRecorrencia'] as string) ||
+      (request.body &&
+      typeof request.body === 'object' &&
+      'criterioMinimoRecorrencia' in request.body
+        ? String(request.body.criterioMinimoRecorrencia)
+        : undefined);
+
+    const criterioMinimoParsed = criterioMinimoRaw ? parseInt(criterioMinimoRaw, 10) : undefined;
+    const criterioMinimoRecorrencia =
+      typeof criterioMinimoParsed === 'number' && !isNaN(criterioMinimoParsed)
+        ? criterioMinimoParsed
+        : undefined;
+
+    const firestore = getFirestore();
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+    const clientesRepo = new FirestoreClientesRepository(firestore);
+    const servicosRepo = new FirestoreServicosRepository(firestore);
+
+    const painel = await calcularOitoIndicadoresPainel(
+      agendamentosRepo,
+      clientesRepo,
+      servicosRepo,
+      {
+        dataReferencia,
+        mesReferencia,
+        criterioMinimoRecorrencia,
+      },
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      dados: painel,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao calcular indicadores administrativos:', error);
+    response.status(500).json({ error: 'Erro interno ao calcular indicadores administrativos.' });
   }
 });

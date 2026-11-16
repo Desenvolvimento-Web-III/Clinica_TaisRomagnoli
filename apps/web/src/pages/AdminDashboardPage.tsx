@@ -33,6 +33,11 @@ import {
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { buscarClientesAdmin, CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
+import {
+  consultarPainelIndicadoresAdmin,
+  PAINEL_INDICADORES_PADRAO,
+} from '@/services/indicadores-admin-service';
+import type { PainelIndicadores } from '@clinica/shared';
 import type { AdminClientListItem } from '@/features/admin-dashboard/types';
 
 interface AgendamentoAgendaItem {
@@ -287,6 +292,10 @@ export function AdminDashboardPage() {
   const [clientes, setClientes] = useState<AdminClientListItem[]>(CLIENTES_DEMO_INICIAIS);
   const [isLoadingClientes, setIsLoadingClientes] = useState(false);
 
+  // Estados dos 8 Indicadores do Painel Administrativo
+  const [painelIndicadores, setPainelIndicadores] =
+    useState<PainelIndicadores>(PAINEL_INDICADORES_PADRAO);
+
   const carregarClientes = async () => {
     setIsLoadingClientes(true);
     try {
@@ -313,6 +322,20 @@ export function AdminDashboardPage() {
       ativo = false;
     };
   }, []);
+
+  useEffect(() => {
+    let ativo = true;
+    if (activeSection === 'relatorios') {
+      void consultarPainelIndicadoresAdmin().then((dados) => {
+        if (ativo && dados) {
+          setPainelIndicadores(dados);
+        }
+      });
+    }
+    return () => {
+      ativo = false;
+    };
+  }, [activeSection]);
 
   // Estados de Gerenciamento de Serviços
   const [servicos, setServicos] = useState<Service[]>(SERVICOS_INICIAIS);
@@ -841,92 +864,142 @@ export function AdminDashboardPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {/* Indicador 1 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-agendamentos-dia"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   1. Agendamentos do Dia
                 </span>
-                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">6</p>
+                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">
+                  {painelIndicadores.indicadores.agendamentosDoDia.total}
+                </p>
                 <p className="mt-1 text-xs text-emerald-600 font-medium">
-                  4 concluídos, 2 pendentes
+                  {painelIndicadores.indicadores.agendamentosDoDia.detalhe}
                 </p>
               </div>
 
               {/* Indicador 2 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-clientes-cadastrados"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   2. Clientes Cadastrados
                 </span>
-                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">148</p>
+                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">
+                  {painelIndicadores.indicadores.clientesCadastrados.total}
+                </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  +12 novos neste mês
+                  {painelIndicadores.indicadores.clientesCadastrados.detalhe}
                 </p>
               </div>
 
               {/* Indicador 3 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-clientes-recorrentes"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   3. Clientes Recorrentes
                 </span>
-                <p className="mt-2 text-2xl font-black text-[var(--color-brand-deep)]">32</p>
+                <p className="mt-2 text-2xl font-black text-[var(--color-brand-deep)]">
+                  {painelIndicadores.indicadores.clientesRecorrentes.total}
+                </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  ≥ 2 atendimentos no mesmo mês
+                  {painelIndicadores.indicadores.clientesRecorrentes.detalhe}
                 </p>
               </div>
 
               {/* Indicador 4 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-atendimentos-mes"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   4. Atendimentos no Mês
                 </span>
-                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">74</p>
+                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">
+                  {painelIndicadores.indicadores.atendimentosRealizadosMes.total}
+                </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  Sessões concluídas
+                  {painelIndicadores.indicadores.atendimentosRealizadosMes.detalhe}
                 </p>
               </div>
 
               {/* Indicador 5 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-cancelamentos-faltas"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   5. Cancelamentos e Faltas
                 </span>
-                <p className="mt-2 text-2xl font-black text-amber-600">3 / 1</p>
+                <p className="mt-2 text-2xl font-black text-amber-600">
+                  {painelIndicadores.indicadores.cancelamentosEFaltas.cancelamentosNoPrazo} /{' '}
+                  {painelIndicadores.indicadores.cancelamentosEFaltas.cancelamentosTardios +
+                    painelIndicadores.indicadores.cancelamentosEFaltas.faltas}
+                </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  3 com aviso ≥ 3h, 1 falta
+                  {painelIndicadores.indicadores.cancelamentosEFaltas.detalhe}
                 </p>
               </div>
 
               {/* Indicador 6 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-ocupacao-agenda"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   6. Ocupação da Agenda
                 </span>
-                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">82%</p>
-                <p className="mt-1 text-xs text-emerald-600 font-medium">
-                  Meta mensal de 80% superada
+                <p className="mt-2 text-2xl font-black text-[var(--color-text-primary)]">
+                  {painelIndicadores.indicadores.ocupacaoAgenda.taxaOcupacaoPercentual}%
+                </p>
+                <p
+                  className={`mt-1 text-xs font-medium ${
+                    painelIndicadores.indicadores.ocupacaoAgenda.metaSuperada
+                      ? 'text-emerald-600'
+                      : 'text-amber-600'
+                  }`}
+                >
+                  {painelIndicadores.indicadores.ocupacaoAgenda.detalhe}
                 </p>
               </div>
 
               {/* Indicador 7 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-valores-recebidos"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   7. Valores Recebidos e Previstos
                 </span>
-                <p className="mt-2 text-xl font-black text-[var(--color-text-primary)]">R$ 8.940</p>
+                <p className="mt-2 text-xl font-black text-[var(--color-text-primary)]">
+                  R${' '}
+                  {painelIndicadores.indicadores.valoresRecebidosEPrevistos.valorTotalRecebidoReais.toLocaleString(
+                    'pt-BR',
+                    { minimumFractionDigits: 0 },
+                  )}
+                </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  R$ 3.830 previstos (sinal 30% retido)
+                  {painelIndicadores.indicadores.valoresRecebidosEPrevistos.detalhe}
                 </p>
               </div>
 
               {/* Indicador 8 */}
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm">
+              <div
+                className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
+                data-testid="indicador-servico-mais-agendado"
+              >
                 <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
                   8. Serviço Mais Agendado
                 </span>
                 <p className="mt-2 text-lg font-bold text-[var(--color-brand-deep)]">
-                  Massagem Relaxante
+                  {painelIndicadores.indicadores.servicoMaisAgendado.nome}
                 </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  38 atendimentos realizados
+                  {painelIndicadores.indicadores.servicoMaisAgendado.detalhe}
                 </p>
               </div>
             </div>

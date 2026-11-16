@@ -69,3 +69,4 @@ export * from './schemas/disponibilidade-horarios.js';
 export * from './schemas/professional.js';
 export * from './types/anamnese.js';
 export * from './schemas/anamnese.js';
+export * from './schemas/indicadores-painel.js';
