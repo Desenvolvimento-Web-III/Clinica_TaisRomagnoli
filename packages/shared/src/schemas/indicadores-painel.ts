@@ -101,6 +101,15 @@ export const metricasOperacionaisSchema = z.object({
 
 export type MetricasOperacionais = z.infer<typeof metricasOperacionaisSchema>;
 
+export const indicadoresOperacionaisSchema = z.object({
+  agendamentosDoDia: indicadorAgendamentosDoDiaSchema,
+  atendimentosRealizadosMes: indicadorAtendimentosRealizadosMesSchema,
+  cancelamentosEFaltas: indicadorCancelamentosEFaltasSchema,
+  ocupacaoAgenda: indicadorOcupacaoAgendaSchema,
+});
+
+export type IndicadoresOperacionais = z.infer<typeof indicadoresOperacionaisSchema>;
+
 export const metricasClientesSchema = z.object({
   clientesCadastrados: indicadorClientesCadastradosSchema,
   clientesRecorrentes: indicadorClientesRecorrentesSchema,

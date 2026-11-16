@@ -87,6 +87,17 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText('Massagem Relaxante • 60 min')).toBeInTheDocument();
   });
 
+  it('exibe os indicadores operacionais do painel (agendamentos, atendimentos, cancelamentos/faltas, ocupação) na Agenda', async () => {
+    renderDashboard();
+
+    const indicadores = await screen.findByTestId('indicadores-operacionais');
+    expect(indicadores).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-agendamentos-dia')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-atendimentos-mes')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-cancelamentos-faltas')).toBeInTheDocument();
+    expect(screen.getByTestId('indicador-ocupacao-agenda')).toBeInTheDocument();
+  });
+
   it('permite alternar para a aba Clientes e buscar cliente', () => {
     renderDashboard();
 

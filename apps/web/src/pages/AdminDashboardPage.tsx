@@ -25,6 +25,7 @@ import {
 import type { Service } from '@/features/services/types';
 import { AdminConfiguracoesGerais } from '@/features/admin-dashboard/components/AdminConfiguracoesGerais';
 import { AdminClientsList } from '@/features/admin-dashboard/components/AdminClientsList';
+import { AdminIndicadoresOperacionais } from '@/features/admin-dashboard/components/AdminIndicadoresOperacionais';
 import {
   atualizarStatusAgendamentoBackend,
   buscarAgendamentosAdmin,
@@ -325,7 +326,7 @@ export function AdminDashboardPage() {
 
   useEffect(() => {
     let ativo = true;
-    if (activeSection === 'relatorios') {
+    if (activeSection === 'agenda' || activeSection === 'relatorios') {
       void consultarPainelIndicadoresAdmin().then((dados) => {
         if (ativo && dados) {
           setPainelIndicadores(dados);
@@ -694,6 +695,9 @@ export function AdminDashboardPage() {
                 <span>Novo Agendamento Presencial</span>
               </button>
             </div>
+
+            {/* Indicadores Operacionais */}
+            <AdminIndicadoresOperacionais indicadores={painelIndicadores.indicadores} />
 
             {/* Aviso de Regra de Negócio: Presencial sem sinal */}
             <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-brand-soft)]/50 p-4 text-xs text-[var(--color-brand-deep)] sm:text-sm">
