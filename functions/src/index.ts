@@ -67,6 +67,16 @@ import {
   obterFichaAnamneseService,
   registrarLiberacaoMedicaService,
 } from './modules/anamnese/anamnese-service.js';
+import {
+  FirestoreAuditoriaRepository,
+  type AuditoriaRepository,
+} from './modules/auditoria/auditoria-repository.js';
+import {
+  AuditoriaBusinessError,
+  registrarAuditoria,
+  listarLogsAuditoria,
+} from './modules/auditoria/auditoria-service.js';
+import type { UsuarioRoleAuditoria } from '@clinica/shared';
 
 initializeApp();
 
@@ -140,6 +150,17 @@ export {
   registrarLiberacaoMedicaService,
 } from './modules/anamnese/anamnese-service.js';
 export type { AnamneseRepository } from './modules/anamnese/anamnese-repository.js';
+export {
+  FirestoreAuditoriaRepository,
+  InMemoryAuditoriaRepository,
+} from './modules/auditoria/auditoria-repository.js';
+export {
+  AuditoriaBusinessError,
+  registrarAuditoria,
+  listarLogsAuditoria,
+  obterLogAuditoria,
+} from './modules/auditoria/auditoria-service.js';
+export type { AuditoriaRepository };
 import {
   atribuirFuncaoAdministrativa as atribuirFuncaoAdministrativaService,
   definirAdministradoraInicial,
@@ -258,12 +279,82 @@ function responderErroNegocio(
     error instanceof AgendaBloqueiosBusinessError ||
     error instanceof HorariosBusinessError ||
     error instanceof ProfissionalBusinessError ||
-    error instanceof AnamneseBusinessError
+    error instanceof AnamneseBusinessError ||
+    error instanceof AuditoriaBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
   }
   return false;
+}
+
+let repositorioAuditoriaCompartilhado: AuditoriaRepository | null = null;
+
+export function definirAuditoriaRepositoryParaTestes(repo: AuditoriaRepository | null): void {
+  repositorioAuditoriaCompartilhado = repo;
+}
+
+export function obterAuditoriaRepository(): AuditoriaRepository {
+  if (repositorioAuditoriaCompartilhado) {
+    return repositorioAuditoriaCompartilhado;
+  }
+  return new FirestoreAuditoriaRepository();
+}
+
+function extrairDadosRequisicao(request: { ip?: string; headers?: Record<string, unknown> }) {
+  const forwarded = request.headers ? request.headers['x-forwarded-for'] : undefined;
+  const ip =
+    typeof forwarded === 'string'
+      ? (forwarded.split(',')[0]?.trim() ?? null)
+      : (request.ip ?? null);
+  const userAgent =
+    request.headers && typeof request.headers['user-agent'] === 'string'
+      ? (request.headers['user-agent'] as string)
+      : null;
+  return { ip, userAgent };
+}
+
+export async function registrarAuditoriaOperacao(params: {
+  usuario: { uid: string; email?: string | null; role?: string | null } | null;
+  acao: string;
+  recurso: string;
+  recursoId: string;
+  dadosAfetados: Record<string, unknown>;
+  ip?: string | null;
+  userAgent?: string | null;
+}): Promise<void> {
+  try {
+    const role: UsuarioRoleAuditoria =
+      params.usuario?.role === 'admin'
+        ? 'admin'
+        : params.usuario?.role === 'cliente'
+          ? 'cliente'
+          : params.usuario
+            ? 'cliente'
+            : 'anonimo';
+
+    const recursoId =
+      typeof params.recursoId === 'string' && params.recursoId.trim().length > 0
+        ? params.recursoId
+        : 'recurso_sem_id';
+
+    await registrarAuditoria(
+      {
+        usuarioId: params.usuario?.uid ?? 'anonimo',
+        usuarioEmail: params.usuario?.email ?? null,
+        usuarioRole: role,
+        acao: params.acao,
+        recurso: params.recurso,
+        recursoId,
+        dadosAfetados: params.dadosAfetados,
+        ip: params.ip ?? null,
+        userAgent: params.userAgent ?? null,
+      },
+      obterAuditoriaRepository(),
+    );
+  } catch (err) {
+    console.error(`Erro ao gravar auditoria para ação [${params.acao}]:`, err);
+  }
 }
 
 /**
@@ -311,6 +402,18 @@ export const atualizarHorariosFuncionamento = onRequest(
 
       const firestore = getFirestore();
       const resultado = await salvarHorarios(firestore, request.body, user.uid);
+
+      await registrarAuditoriaOperacao({
+        usuario: user,
+        acao: 'horarios_funcionamento.atualizados',
+        recurso: 'configuracoes',
+        recursoId: 'horarios_funcionamento',
+        dadosAfetados: {
+          totalDiasConfigurados: Array.isArray(request.body) ? request.body.length : 0,
+        },
+        ...extrairDadosRequisicao(request),
+      });
+
       response.status(200).json({
         mensagem: 'Horários de funcionamento atualizados com sucesso.',
         dados: resultado,
@@ -363,6 +466,24 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       anamneseRepo,
       new Date(),
     );
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'agendamento.solicitado',
+      recurso: 'agendamentos',
+      recursoId: agendamento.id,
+      dadosAfetados: {
+        clienteId: agendamento.clienteId,
+        servicoId: agendamento.servicoId,
+        dataHoraInicio: agendamento.dataHoraInicio,
+        dataHoraFim: agendamento.dataHoraFim,
+        valorTotalEmCentavos: agendamento.valorTotalEmCentavos,
+        valorSinalEmCentavos: agendamento.valorSinalEmCentavos,
+        status: agendamento.status,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(201).json({
       mensagem: 'Agendamento solicitado com sucesso.',
       dados: agendamento,
@@ -412,6 +533,20 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
       profissionaisRepo,
       servicosRepo,
     );
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'agendamento.reagendado',
+      recurso: 'agendamentos',
+      recursoId: agendamento.id,
+      dadosAfetados: {
+        dataHoraInicio: agendamento.dataHoraInicio,
+        dataHoraFim: agendamento.dataHoraFim,
+        status: agendamento.status,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       mensagem: 'Agendamento alterado com sucesso.',
       dados: agendamento,
@@ -446,6 +581,22 @@ export const cancelarAgendamento = onRequest({ cors: true }, async (request, res
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
 
     const agendamento = await cancelarAgendamentoExistente(request.body, user, repo, notifRepo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'agendamento.cancelado',
+      recurso: 'agendamentos',
+      recursoId:
+        agendamento?.id || (request.body?.agendamentoId as string) || 'agendamento_cancelado',
+      dadosAfetados: {
+        classificacaoCancelamento: agendamento?.classificacaoCancelamento,
+        valorSinalEmCentavos: agendamento?.valorSinalEmCentavos,
+        motivoCancelamento: agendamento?.motivoCancelamento,
+        status: agendamento?.status,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       mensagem: 'Agendamento cancelado com sucesso.',
       dados: agendamento,
@@ -493,6 +644,18 @@ export const atualizarStatusAgendamento = onRequest({ cors: true }, async (reque
       anamneseRepo,
       clientesRepo,
     );
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'agendamento.status_atualizado',
+      recurso: 'agendamentos',
+      recursoId: agendamento.id,
+      dadosAfetados: {
+        status: agendamento.status,
+        observacoes: request.body?.observacoes,
+      },
+      ...extrairDadosRequisicao(request),
+    });
 
     response.status(200).json({
       mensagem: `Status do agendamento atualizado para '${agendamento.status}' com sucesso.`,
@@ -660,6 +823,21 @@ export const cadastrarServico = onRequest({ cors: true }, async (request, respon
     const repo = new FirestoreServicosRepository(firestore);
 
     const novo = await cadastrarNovoServico(request.body, user, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'servico.cadastrado',
+      recurso: 'servicos',
+      recursoId: novo.id,
+      dadosAfetados: {
+        nome: novo.nome,
+        precoEmCentavos: novo.precoEmCentavos,
+        duracaoMinutos: novo.duracaoMinutos,
+        ativo: novo.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(201).json({
       mensagem: 'Serviço cadastrado com sucesso.',
       dados: novo,
@@ -693,6 +871,21 @@ export const editarServico = onRequest({ cors: true }, async (request, response)
     const repo = new FirestoreServicosRepository(firestore);
 
     const atualizado = await editarServicoExistente(request.body, user, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'servico.editado',
+      recurso: 'servicos',
+      recursoId: atualizado.id,
+      dadosAfetados: {
+        nome: atualizado.nome,
+        precoEmCentavos: atualizado.precoEmCentavos,
+        duracaoMinutos: atualizado.duracaoMinutos,
+        ativo: atualizado.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       mensagem: 'Serviço atualizado com sucesso.',
       dados: atualizado,
@@ -731,6 +924,18 @@ export const desativarServico = onRequest({ cors: true }, async (request, respon
       request.query['servicoId']) as string;
 
     const desativado = await desativarServicoExistente(id, user, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'servico.desativado',
+      recurso: 'servicos',
+      recursoId: desativado.id,
+      dadosAfetados: {
+        ativo: desativado.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       mensagem: 'Serviço desativado com sucesso.',
       dados: desativado,
@@ -765,6 +970,18 @@ export const reativarServico = onRequest({ cors: true }, async (request, respons
       request.query['servicoId']) as string;
 
     const reativado = await reativarServicoExistente(id, user, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'servico.reativado',
+      recurso: 'servicos',
+      recursoId: reativado.id,
+      dadosAfetados: {
+        ativo: reativado.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       mensagem: 'Serviço reativado com sucesso.',
       dados: reativado,
@@ -800,6 +1017,16 @@ export const excluirServico = onRequest({ cors: true }, async (request, response
       request.query['servicoId']) as string;
 
     await excluirServicoComProtecaoHistorico(id, user, repo, agendamentosRepo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'servico.excluido',
+      recurso: 'servicos',
+      recursoId: id,
+      dadosAfetados: { id },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       mensagem: 'Serviço excluído com sucesso.',
     });
@@ -889,6 +1116,20 @@ export const criarPerfil = onRequest({ cors: true }, async (request, response) =
     const notifRepo = new FirestoreNotificacoesRepository(firestore);
 
     const perfil = await registrarPerfilCliente(request.body, user, repo, notifRepo, auth);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'cliente.perfil_criado',
+      recurso: 'clientes',
+      recursoId: perfil.uid,
+      dadosAfetados: {
+        nome: perfil.nome,
+        email: perfil.email,
+        telefone: perfil.telefone,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(201).json({
       mensagem: 'Perfil do cliente registrado com sucesso.',
       dados: perfil,
@@ -1047,6 +1288,18 @@ export const atribuirFuncaoAdministrativa = onRequest({ cors: true }, async (req
       firestore,
     );
 
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'admin.funcao_atribuida',
+      recurso: 'usuarios',
+      recursoId: resultado.uid,
+      dadosAfetados: {
+        role: resultado.role,
+        admin: resultado.admin,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: resultado.mensagem,
@@ -1149,6 +1402,19 @@ export const revogarSessoes = onRequest({ cors: true }, async (request, response
     const firestore = getFirestore();
 
     const resultado = await revogarSessoesUsuario(request.body, caller, auth, firestore);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'auth.sessao_revogada',
+      recurso: 'sessoes',
+      recursoId: resultado.uid,
+      dadosAfetados: {
+        uid: resultado.uid,
+        motivo: request.body?.motivo ?? 'revogacao_solicitada',
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: resultado.mensagem,
@@ -1188,6 +1454,18 @@ export const iniciarSessaoUnica = onRequest({ cors: true }, async (request, resp
       (request.body?.motivo as string) || 'Início de nova sessão sob política de sessão única';
     const sessionId = (request.body?.sessionId as string) || undefined;
     const resultado = await aplicarPoliticaSessaoUnica(caller, auth, firestore, motivo, sessionId);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'auth.sessao_unica_iniciada',
+      recurso: 'sessoes',
+      recursoId: caller.uid,
+      dadosAfetados: {
+        sessionId: request.body?.sessionId,
+        motivo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
 
     response.status(200).json({
       sucesso: true,
@@ -1267,6 +1545,22 @@ export const criarBloqueioAgenda = onRequest({ cors: true }, async (request, res
     const repo = new FirestoreBloqueiosRepository(firestore);
 
     const bloqueio = await criarBloqueioAgendaService(request.body, caller, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'bloqueio_agenda.criado',
+      recurso: 'bloqueios_agenda',
+      recursoId: bloqueio.id,
+      dadosAfetados: {
+        tipo: bloqueio.tipo,
+        horaInicio: bloqueio.horaInicio,
+        horaFim: bloqueio.horaFim,
+        motivo: bloqueio.motivo,
+        ativo: bloqueio.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(201).json({
       sucesso: true,
       mensagem: 'Bloqueio de agenda criado com sucesso.',
@@ -1340,6 +1634,16 @@ export const removerBloqueioAgenda = onRequest({ cors: true }, async (request, r
     const repo = new FirestoreBloqueiosRepository(firestore);
 
     const resultado = await removerBloqueioAgendaService(id, caller, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'bloqueio_agenda.removido',
+      recurso: 'bloqueios_agenda',
+      recursoId: id,
+      dadosAfetados: { id },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: 'Bloqueio de agenda excluído com sucesso.',
@@ -1373,6 +1677,16 @@ export const alternarStatusBloqueioAgenda = onRequest({ cors: true }, async (req
     const repo = new FirestoreBloqueiosRepository(firestore);
 
     const atualizado = await alternarStatusBloqueioAgendaService(id, ativo, caller, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'bloqueio_agenda.status_alternado',
+      recurso: 'bloqueios_agenda',
+      recursoId: atualizado.id,
+      dadosAfetados: { ativo: atualizado.ativo },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: `Status do bloqueio atualizado para ${ativo ? 'ativo' : 'inativo'}.`,
@@ -1404,6 +1718,22 @@ export const criarHorarioFixoCliente = onRequest({ cors: true }, async (request,
     const repo = new FirestoreHorariosFixosRepository(firestore);
 
     const horarioFixo = await criarHorarioFixoClienteService(request.body, caller, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'horario_fixo.criado',
+      recurso: 'horarios_fixos',
+      recursoId: horarioFixo.id,
+      dadosAfetados: {
+        clienteId: horarioFixo.clienteId,
+        diaSemana: horarioFixo.diaSemana,
+        horaInicio: horarioFixo.horaInicio,
+        horaFim: horarioFixo.horaFim,
+        frequencia: horarioFixo.frequencia,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(201).json({
       sucesso: true,
       mensagem: 'Reserva de horário fixo criada com sucesso.',
@@ -1477,6 +1807,16 @@ export const removerHorarioFixoCliente = onRequest({ cors: true }, async (reques
     const repo = new FirestoreHorariosFixosRepository(firestore);
 
     const resultado = await removerHorarioFixoClienteService(id, caller, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'horario_fixo.removido',
+      recurso: 'horarios_fixos',
+      recursoId: id,
+      dadosAfetados: { id },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: 'Horário fixo removido com sucesso.',
@@ -1507,6 +1847,20 @@ export const atualizarHorarioFixoCliente = onRequest({ cors: true }, async (requ
     const repo = new FirestoreHorariosFixosRepository(firestore);
 
     const atualizado = await atualizarHorarioFixoClienteService(request.body, caller, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: caller,
+      acao: 'horario_fixo.atualizado',
+      recurso: 'horarios_fixos',
+      recursoId: atualizado.id,
+      dadosAfetados: {
+        ativo: atualizado.ativo,
+        horaInicio: atualizado.horaInicio,
+        horaFim: atualizado.horaFim,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: 'Horário fixo atualizado com sucesso.',
@@ -1707,6 +2061,19 @@ export const cadastrarProfissional = onRequest({ cors: true }, async (request, r
 
     const criado = await cadastrarProfissionalService(request.body, user, repo);
 
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'profissional.cadastrado',
+      recurso: 'profissionais',
+      recursoId: criado.id,
+      dadosAfetados: {
+        nome: criado.nome,
+        especialidade: criado.especialidade,
+        ativo: criado.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(201).json({
       sucesso: true,
       mensagem: 'Profissional cadastrado com sucesso.',
@@ -1742,6 +2109,19 @@ export const atualizarProfissional = onRequest({ cors: true }, async (request, r
     const repo = new FirestoreProfissionaisRepository(firestore);
 
     const atualizado = await atualizarProfissionalService(request.body, user, repo);
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'profissional.atualizado',
+      recurso: 'profissionais',
+      recursoId: atualizado.id,
+      dadosAfetados: {
+        nome: atualizado.nome,
+        especialidade: atualizado.especialidade,
+        ativo: atualizado.ativo,
+      },
+      ...extrairDadosRequisicao(request),
+    });
 
     response.status(200).json({
       sucesso: true,
@@ -1789,6 +2169,18 @@ export const vincularProfissionalAoServicoEndpoint = onRequest(
         servicosRepo,
         profissionaisRepo,
       );
+
+      await registrarAuditoriaOperacao({
+        usuario: user,
+        acao: 'profissional.servico_vinculado',
+        recurso: 'profissionais',
+        recursoId: request.body?.profissionalId || 'prof-vinculo',
+        dadosAfetados: {
+          servicoId: request.body?.servicoId,
+          acao: request.body?.acao,
+        },
+        ...extrairDadosRequisicao(request),
+      });
 
       response.status(200).json({
         sucesso: true,
@@ -1888,6 +2280,19 @@ export const salvarFichaAnamnese = onRequest({ cors: true }, async (request, res
       notifRepo,
     });
 
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'anamnese.ficha_salva',
+      recurso: 'anamneses',
+      recursoId: fichaSalva?.id || clienteId || 'ficha_anamnese',
+      dadosAfetados: {
+        clienteId: fichaSalva?.clienteId || clienteId,
+        exigeLiberacaoMedica: fichaSalva?.exigeLiberacaoMedica,
+        contraindicacoes: fichaSalva?.contraindicacoes,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
     response.status(200).json({
       sucesso: true,
       mensagem: 'Ficha de anamnese salva com sucesso.',
@@ -1923,6 +2328,19 @@ export const atualizarLiberacaoMedica = onRequest({ cors: true }, async (request
       input: request.body,
       usuarioAutenticado: user,
       repo,
+    });
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'anamnese.liberacao_medica_atualizada',
+      recurso: 'anamneses',
+      recursoId: fichaAtualizada?.id || request.body?.clienteId || 'liberacao_medica',
+      dadosAfetados: {
+        clienteId: fichaAtualizada?.clienteId || request.body?.clienteId,
+        liberacaoMedicaAprovada: fichaAtualizada?.liberacaoMedicaAprovada,
+        observacoes: fichaAtualizada?.liberacaoMedicaObservacoes,
+      },
+      ...extrairDadosRequisicao(request),
     });
 
     response.status(200).json({
@@ -2071,5 +2489,53 @@ export const obterPainelIndicadoresAdmin = onRequest({ cors: true }, async (requ
     }
     console.error('Erro ao calcular indicadores administrativos:', error);
     response.status(500).json({ error: 'Erro interno ao calcular indicadores administrativos.' });
+  }
+});
+
+/**
+ * Endpoint para listar os registros de auditoria do sistema.
+ * Restrito exclusivamente a administradores autenticados.
+ */
+export const listarAuditoriaAdmin = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
+    exigirAdministrador(caller);
+
+    const limiteRaw =
+      typeof request.query['limite'] === 'string'
+        ? Number.parseInt(request.query['limite'], 10)
+        : undefined;
+    const limite =
+      typeof limiteRaw === 'number' && !Number.isNaN(limiteRaw) ? limiteRaw : undefined;
+
+    const filtros = {
+      usuarioId:
+        typeof request.query['usuarioId'] === 'string' ? request.query['usuarioId'] : undefined,
+      acao: typeof request.query['acao'] === 'string' ? request.query['acao'] : undefined,
+      recurso: typeof request.query['recurso'] === 'string' ? request.query['recurso'] : undefined,
+      recursoId:
+        typeof request.query['recursoId'] === 'string' ? request.query['recursoId'] : undefined,
+      dataInicio:
+        typeof request.query['dataInicio'] === 'string' ? request.query['dataInicio'] : undefined,
+      dataFim: typeof request.query['dataFim'] === 'string' ? request.query['dataFim'] : undefined,
+      limite,
+    };
+
+    const logs = await listarLogsAuditoria(filtros, obterAuditoriaRepository());
+    response.status(200).json({
+      sucesso: true,
+      dados: logs,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao listar registros de auditoria:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar auditoria.' });
   }
 });
