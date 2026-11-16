@@ -70,3 +70,4 @@ export * from './schemas/professional.js';
 export * from './types/anamnese.js';
 export * from './schemas/anamnese.js';
 export * from './schemas/indicadores-painel.js';
+export * from './schemas/auditoria.js';

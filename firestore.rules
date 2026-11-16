@@ -199,6 +199,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Trilha de auditoria das operações do sistema
+    // Leitura restrita à administração (requer claim de admin)
+    // Escrita bloqueada no client-side: registros gerados exclusivamente por Cloud Functions no backend
+    match /auditoria/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Regra de segurança padrão: bloqueia qualquer outro acesso não especificado
     match /{document=**} {
       allow read, write: if false;
