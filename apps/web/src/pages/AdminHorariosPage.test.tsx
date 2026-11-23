@@ -67,6 +67,29 @@ describe('AdminHorariosPage', () => {
     });
   });
 
+  it('expande e recolhe as configurações de cada dia', async () => {
+    renderWithRouter(<AdminHorariosPage />);
+
+    await screen.findByRole('heading', { name: /Configuração de Horários de Funcionamento/i });
+
+    const segunda = screen.getByRole('button', { name: 'Configurações de Segunda-feira' });
+    const quinta = screen.getByRole('button', { name: 'Configurações de Quinta-feira' });
+
+    expect(segunda).toHaveAttribute('aria-expanded', 'true');
+    expect(quinta).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText(/quinta-feira, turno 1, abertura/i)).not.toBeVisible();
+
+    fireEvent.click(quinta);
+
+    expect(quinta).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText(/quinta-feira, turno 1, abertura/i)).toBeVisible();
+
+    fireEvent.click(segunda);
+
+    expect(segunda).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText(/segunda-feira, turno 1, abertura/i)).not.toBeVisible();
+  });
+
   it('permite adicionar e remover intervalos de manutenção', async () => {
     renderWithRouter(<AdminHorariosPage />);
 

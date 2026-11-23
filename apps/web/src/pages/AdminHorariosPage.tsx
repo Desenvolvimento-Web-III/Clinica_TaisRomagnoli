@@ -17,6 +17,7 @@ export function AdminHorariosPage() {
   const [config, setConfig] = useState<HorariosFuncionamento>(CONFIGURACAO_HORARIOS_PADRAO);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [diasExpandidos, setDiasExpandidos] = useState<Set<number>>(() => new Set([1]));
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -72,6 +73,18 @@ export function AdminHorariosPage() {
         return d;
       });
       return { ...prev, dias: novosDias };
+    });
+  };
+
+  const handleToggleDiaExpandido = (diaIndex: number) => {
+    setDiasExpandidos((prev) => {
+      const novosDiasExpandidos = new Set(prev);
+      if (novosDiasExpandidos.has(diaIndex)) {
+        novosDiasExpandidos.delete(diaIndex);
+      } else {
+        novosDiasExpandidos.add(diaIndex);
+      }
+      return novosDiasExpandidos;
     });
   };
 
@@ -409,31 +422,67 @@ export function AdminHorariosPage() {
             {config.dias.map((diaItem: DiaFuncionamento) => {
               const nomeDia: string = NOMES_DIAS_SEMANA[diaItem.dia] ?? `Dia ${diaItem.dia}`;
               const estaAtivo = diaItem.ativo;
+              const estaExpandido = diasExpandidos.has(diaItem.dia);
+              const resumoTurnos = diaItem.turnos
+                .map((turno) => `${turno.inicio}–${turno.fim}`)
+                .join(' · ');
 
               return (
                 <article
                   key={diaItem.dia}
-                  className={`rounded-2xl sm:rounded-[2rem] bg-white p-4 sm:p-6 lg:p-8 shadow-sm transition-all ${
+                  className={`rounded-2xl bg-white p-3 shadow-sm transition-all sm:p-4 ${
                     !estaAtivo ? 'opacity-80 border border-dashed border-[#E2E8F0]' : ''
                   }`}
                 >
                   {/* Cabeçalho do Dia */}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center space-x-3">
+                    <button
+                      type="button"
+                      aria-expanded={estaExpandido}
+                      aria-controls={`configuracoes-dia-${diaItem.dia}`}
+                      aria-label={`Configurações de ${nomeDia}`}
+                      onClick={() => handleToggleDiaExpandido(diaItem.dia)}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 text-left transition hover:bg-[#F8FAFC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7A60B8]"
+                    >
                       <span
-                        className={`h-3 w-3 rounded-full ${
+                        className={`h-3 w-3 flex-shrink-0 rounded-full ${
                           estaAtivo ? 'bg-[#10B981]' : 'bg-[#94A3B8]'
                         }`}
                       />
-                      <h3 className="text-lg font-bold text-[#000000]">{nomeDia}</h3>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          estaAtivo ? 'bg-[#ECFDF5] text-[#065F46]' : 'bg-[#F1F5F9] text-[#64748B]'
-                        }`}
-                      >
-                        {estaAtivo ? 'Atendimento Ativo' : 'Folga da Clínica'}
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                        <span className="text-base font-bold text-[#000000]">{nomeDia}</span>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            estaAtivo
+                              ? 'bg-[#ECFDF5] text-[#065F46]'
+                              : 'bg-[#F1F5F9] text-[#64748B]'
+                          }`}
+                        >
+                          {estaAtivo ? 'Atendimento Ativo' : 'Folga da Clínica'}
+                        </span>
+                        <span className="truncate text-xs text-[#64748B]">
+                          {estaAtivo
+                            ? resumoTurnos || 'Nenhum turno cadastrado'
+                            : 'Sem atendimento'}
+                        </span>
                       </span>
-                    </div>
+                      <svg
+                        aria-hidden="true"
+                        className={`h-4 w-4 flex-shrink-0 text-[#64748B] transition-transform ${
+                          estaExpandido ? 'rotate-180' : ''
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="m19 9-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
 
                     {/* Switch Ativar/Desativar */}
                     <button
@@ -449,228 +498,239 @@ export function AdminHorariosPage() {
                     </button>
                   </div>
 
-                  {/* Se o dia estiver em Folga */}
-                  {!estaAtivo && (
-                    <div className="mt-4 rounded-xl bg-[#F8FAFC] p-4 text-xs text-[#64748B]">
-                      A clínica permanece fechada neste dia. Ative o atendimento para cadastrar
-                      turnos e manutenções.
-                    </div>
-                  )}
-
-                  {/* Se o dia estiver Ativo */}
-                  {estaAtivo && (
-                    <div className="mt-6 space-y-6 divide-y divide-[#E2E8F0]">
-                      {/* Seção 1: Turnos de Atendimento */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-semibold text-[#000000]">
-                              Turnos de Atendimento
-                            </h4>
-                            <p className="text-xs text-[#334155]">
-                              Horários disponíveis para os clientes agendarem sessões.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleAddTurno(diaItem.dia)}
-                            className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#58418b] hover:underline"
-                          >
-                            + Adicionar turno
-                          </button>
-                        </div>
-
-                        {diaItem.turnos.length === 0 ? (
-                          <p className="text-xs italic text-[#EF4444]">
-                            Nenhum turno cadastrado. Adicione pelo menos um turno de atendimento.
-                          </p>
-                        ) : (
-                          <div className="space-y-2.5">
-                            {diaItem.turnos.map((turno, tIdx) => (
-                              <div
-                                key={tIdx}
-                                className="flex flex-wrap items-center gap-2 rounded-xl bg-[#F8FAFC] p-3 text-xs"
-                              >
-                                <span className="font-medium text-[#334155]">
-                                  Turno {tIdx + 1}:
-                                </span>
-                                <div className="flex items-center space-x-2">
-                                  <label
-                                    htmlFor={`turno-inicio-${diaItem.dia}-${tIdx}`}
-                                    className="sr-only"
-                                  >
-                                    {`${nomeDia}, turno ${tIdx + 1}, abertura`}
-                                  </label>
-                                  <input
-                                    id={`turno-inicio-${diaItem.dia}-${tIdx}`}
-                                    aria-label={`${nomeDia}, turno ${tIdx + 1}, abertura`}
-                                    type="time"
-                                    value={turno.inicio}
-                                    onChange={(e) =>
-                                      handleUpdateTurno(diaItem.dia, tIdx, 'inicio', e.target.value)
-                                    }
-                                    className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
-                                  />
-                                  <span className="text-[#64748B]">às</span>
-                                  <label
-                                    htmlFor={`turno-fim-${diaItem.dia}-${tIdx}`}
-                                    className="sr-only"
-                                  >
-                                    {`${nomeDia}, turno ${tIdx + 1}, fechamento`}
-                                  </label>
-                                  <input
-                                    id={`turno-fim-${diaItem.dia}-${tIdx}`}
-                                    aria-label={`${nomeDia}, turno ${tIdx + 1}, fechamento`}
-                                    type="time"
-                                    value={turno.fim}
-                                    onChange={(e) =>
-                                      handleUpdateTurno(diaItem.dia, tIdx, 'fim', e.target.value)
-                                    }
-                                    className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
-                                  />
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveTurno(diaItem.dia, tIdx)}
-                                  className="ml-auto text-xs text-[#EF4444] transition hover:text-red-700 hover:underline"
-                                  title="Remover este turno"
-                                >
-                                  Remover
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                  <div
+                    id={`configuracoes-dia-${diaItem.dia}`}
+                    hidden={!estaExpandido}
+                    className="mt-3 border-t border-[#E2E8F0] px-2 pt-4"
+                  >
+                    {/* Se o dia estiver em Folga */}
+                    {!estaAtivo && (
+                      <div className="mt-4 rounded-xl bg-[#F8FAFC] p-4 text-xs text-[#64748B]">
+                        A clínica permanece fechada neste dia. Ative o atendimento para cadastrar
+                        turnos e manutenções.
                       </div>
+                    )}
 
-                      {/* Seção 2: Intervalos de Manutenção e Higienização */}
-                      <div className="pt-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-semibold text-[#000000]">
-                              Intervalos de Manutenção e Pausas
-                            </h4>
-                            <p className="text-xs text-[#334155]">
-                              Bloqueios para limpeza profunda, manutenção das salas ou almoço da
-                              profissional.
-                            </p>
+                    {/* Se o dia estiver Ativo */}
+                    {estaAtivo && (
+                      <div className="mt-6 space-y-6 divide-y divide-[#E2E8F0]">
+                        {/* Seção 1: Turnos de Atendimento */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-semibold text-[#000000]">
+                                Turnos de Atendimento
+                              </h4>
+                              <p className="text-xs text-[#334155]">
+                                Horários disponíveis para os clientes agendarem sessões.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAddTurno(diaItem.dia)}
+                              className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#58418b] hover:underline"
+                            >
+                              + Adicionar turno
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleAddManutencao(diaItem.dia)}
-                            className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#58418b] hover:underline"
-                          >
-                            + Adicionar manutenção
-                          </button>
-                        </div>
 
-                        {!diaItem.intervalosManutencao ||
-                        diaItem.intervalosManutencao.length === 0 ? (
-                          <p className="text-xs italic text-[#64748B]">
-                            Nenhum intervalo fixo de manutenção cadastrado para este dia.
-                          </p>
-                        ) : (
-                          <div className="space-y-2.5">
-                            {diaItem.intervalosManutencao.map((manutencao, mIdx) => (
-                              <div
-                                key={mIdx}
-                                className="flex flex-col gap-2 rounded-xl border border-[#E2E8F0] bg-[#FFFBEB]/40 p-3 text-xs sm:flex-row sm:items-center"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <span className="font-medium text-[#92400E]">
-                                    Pausa {mIdx + 1}:
+                          {diaItem.turnos.length === 0 ? (
+                            <p className="text-xs italic text-[#EF4444]">
+                              Nenhum turno cadastrado. Adicione pelo menos um turno de atendimento.
+                            </p>
+                          ) : (
+                            <div className="space-y-2.5">
+                              {diaItem.turnos.map((turno, tIdx) => (
+                                <div
+                                  key={tIdx}
+                                  className="flex flex-wrap items-center gap-2 rounded-xl bg-[#F8FAFC] p-3 text-xs"
+                                >
+                                  <span className="font-medium text-[#334155]">
+                                    Turno {tIdx + 1}:
                                   </span>
-                                  <input
-                                    type="time"
-                                    value={manutencao.inicio}
-                                    onChange={(e) =>
-                                      handleUpdateManutencao(
-                                        diaItem.dia,
-                                        mIdx,
-                                        'inicio',
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
-                                  />
-                                  <span className="text-[#64748B]">às</span>
-                                  <input
-                                    type="time"
-                                    value={manutencao.fim}
-                                    onChange={(e) =>
-                                      handleUpdateManutencao(
-                                        diaItem.dia,
-                                        mIdx,
-                                        'fim',
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
-                                  />
-                                </div>
+                                  <div className="flex items-center space-x-2">
+                                    <label
+                                      htmlFor={`turno-inicio-${diaItem.dia}-${tIdx}`}
+                                      className="sr-only"
+                                    >
+                                      {`${nomeDia}, turno ${tIdx + 1}, abertura`}
+                                    </label>
+                                    <input
+                                      id={`turno-inicio-${diaItem.dia}-${tIdx}`}
+                                      aria-label={`${nomeDia}, turno ${tIdx + 1}, abertura`}
+                                      type="time"
+                                      value={turno.inicio}
+                                      onChange={(e) =>
+                                        handleUpdateTurno(
+                                          diaItem.dia,
+                                          tIdx,
+                                          'inicio',
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
+                                    />
+                                    <span className="text-[#64748B]">às</span>
+                                    <label
+                                      htmlFor={`turno-fim-${diaItem.dia}-${tIdx}`}
+                                      className="sr-only"
+                                    >
+                                      {`${nomeDia}, turno ${tIdx + 1}, fechamento`}
+                                    </label>
+                                    <input
+                                      id={`turno-fim-${diaItem.dia}-${tIdx}`}
+                                      aria-label={`${nomeDia}, turno ${tIdx + 1}, fechamento`}
+                                      type="time"
+                                      value={turno.fim}
+                                      onChange={(e) =>
+                                        handleUpdateTurno(diaItem.dia, tIdx, 'fim', e.target.value)
+                                      }
+                                      className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
+                                    />
+                                  </div>
 
-                                <div className="flex-1">
-                                  <input
-                                    type="text"
-                                    placeholder="Descrição (ex: Almoço, Higienização de salas)"
-                                    value={manutencao.descricao || ''}
-                                    onChange={(e) =>
-                                      handleUpdateManutencao(
-                                        diaItem.dia,
-                                        mIdx,
-                                        'descricao',
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs text-[#000000] placeholder:text-[#94A3B8] focus:border-[#7A60B8] focus:outline-none"
-                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveTurno(diaItem.dia, tIdx)}
+                                    className="ml-auto text-xs text-[#EF4444] transition hover:text-red-700 hover:underline"
+                                    title="Remover este turno"
+                                  >
+                                    Remover
+                                  </button>
                                 </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveManutencao(diaItem.dia, mIdx)}
-                                  className="text-xs text-[#EF4444] transition hover:text-red-700 hover:underline sm:self-center"
-                                  title="Remover esta manutenção"
-                                >
-                                  Remover
-                                </button>
-                              </div>
-                            ))}
+                        {/* Seção 2: Intervalos de Manutenção e Higienização */}
+                        <div className="pt-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-semibold text-[#000000]">
+                                Intervalos de Manutenção e Pausas
+                              </h4>
+                              <p className="text-xs text-[#334155]">
+                                Bloqueios para limpeza profunda, manutenção das salas ou almoço da
+                                profissional.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAddManutencao(diaItem.dia)}
+                              className="inline-flex items-center text-xs font-semibold text-[#6C53A6] hover:text-[#58418b] hover:underline"
+                            >
+                              + Adicionar manutenção
+                            </button>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Seção 3: Intervalo específico do dia */}
-                      <div className="pt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <label
-                          htmlFor={`intervalo-dia-${diaItem.dia}`}
-                          className="text-xs font-medium text-[#334155]"
-                        >
-                          Intervalo entre atendimentos neste dia:
-                        </label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            id={`intervalo-dia-${diaItem.dia}`}
-                            aria-label={`Intervalo entre sessões — ${nomeDia} em minutos`}
-                            type="number"
-                            min="0"
-                            max="120"
-                            step="5"
-                            value={diaItem.intervaloMinutos}
-                            onChange={(e) =>
-                              handleIntervaloDiaChange(
-                                diaItem.dia,
-                                parseInt(e.target.value, 10) || 0,
-                              )
-                            }
-                            className="w-20 rounded-lg border border-[#E2E8F0] px-2 py-1 text-center text-xs font-semibold text-[#000000] focus:border-[#7A60B8] focus:outline-none"
-                          />
-                          <span className="text-xs text-[#64748B]">minutos</span>
+                          {!diaItem.intervalosManutencao ||
+                          diaItem.intervalosManutencao.length === 0 ? (
+                            <p className="text-xs italic text-[#64748B]">
+                              Nenhum intervalo fixo de manutenção cadastrado para este dia.
+                            </p>
+                          ) : (
+                            <div className="space-y-2.5">
+                              {diaItem.intervalosManutencao.map((manutencao, mIdx) => (
+                                <div
+                                  key={mIdx}
+                                  className="flex flex-col gap-2 rounded-xl border border-[#E2E8F0] bg-[#FFFBEB]/40 p-3 text-xs sm:flex-row sm:items-center"
+                                >
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-medium text-[#92400E]">
+                                      Pausa {mIdx + 1}:
+                                    </span>
+                                    <input
+                                      type="time"
+                                      value={manutencao.inicio}
+                                      onChange={(e) =>
+                                        handleUpdateManutencao(
+                                          diaItem.dia,
+                                          mIdx,
+                                          'inicio',
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
+                                    />
+                                    <span className="text-[#64748B]">às</span>
+                                    <input
+                                      type="time"
+                                      value={manutencao.fim}
+                                      onChange={(e) =>
+                                        handleUpdateManutencao(
+                                          diaItem.dia,
+                                          mIdx,
+                                          'fim',
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1.5 font-mono text-xs text-[#000000] focus:border-[#7A60B8] focus:outline-none"
+                                    />
+                                  </div>
+
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      placeholder="Descrição (ex: Almoço, Higienização de salas)"
+                                      value={manutencao.descricao || ''}
+                                      onChange={(e) =>
+                                        handleUpdateManutencao(
+                                          diaItem.dia,
+                                          mIdx,
+                                          'descricao',
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs text-[#000000] placeholder:text-[#94A3B8] focus:border-[#7A60B8] focus:outline-none"
+                                    />
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveManutencao(diaItem.dia, mIdx)}
+                                    className="text-xs text-[#EF4444] transition hover:text-red-700 hover:underline sm:self-center"
+                                    title="Remover esta manutenção"
+                                  >
+                                    Remover
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Seção 3: Intervalo específico do dia */}
+                        <div className="pt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <label
+                            htmlFor={`intervalo-dia-${diaItem.dia}`}
+                            className="text-xs font-medium text-[#334155]"
+                          >
+                            Intervalo entre atendimentos neste dia:
+                          </label>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              id={`intervalo-dia-${diaItem.dia}`}
+                              aria-label={`Intervalo entre sessões — ${nomeDia} em minutos`}
+                              type="number"
+                              min="0"
+                              max="120"
+                              step="5"
+                              value={diaItem.intervaloMinutos}
+                              onChange={(e) =>
+                                handleIntervaloDiaChange(
+                                  diaItem.dia,
+                                  parseInt(e.target.value, 10) || 0,
+                                )
+                              }
+                              className="w-20 rounded-lg border border-[#E2E8F0] px-2 py-1 text-center text-xs font-semibold text-[#000000] focus:border-[#7A60B8] focus:outline-none"
+                            />
+                            <span className="text-xs text-[#64748B]">minutos</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </article>
               );
             })}
