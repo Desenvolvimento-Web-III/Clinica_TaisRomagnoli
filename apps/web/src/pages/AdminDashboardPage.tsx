@@ -26,6 +26,7 @@ import type { Service } from '@/features/services/types';
 import { AdminConfiguracoesGerais } from '@/features/admin-dashboard/components/AdminConfiguracoesGerais';
 import { AdminClientsList } from '@/features/admin-dashboard/components/AdminClientsList';
 import { AdminIndicadoresOperacionais } from '@/features/admin-dashboard/components/AdminIndicadoresOperacionais';
+import { AdminRelatoriosSection } from '@/features/admin-dashboard/components/AdminRelatoriosSection';
 import {
   atualizarStatusAgendamentoBackend,
   buscarAgendamentosAdmin,
@@ -271,6 +272,9 @@ export function AdminDashboardPage() {
 
   // Estados da Agenda e Agendamento Presencial
   const [agendaItems, setAgendaItems] = useState<AgendamentoAgendaItem[]>(AGENDAMENTOS_DEMO);
+  const [agendamentosRelatorio, setAgendamentosRelatorio] = useState<SharedAgendamento[]>([]);
+  const [isLoadingRelatorio, setIsLoadingRelatorio] = useState(true);
+  const [erroAgendamentosRelatorio, setErroAgendamentosRelatorio] = useState<string | null>(null);
   const [confirmingAgendaId, setConfirmingAgendaId] = useState<string | null>(null);
   const [agendaFeedback, setAgendaFeedback] = useState<{
     tipo: 'sucesso' | 'erro';
@@ -334,11 +338,23 @@ export function AdminDashboardPage() {
       .finally(() => {
         if (ativo) setIsLoadingClientes(false);
       });
-    void buscarAgendamentosAdmin().then((lista) => {
-      if (ativo && lista && lista.length > 0) {
-        setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
-      }
-    });
+    void buscarAgendamentosAdmin()
+      .then((lista) => {
+        if (ativo) {
+          setAgendamentosRelatorio(lista);
+          if (lista.length > 0) setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
+        }
+      })
+      .catch((error: unknown) => {
+        if (ativo) {
+          setErroAgendamentosRelatorio(
+            error instanceof Error ? error.message : 'Não foi possível carregar a agenda.',
+          );
+        }
+      })
+      .finally(() => {
+        if (ativo) setIsLoadingRelatorio(false);
+      });
     return () => {
       ativo = false;
     };
@@ -882,8 +898,8 @@ export function AdminDashboardPage() {
                 Relatórios e Indicadores Administrativos
               </h1>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                Acompanhamento dos 8 indicadores consolidados da clínica conforme diretrizes de
-                produto.
+                Acompanhe os indicadores da clínica e filtre dados de clientes, agenda, recorrência
+                e pagamentos.
               </p>
             </div>
 
@@ -1028,6 +1044,13 @@ export function AdminDashboardPage() {
                 </p>
               </div>
             </div>
+
+            <AdminRelatoriosSection
+              clients={clientes}
+              appointments={agendamentosRelatorio}
+              isLoading={isLoadingClientes || isLoadingRelatorio}
+              error={erroClientes || erroAgendamentosRelatorio}
+            />
           </section>
         )}
 
