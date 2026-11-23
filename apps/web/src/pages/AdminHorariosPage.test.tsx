@@ -33,7 +33,7 @@ describe('AdminHorariosPage', () => {
     renderWithRouter(<AdminHorariosPage />);
 
     expect(
-      await screen.findByRole('heading', { name: /Horários de Funcionamento e Manutenção/i }),
+      await screen.findByRole('heading', { name: /Configuração de Horários de Funcionamento/i }),
     ).toBeInTheDocument();
 
     expect(screen.getByText('Domingo')).toBeInTheDocument();
@@ -67,10 +67,33 @@ describe('AdminHorariosPage', () => {
     });
   });
 
+  it('expande e recolhe as configurações de cada dia', async () => {
+    renderWithRouter(<AdminHorariosPage />);
+
+    await screen.findByRole('heading', { name: /Configuração de Horários de Funcionamento/i });
+
+    const segunda = screen.getByRole('button', { name: 'Configurações de Segunda-feira' });
+    const quinta = screen.getByRole('button', { name: 'Configurações de Quinta-feira' });
+
+    expect(segunda).toHaveAttribute('aria-expanded', 'true');
+    expect(quinta).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText(/quinta-feira, turno 1, abertura/i)).not.toBeVisible();
+
+    fireEvent.click(quinta);
+
+    expect(quinta).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText(/quinta-feira, turno 1, abertura/i)).toBeVisible();
+
+    fireEvent.click(segunda);
+
+    expect(segunda).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText(/segunda-feira, turno 1, abertura/i)).not.toBeVisible();
+  });
+
   it('permite adicionar e remover intervalos de manutenção', async () => {
     renderWithRouter(<AdminHorariosPage />);
 
-    await screen.findByRole('heading', { name: /Horários de Funcionamento e Manutenção/i });
+    await screen.findByRole('heading', { name: /Configuração de Horários de Funcionamento/i });
 
     // Busca botões de adicionar manutenção
     const botoesAddManutencao = screen.getAllByRole('button', { name: /\+ Adicionar manutenção/i });
@@ -89,7 +112,18 @@ describe('AdminHorariosPage', () => {
   it('permite salvar alterações com sucesso', async () => {
     renderWithRouter(<AdminHorariosPage />);
 
-    await screen.findByRole('heading', { name: /Horários de Funcionamento e Manutenção/i });
+    await screen.findByRole('heading', { name: /Configuração de Horários de Funcionamento/i });
+
+    const salvamento = vi.spyOn(horariosService, 'salvarHorariosFuncionamento');
+    fireEvent.change(screen.getByLabelText(/intervalo padrão entre sessões/i), {
+      target: { value: '45' },
+    });
+    fireEvent.change(screen.getByLabelText(/segunda-feira, turno 1, abertura/i), {
+      target: { value: '09:00' },
+    });
+    fireEvent.change(screen.getByLabelText(/segunda-feira, turno 1, fechamento/i), {
+      target: { value: '12:30' },
+    });
 
     const botaoSalvar = screen.getByRole('button', { name: /Salvar Alterações/i });
     fireEvent.click(botaoSalvar);
@@ -99,12 +133,27 @@ describe('AdminHorariosPage', () => {
         /Horários de funcionamento e intervalos de manutenção salvos com sucesso/i,
       ),
     ).toBeInTheDocument();
+
+    expect(salvamento).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intervaloPadraoMinutos: 45,
+        dias: expect.arrayContaining([
+          expect.objectContaining({
+            dia: 1,
+            turnos: expect.arrayContaining([
+              expect.objectContaining({ inicio: '09:00', fim: '12:30' }),
+            ]),
+          }),
+        ]),
+      }),
+      'admin-tais',
+    );
   });
 
   it('exibe o link para voltar ao painel administrativo apontando para /admin?tab=configuracoes', async () => {
     renderWithRouter(<AdminHorariosPage />);
 
-    await screen.findByRole('heading', { name: /Horários de Funcionamento e Manutenção/i });
+    await screen.findByRole('heading', { name: /Configuração de Horários de Funcionamento/i });
 
     const linkVoltar = screen.getByRole('link', { name: /Voltar ao painel/i });
     expect(linkVoltar).toBeInTheDocument();
