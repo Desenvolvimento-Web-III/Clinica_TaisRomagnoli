@@ -316,6 +316,7 @@ describe('indicadores-service (Cálculo dos 8 indicadores do painel administrati
     expect(indRecorrentes.total).toBe(1);
     expect(indRecorrentes.criterioMinimoAtendimentosMes).toBe(2);
     expect(indRecorrentes.percentualSobreTotal).toBe(33.3);
+    expect(indRecorrentes.detalhe).toBe('≥ 2 consultas concluídas no mesmo mês');
 
     // --- 4. Atendimentos Realizados no Mês (a1 e a4 = 2 sessões concluídas, 60+60 = 120min) ---
     const indAtendimentos = resultado.indicadores.atendimentosRealizadosMes;
