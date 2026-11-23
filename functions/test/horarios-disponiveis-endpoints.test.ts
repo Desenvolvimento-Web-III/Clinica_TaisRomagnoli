@@ -142,6 +142,13 @@ function createMockResponse(): MockResponse {
 describe('obterHorariosDisponiveis endpoint', () => {
   const handler = obterHorariosDisponiveis as unknown as HttpHandler;
 
+  const proximaSegundaAberta = () => {
+    const data = new Date();
+    const diasAteSegunda = (8 - data.getUTCDay()) % 7 || 7;
+    data.setUTCDate(data.getUTCDate() + diasAteSegunda);
+    return data.toISOString().slice(0, 10);
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -167,11 +174,12 @@ describe('obterHorariosDisponiveis endpoint', () => {
   });
 
   it('retorna grade de horários disponíveis com 200 via GET para data e duracaoMinutos válidos', async () => {
+    const dataFutura = proximaSegundaAberta();
     const req = {
       method: 'GET',
       headers: {},
       query: {
-        data: '2026-11-23', // Próxima segunda-feira futura
+        data: dataFutura,
         duracaoMinutos: '60',
       },
     };
@@ -191,7 +199,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'POST',
       headers: {},
       body: {
-        data: '2026-11-23',
+        data: proximaSegundaAberta(),
         servicoId: 'serv-relaxante',
       },
     };
@@ -208,7 +216,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'POST',
       headers: {},
       body: {
-        data: '2026-11-23',
+        data: proximaSegundaAberta(),
         servicoId: 'servico-nao-existe',
       },
     };
@@ -223,7 +231,7 @@ describe('obterHorariosDisponiveis endpoint', () => {
       method: 'POST',
       headers: {},
       body: {
-        data: '2026-11-23',
+        data: proximaSegundaAberta(),
         servicoId: 'serv-desativado',
       },
     };

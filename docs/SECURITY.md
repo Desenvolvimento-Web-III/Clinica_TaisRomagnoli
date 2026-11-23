@@ -1,7 +1,11 @@
 # Segurança
 
 - A autorização será baseada em papéis. Os papéis iniciais previstos são `admin` e `client`.
-- Custom Claims serão atribuídas exclusivamente por backend confiável, nunca pelo frontend.
+- Custom Claims serão atribuídas exclusivamente por backend confiável, nunca pelo frontend. Para
+  compatibilidade com a base existente, Security Rules também reconhecem como administradora a
+  conta autenticada cujo UID tenha um documento `/admins/{uid}` com `role: "admin"`. Essa coleção
+  permanece sem escrita client-side (deny all); sua manutenção deve ocorrer pelo Console Firebase
+  ou por backend confiável.
 - A rota administrativa será protegida na interface e no roteamento, sem depender apenas disso.
 - Operações privilegiadas validarão autenticação e autorização nas Functions.
 - Firestore e Storage terão autorização independente nas Security Rules.

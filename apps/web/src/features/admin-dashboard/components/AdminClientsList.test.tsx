@@ -173,6 +173,13 @@ describe('AdminClientsList', () => {
     expect(screen.queryByTestId('clients-grid')).not.toBeInTheDocument();
   });
 
+  it('exibe erro de carregamento sem confundir a falha com uma lista vazia', () => {
+    renderComponent({ clients: [], error: 'Acesso negado.' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Acesso negado.');
+    expect(screen.queryByTestId('empty-search-state')).not.toBeInTheDocument();
+  });
+
   it('dispara onRefresh quando fornecido e o botão de atualização for clicado', () => {
     const mockRefresh = vi.fn();
     renderComponent({ onRefresh: mockRefresh });

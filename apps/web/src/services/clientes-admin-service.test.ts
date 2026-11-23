@@ -1,12 +1,98 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { mockCollection, mockGetDocs, mockDb } = vi.hoisted(() => ({
+  mockCollection: vi.fn(),
+  mockGetDocs: vi.fn(),
+  mockDb: {} as object,
+}));
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('firebase/firestore')>();
+  return {
+    ...actual,
+    collection: (...args: unknown[]) => mockCollection(...args),
+    getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  };
+});
+vi.mock('@/lib/firebase', () => ({ db: mockDb }));
 import { INITIAL_ANAMNESE_DATA, type Agendamento as SharedAgendamento } from '@clinica/shared';
 import * as anamneseService from './anamnese-service';
 import * as agendamentosService from './agendamentos-service';
-import { buscarPerfilClienteAdmin, mapFichaAnamneseToAdminView } from './clientes-admin-service';
+import { db } from '@/lib/firebase';
+import {
+  buscarClientesAdmin,
+  buscarPerfilClienteAdmin,
+  mapFichaAnamneseToAdminView,
+  mapFirestoreClientToAdminListItem,
+} from './clientes-admin-service';
 
 describe('clientes-admin-service', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockCollection.mockReset().mockReturnValue('clientes-collection');
+    mockGetDocs.mockReset();
+  });
+
+  it('buscarClientesAdmin lê diretamente os documentos da coleção clientes', async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: 'cliente-b',
+          data: () => ({ nome: 'Bruna', email: 'bruna@exemplo.com', status: 'ativo' }),
+        },
+        {
+          id: 'cliente-a',
+          data: () => ({ nome: 'Ana', telefone: '(11) 98888-7777', status: 'inativo' }),
+        },
+      ],
+    } as never);
+
+    await expect(buscarClientesAdmin()).resolves.toEqual([
+      {
+        id: 'cliente-a',
+        nome: 'Ana',
+        email: '',
+        telefone: '(11) 98888-7777',
+        status: 'inativo',
+        totalAtendimentosMes: 0,
+        ultimoAtendimento: undefined,
+        createdAt: undefined,
+      },
+      {
+        id: 'cliente-b',
+        nome: 'Bruna',
+        email: 'bruna@exemplo.com',
+        telefone: '',
+        status: 'ativo',
+        totalAtendimentosMes: 0,
+        ultimoAtendimento: undefined,
+        createdAt: undefined,
+      },
+    ]);
+    expect(mockCollection).toHaveBeenCalledWith(db, 'clientes');
+    expect(mockGetDocs).toHaveBeenCalledWith('clientes-collection');
+  });
+
+  it('buscarClientesAdmin retorna lista vazia quando coleção não tem documentos', async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+    await expect(buscarClientesAdmin()).resolves.toEqual([]);
+  });
+
+  it('mapFirestoreClientToAdminListItem converte Timestamp e valores ausentes', () => {
+    const timestamp = new Date('2026-11-20T10:00:00.000Z');
+    expect(
+      mapFirestoreClientToAdminListItem('cliente-1', {
+        nome: ' Cliente ',
+        createdAt: { toDate: () => timestamp },
+      }),
+    ).toEqual({
+      id: 'cliente-1',
+      nome: ' Cliente ',
+      email: '',
+      telefone: '',
+      status: 'ativo',
+      totalAtendimentosMes: 0,
+      ultimoAtendimento: undefined,
+      createdAt: '2026-11-20T10:00:00.000Z',
+    });
   });
 
   it('mapFichaAnamneseToAdminView converte contraindicações e status de liberação médica', () => {

@@ -11,6 +11,7 @@ import {
   carregarAgendamentos,
 } from './agendamentos-service';
 import type { Agendamento as SharedAgendamento } from '@clinica/shared';
+import { environment } from '@/config/env';
 
 describe('agendamentos-service', () => {
   beforeEach(() => {
@@ -55,10 +56,14 @@ describe('agendamentos-service', () => {
     expect(ui.observacao).toBe('Preferência por óleo neutro');
   });
 
-  it('getFunctionsBaseUrl retorna a URL dos emuladores em ambiente de desenvolvimento', () => {
-    const url = getFunctionsBaseUrl();
-    expect(url).toContain('5001');
-    expect(url).toContain('us-central1');
+  it('getFunctionsBaseUrl respeita a configuração Firebase e só usa emuladores quando configurados', () => {
+    const projectId = environment.firebase?.projectId || 'demo-clinica-local';
+    const expectedUrl =
+      environment.useFirebaseEmulators || !environment.firebase
+        ? `http://127.0.0.1:5001/${projectId}/us-central1`
+        : `https://us-central1-${projectId}.cloudfunctions.net`;
+
+    expect(getFunctionsBaseUrl()).toBe(expectedUrl);
   });
 
   it('solicitarAgendamentoBackend executa requisição POST com sucesso', async () => {

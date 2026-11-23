@@ -141,6 +141,28 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
       await assertSucceeds(adminDb.collection('clientes').get());
     });
 
+    it('permite listar clientes quando a coleção /admins contém o UID autenticado com role admin', async () => {
+      await testEnvironment.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().doc('admins/admin-registry-user').set({
+          email: 'admin@exemplo.com',
+          role: 'admin',
+        });
+      });
+
+      const adminDb = testEnvironment.authenticatedContext('admin-registry-user').firestore();
+
+      await assertSucceeds(adminDb.collection('clientes').get());
+    });
+
+    it('não permite que clientes se promovam criando um registro em /admins', async () => {
+      const clientDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+
+      await assertFails(clientDb.doc('admins/cliente-joao').set({ role: 'admin' }));
+      await assertFails(clientDb.collection('clientes').get());
+    });
+
     it('bloqueia a listagem de clientes para usuários clientes comuns', async () => {
       const clientDb = testEnvironment
         .authenticatedContext('cliente-joao', { role: 'cliente' })
