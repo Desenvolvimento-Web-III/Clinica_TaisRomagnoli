@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const { mockCollection, mockGetDocs } = vi.hoisted(() => ({
+const { mockCollection, mockGetDocs, mockDb } = vi.hoisted(() => ({
   mockCollection: vi.fn(),
   mockGetDocs: vi.fn(),
+  mockDb: {} as object,
 }));
 vi.mock('firebase/firestore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('firebase/firestore')>();
@@ -11,6 +12,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     getDocs: (...args: unknown[]) => mockGetDocs(...args),
   };
 });
+vi.mock('@/lib/firebase', () => ({ db: mockDb }));
 import { INITIAL_ANAMNESE_DATA, type Agendamento as SharedAgendamento } from '@clinica/shared';
 import * as anamneseService from './anamnese-service';
 import * as agendamentosService from './agendamentos-service';

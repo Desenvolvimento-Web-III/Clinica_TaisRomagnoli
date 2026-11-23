@@ -12,6 +12,8 @@ import {
 import * as anamneseService from '@/services/anamnese-service';
 import * as agendamentosService from '@/services/agendamentos-service';
 import * as settingsService from '@/services/clinic-settings-service';
+import * as clientesAdminService from '@/services/clientes-admin-service';
+import { CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
 import { AdminDashboardPage } from './AdminDashboardPage';
 import { useAuth } from '@/features/auth/auth-context';
 
@@ -24,6 +26,7 @@ describe('AdminDashboardPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(clientesAdminService, 'buscarClientesAdmin').mockResolvedValue(CLIENTES_DEMO_INICIAIS);
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
       DEFAULT_CLINIC_SETTINGS,
     );
@@ -98,13 +101,13 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByTestId('indicador-ocupacao-agenda')).toBeInTheDocument();
   });
 
-  it('permite alternar para a aba Clientes e buscar cliente', () => {
+  it('permite alternar para a aba Clientes e buscar cliente', async () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole('tab', { name: /clientes/i }));
 
     expect(screen.getByRole('heading', { name: /gestão de clientes/i })).toBeInTheDocument();
-    expect(screen.getAllByText(/cliente recorrente/i).length).toBeGreaterThan(0);
+    expect(await screen.findAllByText(/cliente recorrente/i)).not.toHaveLength(0);
     expect(screen.getAllByText(/ver ficha completa/i).length).toBeGreaterThan(0);
 
     const inputBusca = screen.getByPlaceholderText(/buscar por nome ou telefone/i);
@@ -349,6 +352,8 @@ describe('AdminDashboardPage', () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole('button', { name: /novo agendamento presencial/i }));
+
+    await screen.findByRole('option', { name: 'Mariana Silva' });
 
     fireEvent.change(screen.getByLabelText(/cliente cadastrado/i), {
       target: { value: 'demo-client-1' },
