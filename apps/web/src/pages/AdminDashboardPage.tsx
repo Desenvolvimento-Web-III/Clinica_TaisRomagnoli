@@ -1040,7 +1040,9 @@ export function AdminDashboardPage() {
                   {painelIndicadores.indicadores.servicoMaisAgendado.nome}
                 </p>
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                  {painelIndicadores.indicadores.servicoMaisAgendado.detalhe}
+                  {painelIndicadores.indicadores.servicoMaisAgendado.totalAgendamentos === 0
+                    ? '0 agendamentos no período'
+                    : painelIndicadores.indicadores.servicoMaisAgendado.detalhe}
                 </p>
               </div>
             </div>

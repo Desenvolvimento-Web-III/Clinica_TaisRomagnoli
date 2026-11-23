@@ -13,6 +13,7 @@ import * as anamneseService from '@/services/anamnese-service';
 import * as agendamentosService from '@/services/agendamentos-service';
 import * as settingsService from '@/services/clinic-settings-service';
 import * as clientesAdminService from '@/services/clientes-admin-service';
+import * as indicadoresAdminService from '@/services/indicadores-admin-service';
 import { CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
 import { AdminDashboardPage } from './AdminDashboardPage';
 import { useAuth } from '@/features/auth/auth-context';
@@ -188,6 +189,41 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByTestId('indicador-ocupacao-agenda')).toBeInTheDocument();
     expect(screen.getByTestId('indicador-valores-recebidos')).toBeInTheDocument();
     expect(screen.getByTestId('indicador-servico-mais-agendado')).toBeInTheDocument();
+  });
+
+  it('mantém os cards financeiros e de serviços visíveis quando os indicadores são zero', async () => {
+    const painelZerado = structuredClone(indicadoresAdminService.PAINEL_INDICADORES_PADRAO);
+    painelZerado.indicadores.valoresRecebidosEPrevistos = {
+      valorTotalRecebidoCentavos: 0,
+      valorTotalPrevistoCentavos: 0,
+      valorTotalRecebidoReais: 0,
+      valorTotalPrevistoReais: 0,
+      valorSinaisRetidosCentavos: 0,
+      detalhe: 'R$ 0,00 recebidos, R$ 0,00 previstos',
+    };
+    painelZerado.indicadores.servicoMaisAgendado = {
+      servicoId: null,
+      nome: 'Nenhum atendimento registrado',
+      totalAgendamentos: 0,
+      detalhe: 'Sem atendimentos registrados no período',
+      rankingTopServicos: [],
+    };
+    vi.spyOn(indicadoresAdminService, 'consultarPainelIndicadoresAdmin').mockResolvedValue(
+      painelZerado,
+    );
+
+    renderDashboard();
+    fireEvent.click(screen.getByRole('tab', { name: /relatórios/i }));
+
+    const cardPagamentos = screen.getByTestId('indicador-valores-recebidos');
+    const cardServicos = screen.getByTestId('indicador-servico-mais-agendado');
+    expect(cardPagamentos).toBeVisible();
+    expect(cardServicos).toBeVisible();
+    await waitFor(() => {
+      expect(cardPagamentos).toHaveTextContent('R$ 0');
+      expect(cardServicos).toHaveTextContent('Nenhum atendimento registrado');
+      expect(cardServicos).toHaveTextContent('0 agendamentos no período');
+    });
   });
 
   it('permite alternar para a aba Configurações e exibe link para gestor de horários e formulário geral', async () => {
