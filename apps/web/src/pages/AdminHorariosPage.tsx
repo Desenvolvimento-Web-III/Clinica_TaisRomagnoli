@@ -311,11 +311,11 @@ export function AdminHorariosPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-[#000000] sm:text-3xl">
-                Horários de Funcionamento e Manutenção
+                Configuração de Horários de Funcionamento
               </h1>
               <p className="mt-1 text-sm text-[#334155]">
-                Configure os dias de atendimento, os turnos da profissional e os intervalos de
-                manutenção e higienização das salas.
+                Configure os dias de atendimento, abertura, fechamento e os intervalos entre
+                sessões.
               </p>
             </div>
           </div>
@@ -385,6 +385,7 @@ export function AdminHorariosPage() {
               <div className="flex items-center space-x-3">
                 <input
                   id="intervalo-padrao"
+                  aria-label="Intervalo padrão entre sessões em minutos"
                   type="number"
                   min="0"
                   max="120"
@@ -498,10 +499,11 @@ export function AdminHorariosPage() {
                                     htmlFor={`turno-inicio-${diaItem.dia}-${tIdx}`}
                                     className="sr-only"
                                   >
-                                    Início
+                                    {`${nomeDia}, turno ${tIdx + 1}, abertura`}
                                   </label>
                                   <input
                                     id={`turno-inicio-${diaItem.dia}-${tIdx}`}
+                                    aria-label={`${nomeDia}, turno ${tIdx + 1}, abertura`}
                                     type="time"
                                     value={turno.inicio}
                                     onChange={(e) =>
@@ -514,10 +516,11 @@ export function AdminHorariosPage() {
                                     htmlFor={`turno-fim-${diaItem.dia}-${tIdx}`}
                                     className="sr-only"
                                   >
-                                    Término
+                                    {`${nomeDia}, turno ${tIdx + 1}, fechamento`}
                                   </label>
                                   <input
                                     id={`turno-fim-${diaItem.dia}-${tIdx}`}
+                                    aria-label={`${nomeDia}, turno ${tIdx + 1}, fechamento`}
                                     type="time"
                                     value={turno.fim}
                                     onChange={(e) =>
@@ -649,6 +652,7 @@ export function AdminHorariosPage() {
                         <div className="flex items-center space-x-2">
                           <input
                             id={`intervalo-dia-${diaItem.dia}`}
+                            aria-label={`Intervalo entre sessões — ${nomeDia} em minutos`}
                             type="number"
                             min="0"
                             max="120"
