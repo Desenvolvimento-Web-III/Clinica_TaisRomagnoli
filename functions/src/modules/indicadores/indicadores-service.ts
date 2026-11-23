@@ -200,7 +200,7 @@ export async function calcularOitoIndicadoresPainel(
     total: totalRecorrentes,
     criterioMinimoAtendimentosMes: criterioMinimoRecorrencia,
     percentualSobreTotal: percentualRecorrentes,
-    detalhe: `≥ ${criterioMinimoRecorrencia} atendimentos no mesmo mês`,
+    detalhe: `≥ ${criterioMinimoRecorrencia} consultas concluídas no mesmo mês`,
   };
 
   // --- 4. ATENDIMENTOS REALIZADOS NO MÊS ---
