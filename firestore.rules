@@ -10,10 +10,18 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function hasAdminRegistryRecord() {
+      let adminPath = /databases/$(database)/documents/admins/$(request.auth.uid);
+      return isSignedIn()
+        && exists(adminPath)
+        && get(adminPath).data.role == 'admin';
+    }
+
     function isAdmin() {
       return isSignedIn() && (
         ('role' in request.auth.token && request.auth.token.role == 'admin') ||
-        ('admin' in request.auth.token && request.auth.token.admin == true)
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        hasAdminRegistryRecord()
       );
     }
 

@@ -21,7 +21,7 @@ import { resolveLocalServiceImage } from '@/features/services/service-firestore-
  */
 export function getFunctionsBaseUrl(): string {
   const projectId = environment.firebase?.projectId || 'demo-clinica-local';
-  if (environment.useFirebaseEmulators || import.meta.env.DEV) {
+  if (environment.useFirebaseEmulators || !environment.firebase) {
     return `http://127.0.0.1:5001/${projectId}/us-central1`;
   }
   return `https://us-central1-${projectId}.cloudfunctions.net`;

@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { avaliarBloqueioContraindicacao, type FichaAnamneseRecord } from '@clinica/shared';
 import { db } from '@/lib/firebase';
 import { demoAdministrativeClientProfile } from '@/features/admin-client-profile/demo-profile';
@@ -8,6 +8,7 @@ import type {
   ClientAnamnesis,
 } from '@/features/admin-client-profile/types';
 import type { AdminClientListItem } from '@/features/admin-dashboard/types';
+import type { Firestore } from 'firebase/firestore';
 import { obterFichaAnamneseApi } from './anamnese-service';
 import { listarAgendamentosBackend } from './agendamentos-service';
 
@@ -50,39 +51,46 @@ export const CLIENTES_DEMO_INICIAIS: AdminClientListItem[] = [
   },
 ];
 
-/**
- * Consulta a lista de clientes para a visão administrativa.
- * Consulta o Firestore com autorização administrativa (Security Rules: allow list: if isAdmin()).
- * Caso ocorra falha de rede ou em modo demonstrativo, retorna os clientes iniciais de fallback.
- */
-export async function buscarClientesAdmin(): Promise<AdminClientListItem[]> {
-  if (db) {
-    try {
-      const q = query(collection(db, 'clientes'), orderBy('nome', 'asc'));
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        return snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            nome: data.nome || 'Cliente sem nome',
-            email: data.email || '',
-            telefone: data.telefone || '',
-            status: data.status === 'inativo' ? 'inativo' : 'ativo',
-            totalAtendimentosMes:
-              typeof data.totalAtendimentosMes === 'number' ? data.totalAtendimentosMes : 0,
-            ultimoAtendimento: data.ultimoAtendimento || undefined,
-            createdAt: data.createdAt || undefined,
-          };
-        });
-      }
-    } catch (err) {
-      console.warn('Aviso: Consulta direta ao Firestore /clientes falhou ou sem permissão:', err);
+/** Converte um documento da coleção /clientes para o formato da listagem administrativa. */
+export function mapFirestoreClientToAdminListItem(
+  id: string,
+  cliente: Record<string, unknown>,
+): AdminClientListItem {
+  const toIsoString = (value: unknown): string | undefined => {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && 'toDate' in value) {
+      const date = (value as { toDate: () => Date }).toDate();
+      return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
     }
+    return undefined;
+  };
+
+  return {
+    id,
+    nome:
+      typeof cliente.nome === 'string' && cliente.nome.trim() ? cliente.nome : 'Cliente sem nome',
+    email: typeof cliente.email === 'string' ? cliente.email : '',
+    telefone: typeof cliente.telefone === 'string' ? cliente.telefone : '',
+    status: cliente.status === 'inativo' ? 'inativo' : 'ativo',
+    totalAtendimentosMes:
+      typeof cliente.totalAtendimentosMes === 'number' ? cliente.totalAtendimentosMes : 0,
+    ultimoAtendimento: toIsoString(cliente.ultimoAtendimento),
+    createdAt: toIsoString(cliente.createdAt),
+  };
+}
+
+/** Lista diretamente os documentos da coleção /clientes, protegida pelas Security Rules. */
+export async function buscarClientesAdmin(
+  customDb: Firestore | null = db,
+): Promise<AdminClientListItem[]> {
+  if (!customDb) {
+    throw new Error('Firebase não está configurado para carregar os clientes.');
   }
 
-  return CLIENTES_DEMO_INICIAIS;
+  const snapshot = await getDocs(collection(customDb, 'clientes'));
+  return snapshot.docs
+    .map((clienteDoc) => mapFirestoreClientToAdminListItem(clienteDoc.id, clienteDoc.data()))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export function mapFichaAnamneseToAdminView(ficha: Partial<FichaAnamneseRecord>): ClientAnamnesis {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   avaliarBloqueioContraindicacao,
@@ -33,7 +33,7 @@ import {
   solicitarAgendamentoBackend,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
-import { buscarClientesAdmin, CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
+import { buscarClientesAdmin } from '@/services/clientes-admin-service';
 import {
   consultarPainelIndicadoresAdmin,
   PAINEL_INDICADORES_PADRAO,
@@ -290,30 +290,50 @@ export function AdminDashboardPage() {
   const [submittingPresencial, setSubmittingPresencial] = useState(false);
 
   // Estados de Gerenciamento de Clientes
-  const [clientes, setClientes] = useState<AdminClientListItem[]>(CLIENTES_DEMO_INICIAIS);
-  const [isLoadingClientes, setIsLoadingClientes] = useState(false);
+  const [clientes, setClientes] = useState<AdminClientListItem[]>([]);
+  const [isLoadingClientes, setIsLoadingClientes] = useState(true);
+  const [erroClientes, setErroClientes] = useState<string | null>(null);
 
   // Estados dos 8 Indicadores do Painel Administrativo
   const [painelIndicadores, setPainelIndicadores] =
     useState<PainelIndicadores>(PAINEL_INDICADORES_PADRAO);
 
-  const carregarClientes = async () => {
+  const carregarClientes = useCallback(async () => {
     setIsLoadingClientes(true);
+    setErroClientes(null);
     try {
       const lista = await buscarClientesAdmin();
       setClientes(lista);
+    } catch (error) {
+      setClientes([]);
+      setErroClientes(
+        error instanceof Error ? error.message : 'Não foi possível carregar os clientes.',
+      );
     } finally {
       setIsLoadingClientes(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let ativo = true;
-    void buscarClientesAdmin().then((lista) => {
-      if (ativo && lista && lista.length > 0) {
-        setClientes(lista);
-      }
-    });
+    void buscarClientesAdmin()
+      .then((lista) => {
+        if (ativo) {
+          setClientes(lista);
+          setErroClientes(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (ativo) {
+          setClientes([]);
+          setErroClientes(
+            error instanceof Error ? error.message : 'Não foi possível carregar os clientes.',
+          );
+        }
+      })
+      .finally(() => {
+        if (ativo) setIsLoadingClientes(false);
+      });
     void buscarAgendamentosAdmin().then((lista) => {
       if (ativo && lista && lista.length > 0) {
         setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
@@ -811,6 +831,7 @@ export function AdminDashboardPage() {
             <AdminClientsList
               clients={clientes}
               isLoading={isLoadingClientes}
+              error={erroClientes}
               onRefresh={carregarClientes}
             />
           </section>

@@ -5,6 +5,7 @@ import type { AdminClientListItem } from '../types';
 export interface AdminClientsListProps {
   clients: AdminClientListItem[];
   isLoading?: boolean;
+  error?: string | null;
   onRefresh?: () => void;
 }
 
@@ -19,7 +20,12 @@ function getInitials(name: string): string {
   return `${first}${last}`.toUpperCase();
 }
 
-export function AdminClientsList({ clients, isLoading = false, onRefresh }: AdminClientsListProps) {
+export function AdminClientsList({
+  clients,
+  isLoading = false,
+  error,
+  onRefresh,
+}: AdminClientsListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<ClientFilter>('todos');
   const searchInputId = useId();
@@ -106,6 +112,16 @@ export function AdminClientsList({ clients, isLoading = false, onRefresh }: Admi
           </button>
         )}
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          data-testid="clients-load-error"
+          className="rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] px-4 py-3 text-sm text-[var(--color-error-text)]"
+        >
+          {error}
+        </div>
+      )}
 
       {/* Cards de Métricas Resumidas */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
@@ -417,7 +433,7 @@ export function AdminClientsList({ clients, isLoading = false, onRefresh }: Admi
       )}
 
       {/* Estado Vazio de Pesquisa */}
-      {(!isLoading || clients.length > 0) && filteredClients.length === 0 && (
+      {!error && (!isLoading || clients.length > 0) && filteredClients.length === 0 && (
         <div
           data-testid="empty-search-state"
           className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border-default)] bg-white p-10 text-center"
