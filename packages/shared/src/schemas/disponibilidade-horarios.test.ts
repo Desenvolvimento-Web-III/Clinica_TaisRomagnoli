@@ -291,4 +291,56 @@ describe('disponibilidade-horarios', () => {
       expect(parsed.success).toBe(false);
     });
   });
+
+  describe('Bloqueio e liberação de horário por reserva temporária durante pagamento', () => {
+    const dataAlvo = '2026-11-25'; // Quarta-feira
+    const agoraRef = new Date('2026-11-25T10:00:00.000Z');
+
+    it('bloqueia o horário quando a reserva temporária está dentro do prazo de tolerância', () => {
+      // Reserva de 15 minutos criada às 09:55, expira às 10:10
+      const agendamentosExistentes = [
+        {
+          dataHoraInicio: '2026-11-25T10:00:00.000Z',
+          dataHoraFim: '2026-11-25T11:00:00.000Z',
+          intervaloAposMinutos: 30,
+          status: 'pendente',
+          reservaExpiraEm: '2026-11-25T10:10:00.000Z',
+        },
+      ];
+
+      const slots = gerarHorariosDisponiveis({
+        data: dataAlvo,
+        duracaoMinutos: 60,
+        agendamentosExistentes,
+        dataReferencia: agoraRef,
+      });
+
+      const horarios = slots.map((s) => s.horaInicio);
+      expect(horarios).not.toContain('10:00');
+    });
+
+    it('libera o horário quando a reserva temporária pendente já expirou', () => {
+      // Reserva temporária que expirou às 09:50
+      const agendamentosExistentes = [
+        {
+          dataHoraInicio: '2026-11-25T10:00:00.000Z',
+          dataHoraFim: '2026-11-25T11:00:00.000Z',
+          intervaloAposMinutos: 30,
+          status: 'pendente',
+          reservaExpiraEm: '2026-11-25T09:50:00.000Z', // Expirado em relação a 10:00
+        },
+      ];
+
+      const slots = gerarHorariosDisponiveis({
+        data: dataAlvo,
+        duracaoMinutos: 60,
+        agendamentosExistentes,
+        dataReferencia: agoraRef,
+      });
+
+      const horarios = slots.map((s) => s.horaInicio);
+      // O horário das 10:00 foi liberado e está disponível novamente
+      expect(horarios).toContain('10:00');
+    });
+  });
 });

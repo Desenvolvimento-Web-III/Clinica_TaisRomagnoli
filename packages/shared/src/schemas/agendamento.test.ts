@@ -11,6 +11,10 @@ import {
   verificarAntecedenciaCancelamento,
   verificarDataHoraNoPassado,
   obterDataAtualIso,
+  verificarReservaExpirada,
+  calcularExpiracaoReservaTemporaria,
+  TEMPO_PADRAO_RESERVA_TEMPORARIA_MINUTOS,
+  solicitarReservaTemporariaInputSchema,
 } from './agendamento.js';
 
 describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
@@ -350,6 +354,106 @@ describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
 
     it('retorna data no formato YYYY-MM-DD em obterDataAtualIso', () => {
       expect(obterDataAtualIso(dataRef)).toBe('2026-11-13');
+    });
+  });
+
+  describe('Reserva Temporária durante o Pagamento', () => {
+    const agora = new Date('2026-11-24T15:00:00.000Z');
+
+    it('calcula data de expiração da reserva temporária com 15 minutos padrão', () => {
+      const expiraIso = calcularExpiracaoReservaTemporaria(agora);
+      expect(expiraIso).toBe('2026-11-24T15:15:00.000Z');
+      expect(TEMPO_PADRAO_RESERVA_TEMPORARIA_MINUTOS).toBe(15);
+    });
+
+    it('calcula data de expiração da reserva temporária com minutos customizados', () => {
+      const expiraIso = calcularExpiracaoReservaTemporaria(agora, 30);
+      expect(expiraIso).toBe('2026-11-24T15:30:00.000Z');
+    });
+
+    it('verificarReservaExpirada identifica se a reserva temporária expirou', () => {
+      // Reserva pendente válida (ainda no tempo de retenção)
+      expect(
+        verificarReservaExpirada(
+          {
+            status: 'pendente',
+            reservaExpiraEm: '2026-11-24T15:15:00.000Z',
+          },
+          agora,
+        ),
+      ).toBe(false);
+
+      // Reserva pendente expirada (momento posterior ao limite)
+      const depoisLimite = new Date('2026-11-24T15:15:01.000Z');
+      expect(
+        verificarReservaExpirada(
+          {
+            status: 'pendente',
+            reservaExpiraEm: '2026-11-24T15:15:00.000Z',
+          },
+          depoisLimite,
+        ),
+      ).toBe(true);
+
+      // Reserva no exato momento limite é considerada expirada
+      const noLimite = new Date('2026-11-24T15:15:00.000Z');
+      expect(
+        verificarReservaExpirada(
+          {
+            status: 'pendente',
+            reservaExpiraEm: '2026-11-24T15:15:00.000Z',
+          },
+          noLimite,
+        ),
+      ).toBe(true);
+    });
+
+    it('não considera expirado se agendamento já estiver confirmado ou cancelado', () => {
+      const depoisLimite = new Date('2026-11-24T15:30:00.000Z');
+      expect(
+        verificarReservaExpirada(
+          {
+            status: 'confirmado',
+            reservaExpiraEm: '2026-11-24T15:15:00.000Z',
+          },
+          depoisLimite,
+        ),
+      ).toBe(false);
+
+      expect(
+        verificarReservaExpirada(
+          {
+            status: 'cancelado',
+            reservaExpiraEm: '2026-11-24T15:15:00.000Z',
+          },
+          depoisLimite,
+        ),
+      ).toBe(false);
+    });
+
+    it('não considera expirado se não possuir reservaExpiraEm', () => {
+      expect(
+        verificarReservaExpirada(
+          {
+            status: 'pendente',
+          },
+          agora,
+        ),
+      ).toBe(false);
+    });
+
+    it('solicitarReservaTemporariaInputSchema aceita tempoReservaMinutos opcional', () => {
+      const parsed = solicitarReservaTemporariaInputSchema.parse({
+        servicoId: 'srv-1',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 15000,
+        dataHoraInicio: '2026-11-25T14:00:00.000Z',
+        metodoPagamento: 'pix',
+        tempoReservaMinutos: 20,
+      });
+
+      expect(parsed.tempoReservaMinutos).toBe(20);
     });
   });
 });

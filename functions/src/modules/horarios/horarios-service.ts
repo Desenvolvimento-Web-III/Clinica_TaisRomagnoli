@@ -196,6 +196,7 @@ export async function consultarGradeHorariosDisponiveis(
     bloqueios,
     horariosFixos,
     clienteIdSolicitante,
+    dataReferencia,
   });
 
   let slotsFinais = slots;

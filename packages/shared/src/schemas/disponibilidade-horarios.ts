@@ -3,7 +3,7 @@ import {
   CONFIGURACAO_HORARIOS_PADRAO,
   type HorariosFuncionamento,
 } from './horarios-funcionamento.js';
-import { verificarConflitoHorarios } from './agendamento.js';
+import { verificarConflitoHorarios, verificarReservaExpirada } from './agendamento.js';
 import {
   extrairDataHoraLocal,
   verificarConflitoBloqueioOuHorarioFixo,
@@ -112,10 +112,12 @@ export interface GerarHorariosDisponiveisParams {
     dataHoraFim: string;
     intervaloAposMinutos?: number;
     status?: string;
+    reservaExpiraEm?: string;
   }>;
   bloqueios?: BloqueioAgenda[];
   horariosFixos?: HorarioFixoCliente[];
   clienteIdSolicitante?: string;
+  dataReferencia?: Date | string;
 }
 
 /**
@@ -125,6 +127,7 @@ export interface GerarHorariosDisponiveisParams {
  * 2. O intervalo padrão de 30 minutos de organização entre atendimentos.
  * 3. Encaixe dentro dos turnos da clínica sem invadir intervalos de manutenção.
  * 4. Respeito a bloqueios da clínica e reservas de clientes fixos.
+ * 5. Bloqueio de horário por tempo limitado durante reservas temporárias em processamento de pagamento.
  */
 export function gerarHorariosDisponiveis(params: GerarHorariosDisponiveisParams): SlotDisponivel[] {
   const {
@@ -137,6 +140,7 @@ export function gerarHorariosDisponiveis(params: GerarHorariosDisponiveisParams)
     bloqueios = [],
     horariosFixos = [],
     clienteIdSolicitante,
+    dataReferencia,
   } = params;
 
   if (duracaoMinutos <= 0) {
@@ -156,7 +160,10 @@ export function gerarHorariosDisponiveis(params: GerarHorariosDisponiveisParams)
   }
 
   const slotsDisponiveis: SlotDisponivel[] = [];
-  const agendamentosValidos = agendamentosExistentes.filter((a) => a.status !== 'cancelado');
+  const dataReferenciaObj = dataReferencia ? new Date(dataReferencia) : new Date();
+  const agendamentosValidos = agendamentosExistentes.filter(
+    (a) => a.status !== 'cancelado' && !verificarReservaExpirada(a, dataReferenciaObj),
+  );
 
   for (const turno of diaConfig.turnos) {
     const turnoInicioMin = horaParaMinutos(turno.inicio);

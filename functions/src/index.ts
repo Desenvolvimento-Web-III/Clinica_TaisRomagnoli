@@ -12,6 +12,8 @@ import {
 } from './modules/horarios/horarios-service.js';
 import {
   solicitarNovoAgendamento,
+  criarReservaTemporariaService,
+  expirarReservasTemporariasService,
   alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
   atualizarStatusAgendamento as atualizarStatusAgendamentoService,
@@ -102,6 +104,8 @@ export {
 } from './modules/horarios/horarios-service.js';
 export {
   solicitarNovoAgendamento,
+  criarReservaTemporariaService,
+  expirarReservasTemporariasService,
   alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
   atualizarStatusAgendamento as atualizarStatusAgendamentoService,
@@ -2760,5 +2764,105 @@ export const confirmarPagamentoSinal = onRequest({ cors: true }, async (request,
     }
     console.error('Erro ao confirmar pagamento do sinal:', error);
     response.status(500).json({ error: 'Erro interno ao confirmar pagamento do sinal.' });
+  }
+});
+
+/**
+ * Cria uma reserva temporária de horário enquanto o sinal é processado,
+ * bloqueando o horário na agenda por tempo determinado.
+ */
+export const criarReservaTemporaria = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const repo = new FirestoreAgendamentosRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const servicosRepo = new FirestoreServicosRepository(firestore);
+    const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
+    const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
+    const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
+    const anamneseRepo = new FirestoreAnamneseRepository(firestore);
+    const auditoriaRepo = obterAuditoriaRepository();
+
+    const agendamento = await criarReservaTemporariaService(
+      request.body,
+      user,
+      repo,
+      notifRepo,
+      servicosRepo,
+      bloqueiosRepo,
+      horariosFixosRepo,
+      undefined,
+      profissionaisRepo,
+      anamneseRepo,
+      new Date(),
+      auditoriaRepo,
+    );
+
+    response.status(201).json({
+      sucesso: true,
+      mensagem: 'Reserva temporária criada com sucesso.',
+      dados: agendamento,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados da requisição inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao criar reserva temporária:', error);
+    response.status(500).json({ error: 'Erro interno ao criar reserva temporária.' });
+  }
+});
+
+/**
+ * Expira reservas temporárias cujo tempo limite de pagamento foi ultrapassado,
+ * liberando os horários na agenda para novos atendimentos.
+ */
+export const expirarReservasTemporarias = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    if (!user.isAdmin) {
+      response.status(403).json({
+        error: 'Apenas a administradora pode executar a limpeza de reservas temporárias expiradas.',
+      });
+      return;
+    }
+
+    const firestore = getFirestore();
+    const repo = new FirestoreAgendamentosRepository(firestore);
+    const notifRepo = new FirestoreNotificacoesRepository(firestore);
+    const auditoriaRepo = obterAuditoriaRepository();
+
+    const expirados = await expirarReservasTemporariasService(
+      repo,
+      new Date(),
+      auditoriaRepo,
+      notifRepo,
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: `${expirados.length} reserva(s) temporária(s) expirada(s) e liberada(s).`,
+      dados: expirados,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao expirar reservas temporárias:', error);
+    response.status(500).json({ error: 'Erro interno ao expirar reservas temporárias.' });
   }
 });

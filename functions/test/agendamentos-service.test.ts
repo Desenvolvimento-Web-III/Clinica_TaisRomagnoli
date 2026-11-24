@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   solicitarNovoAgendamento,
+  criarReservaTemporariaService,
+  expirarReservasTemporariasService,
   alterarAgendamentoExistente,
   cancelarAgendamentoExistente,
   atualizarStatusAgendamento,
@@ -16,6 +18,7 @@ import { InMemoryServicosRepository } from '../src/modules/servicos/servicos-rep
 import { InMemoryProfissionaisRepository } from '../src/modules/profissionais/profissionais-repository.js';
 import { InMemoryAnamneseRepository } from '../src/modules/anamnese/anamnese-repository.js';
 import { InMemoryClientesRepository } from '../src/modules/clientes/clientes-repository.js';
+import { InMemoryAuditoriaRepository } from '../src/modules/auditoria/auditoria-repository.js';
 import {
   salvarFichaAnamneseService,
   registrarLiberacaoMedicaService,
@@ -1685,6 +1688,271 @@ describe('Agendamentos Service (Functions Backend)', () => {
           anamneseRepo,
         ),
       ).rejects.toMatchObject({ statusCode: 403 });
+    });
+  });
+
+  describe('Reserva Temporária durante o Pagamento do Sinal', () => {
+    let auditoriaRepo: InMemoryAuditoriaRepository;
+
+    beforeEach(() => {
+      auditoriaRepo = new InMemoryAuditoriaRepository();
+    });
+
+    it('cria reserva temporária com tempo de expiração padrão de 15 minutos para agendamento de cliente', async () => {
+      const dataRef = new Date('2026-11-25T10:00:00.000Z');
+      const agendamento = await criarReservaTemporariaService(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-11-25T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataRef,
+        auditoriaRepo,
+      );
+
+      expect(agendamento.status).toBe('pendente');
+      expect(agendamento.reservaExpiraEm).toBe('2026-11-25T10:15:00.000Z');
+
+      const logs = await auditoriaRepo.listar({ acao: 'agendamento.reserva_temporaria_criada' });
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.recursoId).toBe(agendamento.id);
+    });
+
+    it('permite customizar o tempo de retenção da reserva temporária', async () => {
+      const dataRef = new Date('2026-11-25T10:00:00.000Z');
+      const agendamento = await criarReservaTemporariaService(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-11-25T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+          tempoReservaMinutos: 30,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataRef,
+      );
+
+      expect(agendamento.reservaExpiraEm).toBe('2026-11-25T10:30:00.000Z');
+    });
+
+    it('bloqueia outro cliente de agendar no mesmo horário enquanto a reserva temporária estiver ativa', async () => {
+      const dataRef = new Date('2026-11-25T10:00:00.000Z');
+      await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-11-25T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataRef,
+      );
+
+      const outroClienteUser: UserContext = {
+        uid: 'outro-cliente-999',
+        nome: 'Fernanda Lima',
+        email: 'fernanda@exemplo.com',
+        isAdmin: false,
+      };
+
+      // Tentativa 5 minutos após o início da reserva (ainda dentro dos 15 minutos)
+      const dataTentativa = new Date('2026-11-25T10:05:00.000Z');
+
+      await expect(
+        solicitarNovoAgendamento(
+          {
+            servicoId: 'drenagem-linfatica',
+            servicoNome: 'Drenagem Linfática',
+            duracaoMinutos: 60,
+            valorTotalEmCentavos: 18000,
+            dataHoraInicio: '2026-11-25T14:00:00.000Z',
+            metodoPagamento: 'pix' as const,
+          },
+          outroClienteUser,
+          repo,
+          notifRepo,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          dataTentativa,
+        ),
+      ).rejects.toThrow(
+        'O horário selecionado não está disponível devido a outro agendamento ou intervalo de manutenção de 30 minutos.',
+      );
+    });
+
+    it('libera o horário para novo agendamento após a expiração da reserva temporária', async () => {
+      const dataCriacao = new Date('2026-11-25T10:00:00.000Z');
+      await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-11-25T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+          tempoReservaMinutos: 15,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataCriacao,
+      );
+
+      const outroClienteUser: UserContext = {
+        uid: 'outro-cliente-999',
+        nome: 'Fernanda Lima',
+        email: 'fernanda@exemplo.com',
+        isAdmin: false,
+      };
+
+      // Tentativa 16 minutos depois (reserva temporária já expirou)
+      const dataTentativa = new Date('2026-11-25T10:16:00.000Z');
+
+      const novoAgendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'drenagem-linfatica',
+          servicoNome: 'Drenagem Linfática',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 18000,
+          dataHoraInicio: '2026-11-25T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        outroClienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataTentativa,
+      );
+
+      expect(novoAgendamento.id).toBeDefined();
+      expect(novoAgendamento.clienteId).toBe('outro-cliente-999');
+      expect(novoAgendamento.status).toBe('pendente');
+    });
+
+    it('expirarReservasTemporariasService cancela agendamentos com reserva pendente expirada', async () => {
+      const dataCriacao = new Date('2026-11-25T10:00:00.000Z');
+      const ag1 = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-11-25T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+          tempoReservaMinutos: 15,
+        },
+        clienteUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataCriacao,
+      );
+
+      // Agendamento presencial confirmado (não deve ser cancelado)
+      const agConfirmado = await solicitarNovoAgendamento(
+        {
+          clienteId: 'cliente-presencial',
+          clienteNome: 'Cliente Presencial',
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-11-25T16:00:00.000Z',
+          metodoPagamento: 'presencial' as const,
+          isencaoSinalAdmin: true,
+        },
+        adminUser,
+        repo,
+        notifRepo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        dataCriacao,
+      );
+
+      expect(agConfirmado.status).toBe('confirmado');
+
+      // Momento 20 minutos após a criação (ag1 expirou)
+      const dataRotina = new Date('2026-11-25T10:20:00.000Z');
+      const expirados = await expirarReservasTemporariasService(
+        repo,
+        dataRotina,
+        auditoriaRepo,
+        notifRepo,
+      );
+
+      expect(expirados).toHaveLength(1);
+      expect(expirados[0]?.id).toBe(ag1.id);
+      expect(expirados[0]?.status).toBe('cancelado');
+      expect(expirados[0]?.motivoCancelamento).toContain(
+        'Tempo limite da reserva temporária expirado',
+      );
+
+      const ag1Salvo = await repo.buscarPorId(ag1.id);
+      expect(ag1Salvo?.status).toBe('cancelado');
+
+      const agConfSalvo = await repo.buscarPorId(agConfirmado.id);
+      expect(agConfSalvo?.status).toBe('confirmado');
+
+      // Verifica auditoria de cancelamento por expiração
+      const logs = await auditoriaRepo.listar({ acao: 'agendamento.reserva_temporaria_expirada' });
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.recursoId).toBe(ag1.id);
     });
   });
 });

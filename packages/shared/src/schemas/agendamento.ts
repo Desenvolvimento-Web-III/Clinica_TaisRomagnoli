@@ -69,12 +69,23 @@ export const solicitarAgendamentoInputSchema = z.object({
   profissionalId: z.string().optional().default('prof-tais-romagnoli'),
   profissionalNome: z.string().optional().default('Tais Romagnoli'),
   observacoes: z.string().max(500, 'Observações não podem exceder 500 caracteres.').optional(),
+  // Tempo de retenção da reserva temporária em minutos durante o processamento do pagamento
+  tempoReservaMinutos: z
+    .number()
+    .int()
+    .min(1, 'Tempo mínimo de reserva temporária é de 1 minuto.')
+    .max(120, 'Tempo máximo de reserva temporária é de 120 minutos.')
+    .optional(),
   // Campo exclusivo para criação presencial por administradora
   isencaoSinalAdmin: z.boolean().optional().default(false),
 });
 
 export type SolicitarAgendamentoInput = z.input<typeof solicitarAgendamentoInputSchema>;
 export type SolicitarAgendamentoParsed = z.output<typeof solicitarAgendamentoInputSchema>;
+
+export const solicitarReservaTemporariaInputSchema = solicitarAgendamentoInputSchema;
+export type SolicitarReservaTemporariaInput = SolicitarAgendamentoInput;
+export type SolicitarReservaTemporariaParsed = SolicitarAgendamentoParsed;
 
 export const cancelarAgendamentoInputSchema = z.object({
   agendamentoId: z.string().min(1, 'ID do agendamento é obrigatório.'),
@@ -113,6 +124,8 @@ export const agendamentoSchema = z.object({
   metodoPagamento: metodoPagamentoSchema,
   origem: origemAgendamentoSchema,
   sinalIsento: z.boolean(),
+  reservaExpiraEm: z.string().optional(),
+  cobrancaSinalId: z.string().optional(),
   observacoes: z.string().optional(),
   canceladoEm: z.string().optional(),
   concluidoEm: z.string().optional(),
@@ -164,6 +177,43 @@ export function calcularDataHoraFim(dataHoraInicioIso: string, duracaoMinutos: n
   const inicioDate = new Date(dataHoraInicioIso);
   const fimDate = new Date(inicioDate.getTime() + duracaoMinutos * 60 * 1000);
   return fimDate.toISOString();
+}
+
+/**
+ * Tempo padrão limite de retenção de reserva temporária em minutos (15 minutos),
+ * bloqueando o horário enquanto o sinal de 30% é processado pelo cliente.
+ */
+export const TEMPO_PADRAO_RESERVA_TEMPORARIA_MINUTOS = 15;
+
+/**
+ * Verifica se a reserva temporária de um agendamento com status pendente expirou.
+ * Retorna true apenas se o status for 'pendente', possuir 'reservaExpiraEm' e a data de referência for posterior ou igual.
+ */
+export function verificarReservaExpirada(
+  agendamento: { status?: string; reservaExpiraEm?: string | null },
+  dataReferencia: Date = new Date(),
+): boolean {
+  if (agendamento.status !== 'pendente') {
+    return false;
+  }
+  if (!agendamento.reservaExpiraEm) {
+    return false;
+  }
+  const expiraEmMs = new Date(agendamento.reservaExpiraEm).getTime();
+  if (isNaN(expiraEmMs)) {
+    return false;
+  }
+  return expiraEmMs <= dataReferencia.getTime();
+}
+
+/**
+ * Calcula a data/hora ISO de expiração da reserva temporária a partir de uma data de referência e duração em minutos.
+ */
+export function calcularExpiracaoReservaTemporaria(
+  dataInicioReserva: Date = new Date(),
+  minutosValidade: number = TEMPO_PADRAO_RESERVA_TEMPORARIA_MINUTOS,
+): string {
+  return new Date(dataInicioReserva.getTime() + minutosValidade * 60 * 1000).toISOString();
 }
 
 /**
