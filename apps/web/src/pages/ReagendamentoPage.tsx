@@ -1,17 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 import {
   getAgendamentosStorage,
-  getTodosAgendamentosStorage,
   saveAgendamentosStorage,
 } from '@/features/agendamentos/data/agendamentos-storage';
-import { alterarAgendamentoBackend } from '@/services/agendamentos-service';
 import {
-  gerarDiasReagendamento,
-  gerarHorariosParaData,
-} from '@/features/agendamentos/utils/reagendamento-utils';
+  alterarAgendamentoBackend,
+  carregarAgendamentos,
+  mapBackendAgendamentoToUi,
+} from '@/services/agendamentos-service';
+import {
+  buscarHorariosFuncionamento,
+  consultarHorariosDisponiveisBackend,
+} from '@/services/horarios-service';
+import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
+import { gerarDiasReagendamento } from '@/features/agendamentos/utils/reagendamento-utils';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
 
 export function ReagendamentoPage() {
@@ -32,7 +37,13 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>(() =>
     getAgendamentosStorage(userId),
   );
-  const todosAgendamentos = useMemo(() => getTodosAgendamentosStorage(), []);
+  const [configuracaoHorarios, setConfiguracaoHorarios] = useState(CONFIGURACAO_HORARIOS_PADRAO);
+  const [gradeHorarios, setGradeHorarios] = useState<{
+    data: string;
+    horarios: string[];
+    erro: string | null;
+  }>({ data: '', horarios: [], erro: null });
+  const [erroReagendamento, setErroReagendamento] = useState<string | null>(null);
   const agora = useMemo(() => new Date(), []);
   const hojeIso = useMemo(() => {
     const y = agora.getFullYear();
@@ -43,36 +54,99 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
   const agendamentoAtual = useMemo(() => {
     if (!userId) return undefined;
-    return agendamentosLocais.find((item) => item.id === id) || agendamentosLocais[0];
+    return id ? agendamentosLocais.find((item) => item.id === id) : agendamentosLocais[0];
   }, [agendamentosLocais, id, userId]);
 
+  useEffect(() => {
+    let ativo = true;
+    carregarAgendamentos(userId).then((resultado) => {
+      if (ativo && resultado.agendamentos.length > 0) {
+        setAgendamentosLocais(resultado.agendamentos);
+      }
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    let ativo = true;
+    buscarHorariosFuncionamento(agendamentoAtual?.profissionalId).then((config) => {
+      if (ativo) setConfiguracaoHorarios(config);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [agendamentoAtual?.profissionalId]);
+
   const opcoesDatasDisponiveis = useMemo(() => {
-    return gerarDiasReagendamento(agendamentoAtual?.dataHoraIso, agora, 6);
-  }, [agendamentoAtual?.dataHoraIso, agora]);
+    return gerarDiasReagendamento(agendamentoAtual?.dataHoraIso, agora, 6, configuracaoHorarios);
+  }, [agendamentoAtual?.dataHoraIso, agora, configuracaoHorarios]);
 
   const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
-    const dias = gerarDiasReagendamento(agendamentoAtual?.dataHoraIso, agora, 6);
-    return dias[0]?.isoDate || '2026-11-18';
+    const dias = gerarDiasReagendamento(
+      agendamentoAtual?.dataHoraIso,
+      agora,
+      6,
+      CONFIGURACAO_HORARIOS_PADRAO,
+    );
+    return dias[0]?.isoDate || '';
   });
 
-  const horariosDisponiveis = useMemo(() => {
-    return gerarHorariosParaData(
-      dataSelecionada,
-      agendamentoAtual?.duracaoMinutos || 60,
-      todosAgendamentos,
-    );
-  }, [dataSelecionada, agendamentoAtual?.duracaoMinutos, todosAgendamentos]);
+  const dataSelecionadaEfetiva = opcoesDatasDisponiveis.some(
+    (dia) => dia.isoDate === dataSelecionada,
+  )
+    ? dataSelecionada
+    : (opcoesDatasDisponiveis[0]?.isoDate ?? '');
 
   const [horarioSelecionadoRaw, setHorarioSelecionado] = useState<string>('10:00');
+  const agendamentoId = agendamentoAtual?.id;
+  const duracaoMinutos = agendamentoAtual?.duracaoMinutos;
+  const servicoId = agendamentoAtual?.servicoId;
+  const profissionalId = agendamentoAtual?.profissionalId;
+
+  useEffect(() => {
+    if (!dataSelecionadaEfetiva || !agendamentoId || !duracaoMinutos) return;
+
+    let ativo = true;
+    consultarHorariosDisponiveisBackend({
+      data: dataSelecionadaEfetiva,
+      duracaoMinutos,
+      servicoId,
+      profissionalId,
+    })
+      .then((horarios) => {
+        if (!ativo) return;
+        setGradeHorarios({ data: dataSelecionadaEfetiva, horarios, erro: null });
+        setHorarioSelecionado(horarios[0] || '');
+      })
+      .catch(() => {
+        if (ativo) {
+          setGradeHorarios({
+            data: dataSelecionadaEfetiva,
+            horarios: [],
+            erro: 'Não foi possível consultar os horários. Tente novamente.',
+          });
+        }
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [dataSelecionadaEfetiva, agendamentoId, duracaoMinutos, servicoId, profissionalId]);
+
+  const carregandoHorarios =
+    Boolean(dataSelecionadaEfetiva && agendamentoId) &&
+    gradeHorarios.data !== dataSelecionadaEfetiva;
+  const horariosDisponiveis =
+    gradeHorarios.data === dataSelecionadaEfetiva ? gradeHorarios.horarios : [];
+  const erroDisponibilidade =
+    gradeHorarios.data === dataSelecionadaEfetiva ? gradeHorarios.erro : null;
 
   // Horário efetivo selecionado garantindo que seja um dos slots disponíveis
-  const horarioSelecionado = useMemo(() => {
-    const disponiveis = horariosDisponiveis.filter((h) => h.isDisponivel);
-    if (disponiveis.some((h) => h.hora === horarioSelecionadoRaw)) {
-      return horarioSelecionadoRaw;
-    }
-    return disponiveis[0]?.hora || horarioSelecionadoRaw;
-  }, [horariosDisponiveis, horarioSelecionadoRaw]);
+  const horarioSelecionado = horariosDisponiveis.includes(horarioSelecionadoRaw)
+    ? horarioSelecionadoRaw
+    : horariosDisponiveis[0] || '';
 
   const [motivo, setMotivo] = useState<string>('');
   const [isSucesso, setIsSucesso] = useState<boolean>(false);
@@ -101,55 +175,43 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
     );
   }
 
-  const diaObjeto = opcoesDatasDisponiveis.find((d) => d.isoDate === dataSelecionada);
+  const diaObjeto = opcoesDatasDisponiveis.find((d) => d.isoDate === dataSelecionadaEfetiva);
 
-  const handleConfirmarReagendamento = () => {
-    if (!agendamentoAtual || dataSelecionada < hojeIso) return;
+  const handleConfirmarReagendamento = async () => {
+    if (!agendamentoAtual || !horarioSelecionado || dataSelecionadaEfetiva < hojeIso) return;
     setSubmitting(true);
+    setErroReagendamento(null);
 
     const novaDataHoraInicioIso = new Date(
-      `${dataSelecionada}T${horarioSelecionado}:00`,
+      `${dataSelecionadaEfetiva}T${horarioSelecionado}:00`,
     ).toISOString();
     if (new Date(novaDataHoraInicioIso).getTime() < Date.now()) {
       setSubmitting(false);
+      setErroReagendamento('Escolha um horário futuro para reagendar.');
       return;
     }
-    alterarAgendamentoBackend({
+    const resposta = await alterarAgendamentoBackend({
       agendamentoId: agendamentoAtual.id,
       novaDataHoraInicio: novaDataHoraInicioIso,
       motivo: motivo || undefined,
-    }).catch(() => {
-      // Fallback silencioso para garantir funcionamento offline/demonstrativo
     });
 
-    setTimeout(() => {
-      const dataFormatadaNova = diaObjeto
-        ? `${diaObjeto.diaSemanaFormatado.slice(0, 3)}, ${diaObjeto.dataCurta}`
-        : dataSelecionada;
-
-      const [horaInicio] = horarioSelecionado.split(':');
-      const horaFim = (parseInt(horaInicio ?? '10', 10) + 1).toString().padStart(2, '0');
-      const horarioFormatadoNovo = `${horarioSelecionado} - ${horaFim}:00`;
-
-      setAgendamentosLocais((prev) => {
-        const atualizados = prev.map((item) =>
-          item.id === agendamentoAtual.id
-            ? {
-                ...item,
-                dataHoraIso: `${dataSelecionada}T${horarioSelecionado}:00`,
-                dataFormatada: dataFormatadaNova,
-                horarioFormatado: horarioFormatadoNovo,
-                observacao: motivo ? `Reagendado. Motivo: ${motivo}` : item.observacao,
-              }
-            : item,
-        );
-        saveAgendamentosStorage(atualizados, userId);
-        return atualizados;
-      });
-
+    if (!resposta.sucesso || !resposta.dados) {
       setSubmitting(false);
-      setIsSucesso(true);
-    }, 400);
+      setErroReagendamento(resposta.erro || 'Não foi possível confirmar o reagendamento.');
+      return;
+    }
+
+    const agendamentoAtualizado = mapBackendAgendamentoToUi(resposta.dados);
+    setAgendamentosLocais((prev) => {
+      const atualizados = prev.map((item) =>
+        item.id === agendamentoAtualizado.id ? agendamentoAtualizado : item,
+      );
+      saveAgendamentosStorage(atualizados, userId);
+      return atualizados;
+    });
+    setSubmitting(false);
+    setIsSucesso(true);
   };
 
   return (
@@ -369,7 +431,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
                 <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
                   {opcoesDatasDisponiveis.map((dia) => {
-                    const isSelected = dataSelecionada === dia.isoDate;
+                    const isSelected = dataSelecionadaEfetiva === dia.isoDate;
                     return (
                       <button
                         key={dia.isoDate}
@@ -379,15 +441,6 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                         data-testid={`data-option-${dia.isoDate}`}
                         onClick={() => {
                           setDataSelecionada(dia.isoDate);
-                          const novosHorarios = gerarHorariosParaData(
-                            dia.isoDate,
-                            agendamentoAtual?.duracaoMinutos || 60,
-                            todosAgendamentos,
-                          );
-                          const disp = novosHorarios.filter((h) => h.isDisponivel);
-                          if (disp.length > 0 && disp[0]) {
-                            setHorarioSelecionado(disp[0].hora);
-                          }
                         }}
                         className={`flex min-h-16 flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all ${
                           !dia.isDisponivel
@@ -421,30 +474,34 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                   Horários disponíveis para {diaObjeto?.diaSemanaFormatado}, {diaObjeto?.dataCurta}:
                 </p>
 
-                {horariosDisponiveis.length === 0 ? (
+                {carregandoHorarios ? (
+                  <p className="mt-4 rounded-xl bg-[var(--color-canvas-neutral)] p-4 text-center text-xs text-[var(--color-text-secondary)]">
+                    Consultando a disponibilidade da clínica…
+                  </p>
+                ) : erroDisponibilidade ? (
+                  <p
+                    role="alert"
+                    className="mt-4 rounded-xl bg-red-50 p-4 text-center text-xs text-red-700"
+                  >
+                    {erroDisponibilidade}
+                  </p>
+                ) : horariosDisponiveis.length === 0 ? (
                   <div className="mt-4 rounded-xl bg-[var(--color-canvas-neutral)] p-4 text-center text-xs text-[var(--color-text-secondary)]">
                     Nenhum horário disponível para esta data. Por favor, escolha outro dia.
                   </div>
                 ) : (
                   <div className="mt-4 flex flex-wrap gap-2.5">
-                    {horariosDisponiveis.map((slot) => {
-                      const isSelected = horarioSelecionado === slot.hora;
+                    {horariosDisponiveis.map((horario) => {
+                      const isSelected = horarioSelecionado === horario;
                       return (
                         <button
-                          key={slot.hora}
+                          key={horario}
                           type="button"
-                          disabled={!slot.isDisponivel}
-                          data-testid={`horario-option-${slot.hora}`}
-                          onClick={() => setHorarioSelecionado(slot.hora)}
-                          className={`inline-flex min-h-11 min-w-24 items-center justify-center rounded-xl border px-4 py-2 text-sm font-semibold transition-all ${
-                            !slot.isDisponivel
-                              ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 line-through'
-                              : isSelected
-                                ? 'border-[var(--color-brand-strong)] bg-[var(--color-brand-strong)] text-white shadow-sm'
-                                : 'border-[var(--color-border-default)] bg-white text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-deep)]'
-                          }`}
+                          data-testid={`horario-option-${horario}`}
+                          onClick={() => setHorarioSelecionado(horario)}
+                          className={`inline-flex min-h-11 min-w-24 items-center justify-center rounded-xl border px-4 py-2 text-sm font-semibold transition-all ${isSelected ? 'border-[var(--color-brand-strong)] bg-[var(--color-brand-strong)] text-white shadow-sm' : 'border-[var(--color-border-default)] bg-white text-[var(--color-text-primary)] hover:border-[var(--color-brand-primary)] hover:text-[var(--color-brand-deep)]'}`}
                         >
-                          {slot.hora}
+                          {horario}
                         </button>
                       );
                     })}
@@ -516,6 +573,15 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                   </div>
                 </div>
 
+                {erroReagendamento && (
+                  <p
+                    role="alert"
+                    className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
+                    {erroReagendamento}
+                  </p>
+                )}
+
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
                   <button
                     type="button"
@@ -528,7 +594,12 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
                   <button
                     type="button"
                     data-testid="confirmar-reagendamento-btn"
-                    disabled={submitting || !horarioSelecionado || dataSelecionada < hojeIso}
+                    disabled={
+                      submitting ||
+                      carregandoHorarios ||
+                      !horarioSelecionado ||
+                      dataSelecionadaEfetiva < hojeIso
+                    }
                     onClick={handleConfirmarReagendamento}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-strong)] px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[var(--color-brand-deep)] active:scale-95 disabled:opacity-50"
                   >

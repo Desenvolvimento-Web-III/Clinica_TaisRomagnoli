@@ -50,9 +50,11 @@ export function mapBackendAgendamentoToUi(item: SharedAgendamento): UiAgendament
   return {
     id: item.id,
     clienteId: item.clienteId,
+    servicoId: item.servicoId,
     servicoNome: item.servicoNome,
     servicoCategoria: 'Massoterapia',
     duracaoMinutos: item.duracaoMinutos,
+    profissionalId: item.profissionalId,
     profissionalNome: item.profissionalNome || 'Tais Romagnoli',
     dataHoraIso: item.dataHoraInicio,
     dataFormatada: `${diaSemana}, ${dia} ${mes}`,

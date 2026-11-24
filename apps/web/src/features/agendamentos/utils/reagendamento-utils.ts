@@ -2,6 +2,7 @@ import {
   CONFIGURACAO_HORARIOS_PADRAO,
   gerarHorariosDisponiveis,
   calcularDataHoraFim,
+  type HorariosFuncionamento,
 } from '@clinica/shared';
 import type { Agendamento } from '../types/agendamento';
 
@@ -63,6 +64,7 @@ export function gerarDiasReagendamento(
   dataAgendamentoAtualIso?: string,
   dataHoje = new Date(),
   quantidadeDias = 6,
+  configuracaoHorarios: HorariosFuncionamento = CONFIGURACAO_HORARIOS_PADRAO,
 ): DiaDisponivel[] {
   const hojeAno = dataHoje.getFullYear();
   const hojeMes = dataHoje.getMonth();
@@ -88,11 +90,17 @@ export function gerarDiasReagendamento(
   }
 
   const diasValidos: DiaDisponivel[] = [];
+  const diasAtivos = new Set<number>(
+    configuracaoHorarios.dias
+      .filter((dia) => dia.ativo && dia.turnos.length > 0)
+      .map((dia) => dia.dia),
+  );
+  let diasVerificados = 0;
 
-  while (diasValidos.length < quantidadeDias) {
+  while (diasValidos.length < quantidadeDias && diasVerificados < 366) {
+    diasVerificados++;
     const dayOfWeek = cursor.getDay();
-    // Exclui folgas da dona da clínica: Domingo (0) e Terça-feira (2)
-    if (dayOfWeek !== 0 && dayOfWeek !== 2) {
+    if (diasAtivos.has(dayOfWeek)) {
       const y = cursor.getFullYear();
       const m = String(cursor.getMonth() + 1).padStart(2, '0');
       const d = String(cursor.getDate()).padStart(2, '0');

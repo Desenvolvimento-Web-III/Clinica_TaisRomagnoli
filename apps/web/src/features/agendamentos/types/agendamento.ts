@@ -4,9 +4,11 @@ export type StatusAgendamento =
 export interface Agendamento {
   id: string;
   clienteId?: string;
+  servicoId?: string;
   servicoNome: string;
   servicoCategoria: string;
   duracaoMinutos: number;
+  profissionalId?: string;
   profissionalNome: string;
   dataHoraIso: string;
   dataFormatada: string;

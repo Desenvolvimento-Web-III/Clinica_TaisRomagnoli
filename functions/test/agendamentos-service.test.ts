@@ -592,6 +592,44 @@ describe('Agendamentos Service (Functions Backend)', () => {
       expect(notifs[0].mensagem).toContain('anteriormente em');
     });
 
+    it('recusa novo horário em dia fechado pela configuração da clínica', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'shiatsu',
+          servicoNome: 'Shiatsu Express',
+          duracaoMinutos: 45,
+          valorTotalEmCentavos: 15000,
+          dataHoraInicio: '2026-10-22T09:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+      const configuracao = structuredClone(CONFIGURACAO_HORARIOS_PADRAO);
+      configuracao.dias = configuracao.dias.map((dia) => ({
+        ...dia,
+        ativo: dia.dia === 4,
+        turnos: dia.dia === 4 ? [{ inicio: '08:00', fim: '18:00' }] : [],
+        intervalosManutencao: [],
+      }));
+
+      await expect(
+        alterarAgendamentoExistente(
+          {
+            agendamentoId: agendamento.id,
+            novaDataHoraInicio: '2026-10-23T14:00:00.000Z',
+          },
+          clienteUser,
+          repo,
+          undefined,
+          new Date('2026-10-20T10:00:00.000Z'),
+          undefined,
+          undefined,
+          configuracao,
+        ),
+      ).rejects.toThrow(/não realiza atendimentos no dia da semana/i);
+    });
+
     it('bloqueia tentativa de alteração com menos de 3 horas de antecedência pelo cliente', async () => {
       const agendamento = await solicitarNovoAgendamento(
         {

@@ -520,6 +520,11 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
     const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
     const servicosRepo = new FirestoreServicosRepository(firestore);
+    const agendamentoAtual =
+      typeof request.body?.agendamentoId === 'string'
+        ? await repo.buscarPorId(request.body.agendamentoId)
+        : null;
+    const configuracaoHorarios = await obterHorarios(firestore, agendamentoAtual?.profissionalId);
 
     const agendamento = await alterarAgendamentoExistente(
       request.body,
@@ -529,7 +534,7 @@ export const alterarAgendamento = onRequest({ cors: true }, async (request, resp
       new Date(),
       bloqueiosRepo,
       horariosFixosRepo,
-      undefined,
+      configuracaoHorarios,
       profissionaisRepo,
       servicosRepo,
     );
