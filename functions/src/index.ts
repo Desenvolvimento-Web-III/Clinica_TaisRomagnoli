@@ -26,7 +26,10 @@ import {
   marcarNotificacaoComoLida,
   NotificacaoBusinessError,
 } from './modules/notificacoes/notificacoes-service.js';
-import { FirestoreServicosRepository } from './modules/servicos/servicos-repository.js';
+import {
+  FirestoreServicosRepository,
+  type ServicosRepository,
+} from './modules/servicos/servicos-repository.js';
 import {
   cadastrarNovoServico,
   editarServicoExistente,
@@ -76,6 +79,17 @@ import {
   registrarAuditoria,
   listarLogsAuditoria,
 } from './modules/auditoria/auditoria-service.js';
+import {
+  FirestorePagamentosRepository,
+  type PagamentosRepository,
+} from './modules/pagamentos/pagamentos-repository.js';
+import {
+  PagamentoBusinessError,
+  gerarCobrancaSinalService,
+  obterCobrancaSinalService,
+  listarPagamentosClienteService,
+  confirmarPagamentoSinalService,
+} from './modules/pagamentos/pagamentos-service.js';
 import type { UsuarioRoleAuditoria } from '@clinica/shared';
 
 initializeApp();
@@ -161,6 +175,18 @@ export {
   obterLogAuditoria,
 } from './modules/auditoria/auditoria-service.js';
 export type { AuditoriaRepository };
+export {
+  FirestorePagamentosRepository,
+  InMemoryPagamentosRepository,
+} from './modules/pagamentos/pagamentos-repository.js';
+export type { PagamentosRepository };
+export {
+  PagamentoBusinessError,
+  gerarCobrancaSinalService,
+  obterCobrancaSinalService,
+  listarPagamentosClienteService,
+  confirmarPagamentoSinalService,
+} from './modules/pagamentos/pagamentos-service.js';
 import {
   atribuirFuncaoAdministrativa as atribuirFuncaoAdministrativaService,
   definirAdministradoraInicial,
@@ -280,7 +306,8 @@ function responderErroNegocio(
     error instanceof HorariosBusinessError ||
     error instanceof ProfissionalBusinessError ||
     error instanceof AnamneseBusinessError ||
-    error instanceof AuditoriaBusinessError
+    error instanceof AuditoriaBusinessError ||
+    error instanceof PagamentoBusinessError
   ) {
     response.status(error.statusCode).json({ error: error.message });
     return true;
@@ -289,6 +316,8 @@ function responderErroNegocio(
 }
 
 let repositorioAuditoriaCompartilhado: AuditoriaRepository | null = null;
+let repositorioPagamentosCompartilhado: PagamentosRepository | null = null;
+let repositorioServicosCompartilhado: ServicosRepository | null = null;
 
 export function definirAuditoriaRepositoryParaTestes(repo: AuditoriaRepository | null): void {
   repositorioAuditoriaCompartilhado = repo;
@@ -299,6 +328,28 @@ export function obterAuditoriaRepository(): AuditoriaRepository {
     return repositorioAuditoriaCompartilhado;
   }
   return new FirestoreAuditoriaRepository();
+}
+
+export function definirPagamentosRepositoryParaTestes(repo: PagamentosRepository | null): void {
+  repositorioPagamentosCompartilhado = repo;
+}
+
+export function obterPagamentosRepository(): PagamentosRepository {
+  if (repositorioPagamentosCompartilhado) {
+    return repositorioPagamentosCompartilhado;
+  }
+  return new FirestorePagamentosRepository(getFirestore());
+}
+
+export function definirServicosRepositoryParaTestes(repo: ServicosRepository | null): void {
+  repositorioServicosCompartilhado = repo;
+}
+
+export function obterServicosRepository(): ServicosRepository {
+  if (repositorioServicosCompartilhado) {
+    return repositorioServicosCompartilhado;
+  }
+  return new FirestoreServicosRepository(getFirestore());
 }
 
 function extrairDadosRequisicao(request: { ip?: string; headers?: Record<string, unknown> }) {
@@ -2537,5 +2588,177 @@ export const listarAuditoriaAdmin = onRequest({ cors: true }, async (request, re
     }
     console.error('Erro ao listar registros de auditoria:', error);
     response.status(500).json({ error: 'Erro interno ao consultar auditoria.' });
+  }
+});
+
+/**
+ * Gera a cobrança do sinal de 30% com base no valor do serviço selecionado.
+ * Permite pagamentos via Pix, Boleto ou Cartão de Crédito.
+ */
+export const gerarCobrancaSinal = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const pagamentosRepo = obterPagamentosRepository();
+    const servicosRepo = obterServicosRepository();
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+    const auditoriaRepo = obterAuditoriaRepository();
+
+    const cobranca = await gerarCobrancaSinalService(
+      request.body,
+      user,
+      pagamentosRepo,
+      servicosRepo,
+      agendamentosRepo,
+      auditoriaRepo,
+    );
+
+    await registrarAuditoriaOperacao({
+      usuario: user,
+      acao: 'pagamento.cobranca_gerada',
+      recurso: 'pagamentos',
+      recursoId: cobranca.id,
+      dadosAfetados: {
+        servicoId: cobranca.servicoId,
+        valorTotalEmCentavos: cobranca.valorTotalEmCentavos,
+        valorSinalEmCentavos: cobranca.valorSinalEmCentavos,
+        metodoPagamento: cobranca.metodoPagamento,
+        status: cobranca.status,
+      },
+      ...extrairDadosRequisicao(request),
+    });
+
+    response.status(201).json({
+      sucesso: true,
+      mensagem: 'Cobrança do sinal de 30% gerada com sucesso.',
+      dados: cobranca,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados da requisição inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao gerar cobrança do sinal:', error);
+    response.status(500).json({ error: 'Erro interno ao gerar cobrança do sinal.' });
+  }
+});
+
+/**
+ * Consulta uma cobrança de sinal específica pelo identificador.
+ * Permite acesso apenas ao titular da cobrança ou à administradora.
+ */
+export const obterCobrancaSinal = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const cobrancaId = (request.query['cobrancaId'] as string) || (request.query['id'] as string);
+
+    if (!cobrancaId) {
+      response.status(400).json({ error: 'Parâmetro cobrancaId é obrigatório na consulta.' });
+      return;
+    }
+
+    const cobranca = await obterCobrancaSinalService(cobrancaId, user, obterPagamentosRepository());
+
+    response.status(200).json({
+      sucesso: true,
+      dados: cobranca,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao consultar cobrança do sinal:', error);
+    response.status(500).json({ error: 'Erro interno ao consultar cobrança do sinal.' });
+  }
+});
+
+/**
+ * Lista o histórico de pagamentos e cobranças de sinal do cliente autenticado.
+ * A administradora pode passar query parameter 'clienteId' para consultar de um cliente específico.
+ */
+export const listarMeusPagamentos = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'GET') {
+    response.status(405).json({ error: 'Método não permitido. Use GET.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const clienteIdAlvo =
+      user.isAdmin && typeof request.query['clienteId'] === 'string'
+        ? request.query['clienteId']
+        : user.uid;
+
+    const pagamentos = await listarPagamentosClienteService(
+      clienteIdAlvo,
+      user,
+      obterPagamentosRepository(),
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      dados: pagamentos,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    console.error('Erro ao listar pagamentos:', error);
+    response.status(500).json({ error: 'Erro interno ao listar pagamentos.' });
+  }
+});
+
+/**
+ * Confirma a quitação do sinal de 30% e atualiza o agendamento associado se houver.
+ */
+export const confirmarPagamentoSinal = onRequest({ cors: true }, async (request, response) => {
+  if (request.method !== 'POST' && request.method !== 'PATCH') {
+    response.status(405).json({ error: 'Método não permitido. Use POST ou PATCH.' });
+    return;
+  }
+
+  try {
+    const user = await extrairUsuarioAutenticado(request.headers.authorization);
+    const firestore = getFirestore();
+    const pagamentosRepo = obterPagamentosRepository();
+    const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+    const auditoriaRepo = obterAuditoriaRepository();
+
+    const cobranca = await confirmarPagamentoSinalService(
+      request.body,
+      user,
+      pagamentosRepo,
+      agendamentosRepo,
+      auditoriaRepo,
+    );
+
+    response.status(200).json({
+      sucesso: true,
+      mensagem: 'Pagamento do sinal confirmado com sucesso.',
+      dados: cobranca,
+    });
+  } catch (error: unknown) {
+    if (responderErroNegocio(response, error)) {
+      return;
+    }
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+      response.status(400).json({ error: 'Dados da requisição inválidos.', detalhes: error });
+      return;
+    }
+    console.error('Erro ao confirmar pagamento do sinal:', error);
+    response.status(500).json({ error: 'Erro interno ao confirmar pagamento do sinal.' });
   }
 });
