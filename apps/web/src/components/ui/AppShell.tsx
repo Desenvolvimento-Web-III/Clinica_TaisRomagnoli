@@ -4,6 +4,7 @@ import { BrandLogo } from './BrandLogo';
 import { BottomNav } from '@/features/agendamentos/components/BottomNav';
 import { AuthenticatedUserNav } from '@/features/auth/components/AuthenticatedUserNav';
 import { useOptionalAuth } from '@/features/auth/auth-context';
+import { PwaInstallBanner, OfflineNotice } from '@/features/pwa';
 
 export type ActiveTab =
   'inicio' | 'agendar' | 'agendamentos' | 'notificacoes' | 'perfil' | 'admin_horarios';
@@ -65,6 +66,9 @@ export function AppShell({
       >
         Pular para o conteúdo principal
       </a>
+
+      {/* Alerta sutil quando usuário perde conexão com a internet */}
+      <OfflineNotice />
 
       {/* Cabeçalho Fixo / Sticky com Navegação Adaptativa */}
       <header className="sticky top-0 z-40 border-b border-[var(--color-border-default)] bg-white/95 backdrop-blur-xl">
@@ -135,6 +139,9 @@ export function AppShell({
           </div>
         </div>
       )}
+
+      {/* Banner de Instalação PWA na Tela Inicial */}
+      <PwaInstallBanner />
 
       {/* Área de Conteúdo Principal Flexível e Responsiva */}
       <main
