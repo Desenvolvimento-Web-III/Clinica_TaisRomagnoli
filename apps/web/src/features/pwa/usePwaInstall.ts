@@ -12,63 +12,54 @@ export interface BeforeInstallPromptEvent extends Event {
 export const STORAGE_KEY_DISMISSED_UNTIL = 'clinica_pwa_install_dismissed_until';
 export const DEFAULT_DISMISS_DAYS = 7;
 
+function checkStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  const isDisplayStandalone = window.matchMedia?.('(display-mode: standalone)').matches;
+  const isNavigatorStandalone =
+    'standalone' in window.navigator &&
+    Boolean((window.navigator as unknown as { standalone: boolean }).standalone);
+  return Boolean(isDisplayStandalone || isNavigatorStandalone);
+}
+
+function checkIosSafari(): boolean {
+  if (typeof window === 'undefined') return false;
+  const ua = window.navigator.userAgent.toLowerCase();
+  const isIosDevice = /iphone|ipad|ipod/.test(ua);
+  const isSafari = /safari/.test(ua) && !/chrome|crios|fxios|edgios/.test(ua);
+  return Boolean(isIosDevice && isSafari);
+}
+
+function checkDismissed(): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    const dismissedUntil = localStorage.getItem(STORAGE_KEY_DISMISSED_UNTIL);
+    if (!dismissedUntil) return false;
+    const expiresAt = Number(dismissedUntil);
+    if (Date.now() < expiresAt) {
+      return true;
+    }
+    localStorage.removeItem(STORAGE_KEY_DISMISSED_UNTIL);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isStandalone, setIsStandalone] = useState<boolean>(false);
-  const [isIos, setIsIos] = useState<boolean>(false);
-  const [isDismissed, setIsDismissed] = useState<boolean>(true);
+  const [isStandalone, setIsStandalone] = useState<boolean>(() => checkStandalone());
+  const [isIos] = useState<boolean>(() => checkIosSafari());
+  const [isDismissed, setIsDismissed] = useState<boolean>(() => checkDismissed());
   const [installed, setInstalled] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Detectar modo standalone (aplicativo já instalado e aberto da tela inicial)
-    const checkStandalone = () => {
-      const isDisplayStandalone =
-        typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)').matches;
-
-      const isNavigatorStandalone =
-        typeof window !== 'undefined' &&
-        'standalone' in window.navigator &&
-        Boolean((window.navigator as unknown as { standalone: boolean }).standalone);
-
-      return Boolean(isDisplayStandalone || isNavigatorStandalone);
-    };
-
-    const standalone = checkStandalone();
-    setIsStandalone(standalone);
-
-    // 2. Detectar se é Safari no iOS (onde o beforeinstallprompt não existe)
-    if (typeof window !== 'undefined') {
-      const ua = window.navigator.userAgent.toLowerCase();
-      const isIosDevice = /iphone|ipad|ipod/.test(ua);
-      const isSafari = /safari/.test(ua) && !/chrome|crios|fxios|edgios/.test(ua);
-      setIsIos(isIosDevice && isSafari);
-    }
-
-    // 3. Checar persistência de dispensa no localStorage
-    try {
-      const dismissedUntil = localStorage.getItem(STORAGE_KEY_DISMISSED_UNTIL);
-      if (dismissedUntil) {
-        const expiresAt = Number(dismissedUntil);
-        if (Date.now() < expiresAt) {
-          setIsDismissed(true);
-        } else {
-          localStorage.removeItem(STORAGE_KEY_DISMISSED_UNTIL);
-          setIsDismissed(false);
-        }
-      } else {
-        setIsDismissed(false);
-      }
-    } catch {
-      setIsDismissed(false);
-    }
-
-    // 4. Capturar evento beforeinstallprompt do navegador
+    // Capturar evento beforeinstallprompt do navegador
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
-    // 5. Escutar confirmação de instalação do app
+    // Escutar confirmação de instalação do app
     const handleAppInstalled = () => {
       setInstalled(true);
       setDeferredPrompt(null);
