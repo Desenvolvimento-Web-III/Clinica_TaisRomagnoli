@@ -338,10 +338,115 @@ describe('Serviço de Pagamento do Sinal de 30% (pagamentos-service)', () => {
       // Verifica se o agendamento vinculado agora está 'confirmado'
       const agendamentoAtualizado = await agendamentosRepo.buscarPorId('ag-teste-1');
       expect(agendamentoAtualizado?.status).toBe('confirmado');
+      expect(agendamentoAtualizado?.reservaExpiraEm).toBeUndefined();
+      expect(agendamentoAtualizado?.cobrancaSinalId).toBe(cobranca.id);
 
       // Verifica auditoria
       const logs = await auditoriaRepo.listar({ acao: 'pagamento.sinal_confirmado' });
       expect(logs).toHaveLength(1);
+    });
+
+    it('impede gerar cobrança vinculada quando a reserva temporária do agendamento já expirou', async () => {
+      const agendamentoExpirado: Agendamento = {
+        id: 'ag-expirado-1',
+        clienteId: 'cliente-mariana-1',
+        clienteNome: 'Mariana Souza',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-11-25T14:00:00.000Z',
+        dataHoraFim: '2026-11-25T15:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: 'prof-tais-romagnoli',
+        profissionalNome: 'Tais Romagnoli',
+        status: 'pendente',
+        reservaExpiraEm: '2026-11-20T10:00:00.000Z', // no passado
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-11-20T09:45:00.000Z',
+        updatedAt: '2026-11-20T09:45:00.000Z',
+      };
+      await agendamentosRepo.salvar(agendamentoExpirado);
+
+      await expect(
+        gerarCobrancaSinalService(
+          {
+            servicoId: 'massagem-relaxante',
+            agendamentoId: 'ag-expirado-1',
+            metodoPagamento: 'pix' as const,
+          },
+          mockClienteUser,
+          pagamentosRepo,
+          servicosRepo,
+          agendamentosRepo,
+        ),
+      ).rejects.toThrow('A reserva temporária deste agendamento já expirou');
+    });
+
+    it('impede confirmar pagamento quando a reserva temporária vinculada ao agendamento já expirou', async () => {
+      const agendamentoMock: Agendamento = {
+        id: 'ag-expira-teste',
+        clienteId: 'cliente-mariana-1',
+        clienteNome: 'Mariana Souza',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        dataHoraInicio: '2026-11-25T14:00:00.000Z',
+        dataHoraFim: '2026-11-25T15:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: 'prof-tais-romagnoli',
+        profissionalNome: 'Tais Romagnoli',
+        status: 'pendente',
+        reservaExpiraEm: '2026-11-25T13:30:00.000Z',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-11-25T13:15:00.000Z',
+        updatedAt: '2026-11-25T13:15:00.000Z',
+      };
+      await agendamentosRepo.salvar(agendamentoMock);
+
+      const cobranca = await pagamentosRepo.salvar({
+        id: 'cob-expira-1',
+        clienteId: 'cliente-mariana-1',
+        clienteNome: 'Mariana Souza',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        agendamentoId: 'ag-expira-teste',
+        valorTotalEmCentavos: 17000,
+        percentualSinal: 30,
+        valorSinalEmCentavos: 5100,
+        saldoRestanteEmCentavos: 11900,
+        metodoPagamento: 'pix',
+        status: 'pendente',
+        dadosCobranca: {
+          metodo: 'pix',
+          instrucoes: 'Pagar Pix',
+        },
+        expiraEmIso: '2026-11-26T14:00:00.000Z',
+        createdAt: '2026-11-25T13:15:00.000Z',
+        updatedAt: '2026-11-25T13:15:00.000Z',
+      });
+
+      const agoraDepois = new Date('2026-11-25T13:40:00.000Z');
+
+      await expect(
+        confirmarPagamentoSinalService(
+          { cobrancaId: cobranca.id },
+          mockAdminUser,
+          pagamentosRepo,
+          agendamentosRepo,
+          auditoriaRepo,
+          agoraDepois,
+        ),
+      ).rejects.toThrow('O tempo limite para pagamento do sinal desta reserva expirou');
     });
   });
 });

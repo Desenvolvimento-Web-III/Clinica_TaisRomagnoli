@@ -33,6 +33,8 @@ export interface Agendamento {
   metodoPagamento: MetodoPagamento;
   origem: OrigemAgendamento;
   sinalIsento: boolean;
+  reservaExpiraEm?: string; // ISO 8601 - Limite de tempo da reserva temporária durante processamento do sinal
+  cobrancaSinalId?: string; // ID da cobrança do sinal associada à reserva
   observacoes?: string;
   canceladoEm?: string;
   concluidoEm?: string;

@@ -15,6 +15,10 @@ import {
   avaliarBloqueioContraindicacao,
   verificarDataHoraNoPassado,
   MENSAGEM_ERRO_DATA_PASSADA,
+  verificarReservaExpirada,
+  calcularExpiracaoReservaTemporaria,
+  TEMPO_PADRAO_RESERVA_TEMPORARIA_MINUTOS,
+  solicitarReservaTemporariaInputSchema,
   type HorariosFuncionamento,
   type Agendamento,
 } from '@clinica/shared';
@@ -26,6 +30,7 @@ import type { HorariosFixosRepository } from '../agenda/horarios-fixos-repositor
 import type { ProfissionaisRepository } from '../profissionais/profissionais-repository.js';
 import type { AnamneseRepository } from '../anamnese/anamnese-repository.js';
 import type { ClientesRepository } from '../clientes/clientes-repository.js';
+import type { AuditoriaRepository } from '../auditoria/auditoria-repository.js';
 import {
   criarNotificacaoConfirmacao,
   criarNotificacaoAlteracao,
@@ -221,17 +226,22 @@ export async function solicitarNovoAgendamento(
   // 4. Verificação de conflitos de horários e respeito ao intervalo de 30 min com outros agendamentos
   const dataYmd = parsed.dataHoraInicio.substring(0, 10);
   const existentes = await repo.listarPorProfissionalEData(parsed.profissionalId, dataYmd);
+  const dataReferenciaAtual = dataReferencia ?? new Date();
 
-  const conflito = existentes.some((existente) =>
-    verificarConflitoHorarios(
+  const conflito = existentes.some((existente) => {
+    // Se for uma reserva pendente cujo tempo limite de pagamento expirou, ignora conflito
+    if (verificarReservaExpirada(existente, dataReferenciaAtual)) {
+      return false;
+    }
+    return verificarConflitoHorarios(
       { inicioIso: parsed.dataHoraInicio, fimIso: dataHoraFim, intervaloMinutos: 30 },
       {
         inicioIso: existente.dataHoraInicio,
         fimIso: existente.dataHoraFim,
         intervaloMinutos: existente.intervaloAposMinutos,
       },
-    ),
-  );
+    );
+  });
 
   if (conflito) {
     throw new AgendamentoBusinessError(
@@ -251,6 +261,13 @@ export async function solicitarNovoAgendamento(
 
   const valores = calcularValoresAgendamento(parsed.valorTotalEmCentavos, 30, isencaoSinal);
 
+  // Reserva temporária de horário durante o pagamento do sinal
+  const tempoReservaMinutos = parsed.tempoReservaMinutos ?? TEMPO_PADRAO_RESERVA_TEMPORARIA_MINUTOS;
+  const reservaExpiraEm =
+    statusInicial === 'pendente'
+      ? calcularExpiracaoReservaTemporaria(dataReferenciaAtual, tempoReservaMinutos)
+      : undefined;
+
   const novoAgendamento: Agendamento = {
     id: `ag-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     clienteId: clienteIdAlvo,
@@ -269,12 +286,13 @@ export async function solicitarNovoAgendamento(
     profissionalId: parsed.profissionalId,
     profissionalNome: profissionalNomeFinal,
     status: statusInicial,
+    reservaExpiraEm,
     metodoPagamento: parsed.metodoPagamento,
     origem: user.isAdmin ? 'presencial_admin' : 'app_cliente',
     sinalIsento: valores.sinalIsento,
     observacoes: parsed.observacoes,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: dataReferenciaAtual.toISOString(),
+    updatedAt: dataReferenciaAtual.toISOString(),
   };
 
   const salvo = await repo.salvar(novoAgendamento);
@@ -465,6 +483,7 @@ export async function alterarAgendamentoExistente(
 
   const conflito = existentes.some((existente) => {
     if (existente.id === agendamento.id) return false;
+    if (verificarReservaExpirada(existente, dataReferencia)) return false;
     return verificarConflitoHorarios(
       { inicioIso: parsed.novaDataHoraInicio, fimIso: novoDataHoraFim, intervaloMinutos: 30 },
       {
@@ -729,4 +748,137 @@ export async function atualizarStatusAgendamento(
   }
 
   return salvo;
+}
+
+/**
+ * Cria uma reserva temporária bloqueando o horário na agenda por tempo limitado
+ * enquanto o pagamento do sinal é processado pelo cliente ou administradora.
+ */
+export async function criarReservaTemporariaService(
+  input: unknown,
+  user: UserContext,
+  repo: AgendamentosRepository,
+  notifRepo?: NotificacoesRepository,
+  servicosRepo?: ServicosRepository,
+  bloqueiosRepo?: BloqueiosRepository,
+  horariosFixosRepo?: HorariosFixosRepository,
+  configuracoes?: HorariosFuncionamento,
+  profissionaisRepo?: ProfissionaisRepository,
+  anamneseRepo?: AnamneseRepository,
+  dataReferencia?: Date,
+  auditoriaRepo?: AuditoriaRepository,
+): Promise<Agendamento> {
+  const parsed = solicitarReservaTemporariaInputSchema.parse(input);
+  const agendamento = await solicitarNovoAgendamento(
+    parsed,
+    user,
+    repo,
+    notifRepo,
+    servicosRepo,
+    bloqueiosRepo,
+    horariosFixosRepo,
+    configuracoes,
+    profissionaisRepo,
+    anamneseRepo,
+    dataReferencia,
+  );
+
+  if (auditoriaRepo) {
+    try {
+      const dataRef = dataReferencia ?? new Date();
+      await auditoriaRepo.salvar({
+        id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        usuarioId: user.uid,
+        usuarioEmail: user.email || 'sistema@clinicataisromagnoli.com.br',
+        usuarioRole: user.isAdmin ? 'admin' : 'cliente',
+        acao: 'agendamento.reserva_temporaria_criada',
+        recurso: 'agendamentos',
+        recursoId: agendamento.id,
+        dadosAfetados: {
+          detalhes: `Reserva temporária criada para ${agendamento.servicoNome} em ${agendamento.dataHoraInicio}. Expira em: ${agendamento.reservaExpiraEm}`,
+          servicoId: agendamento.servicoId,
+          dataHoraInicio: agendamento.dataHoraInicio,
+          status: agendamento.status,
+          reservaExpiraEm: agendamento.reservaExpiraEm,
+        },
+        dataHora: dataRef.toISOString(),
+      });
+    } catch {
+      // Ignora erro de gravação de auditoria
+    }
+  }
+
+  return agendamento;
+}
+
+/**
+ * Varre agendamentos com reserva pendente e cancela aqueles cujo tempo limite
+ * para pagamento do sinal expirou, liberando o horário na agenda para outros clientes.
+ */
+export async function expirarReservasTemporariasService(
+  repo: AgendamentosRepository,
+  dataReferencia: Date = new Date(),
+  auditoriaRepo?: AuditoriaRepository,
+  notifRepo?: NotificacoesRepository,
+): Promise<Agendamento[]> {
+  const todos = await repo.listarTodos();
+  const agoraIso = dataReferencia.toISOString();
+  const expirados: Agendamento[] = [];
+
+  for (const ag of todos) {
+    if (ag.status === 'pendente' && verificarReservaExpirada(ag, dataReferencia)) {
+      const atualizado: Agendamento = {
+        ...ag,
+        status: 'cancelado',
+        canceladoEm: agoraIso,
+        motivoCancelamento:
+          'Tempo limite da reserva temporária expirado durante o processamento do pagamento',
+        sinalRetido: false,
+        updatedAt: agoraIso,
+      };
+
+      const salvo = await repo.atualizar(atualizado);
+      expirados.push(salvo);
+
+      if (notifRepo) {
+        try {
+          await criarNotificacaoCancelamento(
+            salvo,
+            false,
+            notifRepo,
+            atualizado.motivoCancelamento,
+            'no_prazo',
+          );
+        } catch {
+          // Ignora falha de notificação
+        }
+      }
+
+      if (auditoriaRepo) {
+        try {
+          await auditoriaRepo.salvar({
+            id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            usuarioId: 'sistema',
+            usuarioEmail: 'sistema@clinicataisromagnoli.com.br',
+            usuarioRole: 'sistema',
+            acao: 'agendamento.reserva_temporaria_expirada',
+            recurso: 'agendamentos',
+            recursoId: salvo.id,
+            dadosAfetados: {
+              detalhes: `Reserva temporária expirada para agendamento ${salvo.id} (${salvo.servicoNome} em ${salvo.dataHoraInicio}). Horário liberado na agenda.`,
+              agendamentoId: salvo.id,
+              clienteId: salvo.clienteId,
+              reservaExpiraEm: salvo.reservaExpiraEm,
+              liberadoEm: agoraIso,
+            },
+            dataHora: agoraIso,
+          });
+        } catch {
+          // Ignora falha de auditoria
+        }
+      }
+    }
+  }
+
+  return expirados;
 }

@@ -98,4 +98,3 @@ export class FirestorePagamentosRepository implements PagamentosRepository {
     return snapshot.docs.map((doc) => doc.data() as CobrancaSinal);
   }
 }
-

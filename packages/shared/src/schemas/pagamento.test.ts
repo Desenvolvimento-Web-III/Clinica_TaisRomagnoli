@@ -148,4 +148,3 @@ describe('Schema e Regras de Cobrança do Sinal de 30% (pagamento.ts)', () => {
     });
   });
 });
-

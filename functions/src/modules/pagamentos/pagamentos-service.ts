@@ -3,6 +3,7 @@ import {
   confirmarPagamentoSinalInputSchema,
   calcularCobrancaSinal,
   gerarDadosCobrancaSinal,
+  verificarReservaExpirada,
   type CobrancaSinal,
   type StatusPagamento,
 } from '@clinica/shared';
@@ -40,6 +41,7 @@ export async function gerarCobrancaSinalService(
   servicosRepo?: ServicosRepository,
   agendamentosRepo?: AgendamentosRepository,
   auditoriaRepo?: AuditoriaRepository,
+  dataReferencia?: Date,
 ): Promise<CobrancaSinal> {
   const parsed = solicitarCobrancaSinalInputSchema.parse(input);
 
@@ -93,6 +95,12 @@ export async function gerarCobrancaSinalService(
       throw new PagamentoBusinessError(
         'Acesso negado: o agendamento informado pertence a outro cliente.',
         403,
+      );
+    }
+    if (verificarReservaExpirada(agendamento, dataReferencia)) {
+      throw new PagamentoBusinessError(
+        'A reserva temporária deste agendamento já expirou e o horário foi liberado.',
+        409,
       );
     }
   }
@@ -221,6 +229,7 @@ export async function confirmarPagamentoSinalService(
   pagamentosRepo: PagamentosRepository,
   agendamentosRepo?: AgendamentosRepository,
   auditoriaRepo?: AuditoriaRepository,
+  dataReferencia?: Date,
 ): Promise<CobrancaSinal> {
   const parsed = confirmarPagamentoSinalInputSchema.parse(input);
 
@@ -241,7 +250,8 @@ export async function confirmarPagamentoSinalService(
     return cobranca; // Já estava pago
   }
 
-  const agoraIso = new Date().toISOString();
+  const agora = dataReferencia ?? new Date();
+  const agoraIso = agora.toISOString();
   const atualizada: CobrancaSinal = {
     ...cobranca,
     status: 'pago',
@@ -252,15 +262,25 @@ export async function confirmarPagamentoSinalService(
 
   const salva = await pagamentosRepo.salvar(atualizada);
 
-  // Se agendamento vinculado estiver 'pendente', atualiza status para 'confirmado'
+  // Se agendamento vinculado estiver associado, valida expiração da reserva temporária e atualiza para confirmado
   if (salva.agendamentoId && agendamentosRepo) {
     const agendamento = await agendamentosRepo.buscarPorId(salva.agendamentoId);
-    if (agendamento && agendamento.status === 'pendente') {
-      await agendamentosRepo.salvar({
-        ...agendamento,
-        status: 'confirmado',
-        updatedAt: agoraIso,
-      });
+    if (agendamento) {
+      if (verificarReservaExpirada(agendamento, agora)) {
+        throw new PagamentoBusinessError(
+          'O tempo limite para pagamento do sinal desta reserva expirou e o horário foi liberado.',
+          409,
+        );
+      }
+      if (agendamento.status === 'pendente') {
+        await agendamentosRepo.salvar({
+          ...agendamento,
+          status: 'confirmado',
+          reservaExpiraEm: undefined,
+          cobrancaSinalId: salva.id,
+          updatedAt: agoraIso,
+        });
+      }
     }
   }
 
