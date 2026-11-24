@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppShell } from './AppShell';
@@ -288,5 +288,33 @@ describe('AppShell - Estrutura Global Mobile First', () => {
     );
 
     expect(screen.getByTestId('mobile-navigation')).toBeInTheDocument();
+  });
+
+  it('renderiza o componente de instalacao PWA quando a instalacao esta disponivel', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: null,
+      isAuthReady: true,
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell activeTab="inicio">
+          <p>Conteudo principal</p>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    act(() => {
+      const mockPromptEvent = new Event('beforeinstallprompt');
+      Object.assign(mockPromptEvent, {
+        platforms: ['android'],
+        userChoice: Promise.resolve({ outcome: 'accepted', platform: 'android' }),
+        prompt: vi.fn(),
+      });
+      window.dispatchEvent(mockPromptEvent);
+    });
+
+    expect(screen.getByText('Instalar Tais Romagnoli')).toBeInTheDocument();
   });
 });
