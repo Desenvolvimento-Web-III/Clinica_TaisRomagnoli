@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 import { gerarDiasReagendamento, gerarHorariosParaData } from './reagendamento-utils';
 import type { Agendamento } from '../types/agendamento';
 
@@ -74,6 +75,24 @@ describe('reagendamento-utils', () => {
       // Quinta 19 é dia de atendimento
       expect(dias[3]?.isoDate).toBe('2026-11-19');
       expect(dias[3]?.diaSemanaFormatado).toBe('Quinta-feira');
+    });
+
+    it('usa os dias ativos da configuração da clínica em vez de folgas fixas', () => {
+      const configuracao = structuredClone(CONFIGURACAO_HORARIOS_PADRAO);
+      configuracao.dias = configuracao.dias.map((dia) => ({
+        ...dia,
+        ativo: dia.dia === 2 || dia.dia === 6,
+        turnos: dia.dia === 2 || dia.dia === 6 ? [{ inicio: '09:00', fim: '13:00' }] : [],
+      }));
+
+      const dias = gerarDiasReagendamento(
+        '2026-11-18T10:00:00',
+        new Date('2026-11-18T08:00:00'),
+        3,
+        configuracao,
+      );
+
+      expect(dias.map((dia) => dia.isoDate)).toEqual(['2026-11-21', '2026-11-24', '2026-11-28']);
     });
   });
 
