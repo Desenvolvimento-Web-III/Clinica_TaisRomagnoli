@@ -72,3 +72,4 @@ export * from './schemas/anamnese.js';
 export * from './schemas/indicadores-painel.js';
 export * from './schemas/auditoria.js';
 export * from './schemas/pagamento.js';
+export * from './schemas/whatsapp.js';
