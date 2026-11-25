@@ -5,7 +5,16 @@ import {
   type AlterarAgendamentoInput,
   type AtualizarStatusAgendamentoInput,
 } from '@clinica/shared';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  where,
+} from 'firebase/firestore';
 import { environment } from '@/config/env';
 import { auth, db } from '@/lib/firebase';
 import type { Agendamento as UiAgendamento } from '@/features/agendamentos/types/agendamento';
@@ -14,7 +23,11 @@ import {
   saveAgendamentosStorage,
   addAgendamentoStorage,
 } from '@/features/agendamentos/data/agendamentos-storage';
-import { resolveLocalServiceImage } from '@/features/services/service-firestore-repository';
+import {
+  mapFirestoreDocToService,
+  resolveLocalServiceImage,
+  type FirestoreServiceData,
+} from '@/features/services/service-firestore-repository';
 
 /**
  * Obtém a URL base das Cloud Functions para o ambiente atual.
@@ -250,38 +263,28 @@ export async function cancelarAgendamentoBackend(
 }
 
 /**
- * Lista os agendamentos do cliente autenticado (ou de um cliente específico para administradora) via Cloud Function.
+ * Lista agendamentos no Firestore. A consulta do cliente é limitada ao próprio UID;
+ * consultas administrativas para outro cliente continuam sujeitas às Security Rules.
  */
 export async function listarAgendamentosBackend(
   token?: string | null,
   clienteId?: string,
 ): Promise<{ sucesso: boolean; dados: SharedAgendamento[]; erro?: string }> {
-  const authToken = token ?? (await getAuthToken());
-  if (!authToken) {
+  const uidAutenticado = auth?.currentUser?.uid;
+  if (!db || !uidAutenticado) {
     return { sucesso: false, dados: [], erro: 'Usuário não autenticado no Firebase.' };
   }
 
   try {
-    const querySuffix = clienteId ? `?clienteId=${encodeURIComponent(clienteId)}` : '';
-    const url = `${getFunctionsBaseUrl()}/listarMeusAgendamentos${querySuffix}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    const body = await response.json();
-
-    if (!response.ok) {
-      return {
-        sucesso: false,
-        dados: [],
-        erro: body.error || 'Não foi possível buscar agendamentos do servidor.',
-      };
-    }
-
-    return { sucesso: true, dados: body.dados || [] };
+    const donoConsulta = clienteId ?? uidAutenticado;
+    const constraints = [where('clienteId', '==', donoConsulta), orderBy('dataHoraInicio', 'asc')];
+    const q = query(collection(db, 'agendamentos'), ...constraints);
+    const snapshot = await getDocs(q);
+    const dados = snapshot.docs.map((docSnap) => ({
+      ...(docSnap.data() as SharedAgendamento),
+      id: docSnap.id,
+    }));
+    return { sucesso: true, dados };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Falha na comunicação com o servidor.';
     return { sucesso: false, dados: [], erro: msg };
@@ -309,26 +312,144 @@ export async function buscarAgendamentosAdmin(): Promise<SharedAgendamento[]> {
   }
 }
 
+/** Busca no Firestore os agendamentos do dia local atual para a agenda administrativa. */
+export async function buscarAgendamentosAdminDoDia(
+  dataReferencia = new Date(),
+): Promise<SharedAgendamento[]> {
+  if (!db || !auth?.currentUser) {
+    throw new Error('Faça login como administradora para consultar a agenda.');
+  }
+
+  const inicioDoDia = new Date(dataReferencia);
+  inicioDoDia.setHours(0, 0, 0, 0);
+  const inicioDoProximoDia = new Date(inicioDoDia);
+  inicioDoProximoDia.setDate(inicioDoProximoDia.getDate() + 1);
+
+  const q = query(
+    collection(db, 'agendamentos'),
+    where('dataHoraInicio', '>=', inicioDoDia.toISOString()),
+    where('dataHoraInicio', '<', inicioDoProximoDia.toISOString()),
+    orderBy('dataHoraInicio', 'asc'),
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => docSnap.data() as SharedAgendamento);
+}
+
+/** Salva uma solicitação diretamente no Firestore, usando perfil e serviço como fontes oficiais. */
+export async function criarAgendamentoFirestore(
+  input: SolicitarAgendamentoInput,
+  clienteIdSolicitado?: string,
+): Promise<{ sucesso: boolean; dados?: SharedAgendamento; erro?: string }> {
+  if (!db || !auth?.currentUser) {
+    return { sucesso: false, erro: 'Entre na sua conta para salvar o agendamento.' };
+  }
+
+  const usuario = auth.currentUser;
+  const clienteId = clienteIdSolicitado ?? usuario.uid;
+  const perfilRef = doc(db, 'clientes', clienteId);
+  const servicoRef = doc(db, 'servicos', input.servicoId);
+  let etapa = 'consultar o perfil do cliente';
+
+  try {
+    const perfilSnapshot = await getDoc(perfilRef);
+    if (!perfilSnapshot.exists()) {
+      return { sucesso: false, erro: 'O perfil deste cliente não foi encontrado no Firebase.' };
+    }
+    if (typeof perfilSnapshot.data().nome !== 'string' || !perfilSnapshot.data().nome.trim()) {
+      return { sucesso: false, erro: 'O perfil deste cliente não possui um nome válido.' };
+    }
+
+    etapa = 'consultar o serviço selecionado';
+    const servicoSnapshot = await getDoc(servicoRef);
+    if (!servicoSnapshot.exists()) {
+      return { sucesso: false, erro: 'O serviço selecionado não foi encontrado no Firebase.' };
+    }
+
+    const perfil = perfilSnapshot.data();
+    const servico = mapFirestoreDocToService(
+      servicoSnapshot.id,
+      servicoSnapshot.data() as FirestoreServiceData,
+    );
+    if (!servico.active) {
+      return { sucesso: false, erro: 'Este serviço está inativo e não pode ser agendado.' };
+    }
+
+    const inicio = new Date(input.dataHoraInicio);
+    if (Number.isNaN(inicio.getTime()) || inicio.getTime() <= Date.now()) {
+      return { sucesso: false, erro: 'Escolha uma data e horário futuros válidos.' };
+    }
+    const fim = new Date(inicio.getTime() + servico.durationMinutes * 60_000);
+    const agora = new Date().toISOString();
+    const id = `ag-${crypto.randomUUID()}`;
+    const sinalIsento = usuario.uid !== clienteId && input.isencaoSinalAdmin === true;
+    const valorSinalEmCentavos = sinalIsento
+      ? 0
+      : (servico.sinalInCents ?? Math.round(servico.priceInCents * 0.3));
+    const agendamento: SharedAgendamento = {
+      id,
+      clienteId,
+      clienteNome: String(perfil.nome ?? ''),
+      ...(typeof perfil.email === 'string' ? { clienteEmail: perfil.email } : {}),
+      ...(typeof perfil.telefone === 'string' ? { clienteTelefone: perfil.telefone } : {}),
+      servicoId: servico.id,
+      servicoNome: servico.name,
+      duracaoMinutos: servico.durationMinutes,
+      valorTotalEmCentavos: servico.priceInCents,
+      valorSinalEmCentavos,
+      saldoRestanteEmCentavos: servico.priceInCents - valorSinalEmCentavos,
+      dataHoraInicio: inicio.toISOString(),
+      dataHoraFim: fim.toISOString(),
+      intervaloAposMinutos: 30,
+      profissionalId: input.profissionalId ?? 'prof-tais-romagnoli',
+      profissionalNome: input.profissionalNome ?? 'Tais Romagnoli',
+      status: 'pendente',
+      metodoPagamento: input.metodoPagamento,
+      origem: usuario.uid === clienteId ? 'app_cliente' : 'presencial_admin',
+      sinalIsento,
+      ...(input.observacoes ? { observacoes: input.observacoes } : {}),
+      createdAt: agora,
+      updatedAt: agora,
+    };
+    etapa = 'gravar o agendamento';
+    await setDoc(doc(db, 'agendamentos', id), agendamento);
+    return { sucesso: true, dados: agendamento };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao gravar no Firestore.';
+    const firebaseCode =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String(error.code)
+        : undefined;
+    if (
+      firebaseCode === 'permission-denied' ||
+      /missing or insufficient permissions/i.test(message)
+    ) {
+      return {
+        sucesso: false,
+        erro: `O Firebase recusou a operação ao ${etapa} (permission-denied). Confira a autorização da coleção correspondente nas Security Rules.`,
+      };
+    }
+    return {
+      sucesso: false,
+      erro: message,
+    };
+  }
+}
+
 /**
  * Sincroniza e busca agendamentos para a UI:
- * Se logado com Firebase e backend disponível, busca do servidor e atualiza o storage local.
+ * Se logado com Firebase, busca os agendamentos no Firestore e atualiza o storage local.
  * Caso contrário, consulta o storage local (modo offline / convidado / fallback).
  */
 export async function carregarAgendamentos(
   userId?: string | null,
 ): Promise<{ agendamentos: UiAgendamento[]; sincronizadoComBackend: boolean; erro?: string }> {
-  const token = await getAuthToken();
-
-  if (userId && token) {
-    const resultado = await listarAgendamentosBackend(token);
+  if (userId && auth?.currentUser?.uid === userId) {
+    const resultado = await listarAgendamentosBackend();
     if (resultado.sucesso && Array.isArray(resultado.dados)) {
       const mapeados = resultado.dados.map(mapBackendAgendamentoToUi);
 
-      // Sincroniza no cache local preservando agendamentos locais se não houver no servidor ainda
-      if (mapeados.length > 0) {
-        saveAgendamentosStorage(mapeados, userId);
-        return { agendamentos: mapeados, sincronizadoComBackend: true };
-      }
+      saveAgendamentosStorage(mapeados, userId);
+      return { agendamentos: mapeados, sincronizadoComBackend: true };
     }
   }
 

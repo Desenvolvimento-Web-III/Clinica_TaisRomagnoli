@@ -11,6 +11,16 @@ genéricos ficam em `components/ui`, enquanto acesso ao Firebase fica em `lib/fi
 Functions de segunda geração serão usadas para operações privilegiadas. Contratos puros comuns ao
 frontend e backend ficam em `@clinica/shared`; componentes React, Firebase e infraestrutura não.
 
+Solicitações iniciais de agendamento podem ser gravadas pelo SDK web diretamente em
+`/agendamentos`, com validação nas Security Rules contra o perfil do cliente e o serviço ativo. Esse
+fluxo só cria registros `pendente`; a confirmação, a prevenção de conflitos entre horários e as
+validações clínicas dependem de backend confiável e não são garantidas pelas regras do Firestore.
+Preço e duração são snapshots da leitura normalizada do catálogo no cliente; por isso, uma solicitação
+pendente deve ser revisada pela administradora antes de qualquer confirmação.
+Sem Functions, a disponibilidade do cliente usa a configuração da clínica e o cache local. Uma
+consulta segura dos horários ocupados por todos os clientes exige uma projeção sem dados pessoais,
+que ainda não existe.
+
 ## Autorização futura
 
 A proteção deverá existir em quatro níveis complementares: interface, rotas, Functions e Firebase

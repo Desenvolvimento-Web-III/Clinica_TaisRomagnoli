@@ -9,7 +9,6 @@ import {
   type HorariosFuncionamento,
   type SalvarHorariosInput,
 } from '@clinica/shared';
-import { getFunctionsBaseUrl } from './agendamentos-service';
 import { getTodosAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
@@ -84,44 +83,16 @@ export async function salvarHorariosFuncionamento(
 }
 
 /**
- * Consulta a grade de horários disponíveis calculada pelo backend para uma determinada data e serviço/duração.
- * Aplica a duração do serviço e os 30 minutos de organização entre sessões.
+ * Calcula os horários a partir das configurações da clínica e dos agendamentos locais.
+ * Os documentos de agendamento não são consultados por clientes porque contêm dados pessoais.
  */
-export async function consultarHorariosDisponiveisBackend(params: {
+export async function consultarHorariosDisponiveis(params: {
   data: string;
   duracaoMinutos?: number;
   servicoId?: string;
   profissionalId?: string;
 }): Promise<string[]> {
-  const baseUrl = getFunctionsBaseUrl();
-  const url = new URL(`${baseUrl}/obterHorariosDisponiveis`);
-  url.searchParams.set('data', params.data);
-  if (params.duracaoMinutos) {
-    url.searchParams.set('duracaoMinutos', String(params.duracaoMinutos));
-  }
-  if (params.servicoId) {
-    url.searchParams.set('servicoId', params.servicoId);
-  }
-  if (params.profissionalId) {
-    url.searchParams.set('profissionalId', params.profissionalId);
-  }
-
-  try {
-    const res = await fetch(url.toString());
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.dados?.horarios)) {
-        return data.dados.horarios;
-      }
-    }
-  } catch (err) {
-    console.warn(
-      'Erro ao conectar com Cloud Function de horários disponíveis. Usando cálculo de disponibilidade local:',
-      err,
-    );
-  }
-
-  // Fallback local caso offline ou sem rede
+  // Sem Functions, usa a configuração Firestore e o cache local do navegador.
   const config = await buscarHorariosFuncionamento(params.profissionalId);
   const todosAgendamentos = getTodosAgendamentosStorage();
   const slots = gerarHorariosDisponiveis({

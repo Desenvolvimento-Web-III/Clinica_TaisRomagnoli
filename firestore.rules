@@ -32,6 +32,71 @@ service cloud.firestore {
       );
     }
 
+    function profileMatchesBooking(data) {
+      let profilePath = /databases/$(database)/documents/clientes/$(data.clienteId);
+      return exists(profilePath)
+        // O caminho já identifica o cliente. O campo uid é legado e pode não existir em perfis antigos.
+        && (!('uid' in get(profilePath).data) || get(profilePath).data.uid == data.clienteId)
+        && get(profilePath).data.nome == data.clienteNome
+        && (('email' in get(profilePath).data && 'clienteEmail' in data
+              && get(profilePath).data.email == data.clienteEmail)
+            || (!('email' in get(profilePath).data) && !('clienteEmail' in data)))
+        && (('telefone' in get(profilePath).data && 'clienteTelefone' in data
+              && get(profilePath).data.telefone == data.clienteTelefone)
+            || (!('telefone' in get(profilePath).data) && !('clienteTelefone' in data)));
+    }
+
+    function serviceMatchesBooking(data) {
+      let servicePath = /databases/$(database)/documents/servicos/$(data.servicoId);
+      let servicoDoc = get(servicePath).data;
+      return exists(servicePath)
+        // O catálogo aceita documentos legados sem ativo/active e os interpreta como ativos.
+        && (('active' in servicoDoc && servicoDoc.active == true)
+            || (!('active' in servicoDoc)
+                && (!('ativo' in servicoDoc) || servicoDoc.ativo == true)))
+        // Nomes e valores têm formatos legados distintos (número/string e aliases). O cliente já
+        // normaliza esses campos pelo mesmo mapper do catálogo; a regra valida existência/atividade.
+        && ((!('name' in servicoDoc) && !('nome' in servicoDoc) && !('nome_servico' in servicoDoc))
+            || ('name' in servicoDoc && data.servicoNome == servicoDoc.name)
+            || ('nome' in servicoDoc && data.servicoNome == servicoDoc.nome)
+            || ('nome_servico' in servicoDoc && data.servicoNome == servicoDoc.nome_servico));
+    }
+
+    function validBookingCreate(data) {
+      return isSignedIn()
+        && (isOwner(data.clienteId) || isAdmin())
+        && profileMatchesBooking(data)
+        && serviceMatchesBooking(data)
+        && data.status == 'pendente'
+        && data.sinalIsento == (isAdmin() && !isOwner(data.clienteId) && data.sinalIsento)
+        && data.origem == (isOwner(data.clienteId) ? 'app_cliente' : 'presencial_admin')
+        && data.intervaloAposMinutos == 30
+        && data.duracaoMinutos is int
+        && data.duracaoMinutos >= 15
+        && data.duracaoMinutos <= 360
+        && data.valorTotalEmCentavos is int
+        && data.valorTotalEmCentavos >= 100
+        && data.valorSinalEmCentavos >= 0
+        && data.valorSinalEmCentavos <= data.valorTotalEmCentavos
+        && data.saldoRestanteEmCentavos == data.valorTotalEmCentavos - data.valorSinalEmCentavos
+        && (!data.sinalIsento || data.valorSinalEmCentavos == 0)
+        && data.metodoPagamento in ['pix', 'cartao', 'boleto', 'dinheiro', 'presencial']
+        && data.keys().hasAll([
+          'id', 'clienteId', 'clienteNome', 'servicoId', 'servicoNome', 'duracaoMinutos',
+          'valorTotalEmCentavos', 'valorSinalEmCentavos', 'saldoRestanteEmCentavos',
+          'dataHoraInicio', 'dataHoraFim', 'intervaloAposMinutos', 'profissionalId',
+          'profissionalNome', 'status', 'metodoPagamento', 'origem', 'sinalIsento',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clienteId', 'clienteNome', 'clienteEmail', 'clienteTelefone', 'servicoId',
+          'servicoNome', 'duracaoMinutos', 'valorTotalEmCentavos', 'valorSinalEmCentavos',
+          'saldoRestanteEmCentavos', 'dataHoraInicio', 'dataHoraFim', 'intervaloAposMinutos',
+          'profissionalId', 'profissionalNome', 'status', 'metodoPagamento', 'origem',
+          'sinalIsento', 'observacoes', 'createdAt', 'updatedAt'
+        ]);
+    }
+
     // Coleção de clientes cadastrados
     match /clientes/{uid} {
       allow get: if isOwner(uid) || isAdmin();
@@ -89,6 +154,8 @@ service cloud.firestore {
         resource.data.clienteId == request.auth.uid ||
         resource.data.uid == request.auth.uid
       ));
+      allow create: if validBookingCreate(request.resource.data)
+        && request.resource.data.id == agendamentoId;
       }
 
     function hasNoRestrictedAnamneseFieldsOnCreate(data) {
@@ -117,7 +184,7 @@ service cloud.firestore {
 
     // Coleções raiz de anamneses e fichas de avaliação
     match /anamneses/{anamnesisId} {
-      allow get: if isAdmin() || isDocOwner(resource.data);
+      allow get: if isAdmin() || isOwner(anamnesisId) || isDocOwner(resource.data);
       allow list: if isAdmin() || (isSignedIn() && (
         resource.data.clienteId == request.auth.uid ||
         resource.data.uid == request.auth.uid
@@ -135,7 +202,7 @@ service cloud.firestore {
     }
 
     match /fichas/{fichaId} {
-      allow get: if isAdmin() || isDocOwner(resource.data);
+      allow get: if isAdmin() || isOwner(fichaId) || isDocOwner(resource.data);
       allow list: if isAdmin() || (isSignedIn() && (
         resource.data.clienteId == request.auth.uid ||
         resource.data.uid == request.auth.uid
@@ -185,10 +252,12 @@ service cloud.firestore {
 
     // Agendamentos de serviços da clínica
     // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
-    // Escrita direta client-side bloqueada: criação, reagendamento e cancelamento são processados por Cloud Functions
+    // Criação direta limitada a solicitações pendentes e validadas contra perfil e serviço.
     match /agendamentos/{agendamentoId} {
       allow read: if isAdmin() || isDocOwner(resource.data);
-      allow write: if false;
+      allow create: if validBookingCreate(request.resource.data)
+        && request.resource.data.id == agendamentoId;
+      allow update, delete: if false;
     }
 
     // Bloqueios de agenda da clínica (únicos e recorrentes)

@@ -23,7 +23,7 @@ vi.mock('@/services/agendamentos-service', async (importOriginal) => {
 
 vi.mock('@/services/horarios-service', () => ({
   buscarHorariosFuncionamento: mockBuscarHorarios,
-  consultarHorariosDisponiveisBackend: mockConsultarGrade,
+  consultarHorariosDisponiveis: mockConsultarGrade,
 }));
 
 vi.mock('@/features/auth/auth-context', () => ({

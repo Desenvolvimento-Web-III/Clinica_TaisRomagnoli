@@ -3,6 +3,8 @@ import type {
   FichaAnamneseRecord,
   RegistrarLiberacaoMedicaInput,
 } from '@clinica/shared';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { getFunctionsBaseUrl, getAuthToken } from './agendamentos-service';
 
 export async function salvarFichaAnamneseApi(
@@ -49,48 +51,39 @@ export async function salvarFichaAnamneseApi(
   }
 }
 
-export async function obterFichaAnamneseApi(
-  clienteId?: string,
-  token?: string | null,
-): Promise<{
+export async function obterFichaAnamneseApi(clienteId?: string): Promise<{
   sucesso: boolean;
   dados?: FichaAnamneseRecord;
   erro?: string;
   statusCode?: number;
 }> {
-  const authToken = token ?? (await getAuthToken());
-  if (!authToken) {
+  if (!auth?.currentUser || !db) {
     return { sucesso: false, erro: 'Usuário não autenticado.' };
   }
 
   try {
-    const params = clienteId ? `?clienteId=${encodeURIComponent(clienteId)}` : '';
-    const url = `${getFunctionsBaseUrl()}/obterFichaAnamnese${params}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    if (response.status === 404) {
-      return { sucesso: true, dados: undefined };
+    const targetClienteId = clienteId ?? auth.currentUser.uid;
+    const fichaRef = doc(db, 'anamneses', targetClienteId);
+    const fichaSnapshot = await getDoc(fichaRef);
+    if (fichaSnapshot.exists()) {
+      return { sucesso: true, dados: fichaSnapshot.data() as FichaAnamneseRecord };
     }
 
-    const body = await response.json();
-    if (!response.ok) {
-      return {
-        sucesso: false,
-        erro: body.error || 'Erro ao consultar ficha de anamnese no servidor.',
-        statusCode: response.status,
-      };
+    const fichaClienteSnapshot = await getDoc(
+      doc(db, 'clientes', targetClienteId, 'anamneses', 'atual'),
+    );
+    if (fichaClienteSnapshot.exists()) {
+      return { sucesso: true, dados: fichaClienteSnapshot.data() as FichaAnamneseRecord };
     }
 
-    return { sucesso: true, dados: body.dados };
+    return { sucesso: true, dados: undefined };
   } catch (error) {
     return {
       sucesso: false,
-      erro: error instanceof Error ? error.message : 'Falha na comunicação com o servidor.',
+      erro:
+        error instanceof Error
+          ? error.message
+          : 'Falha ao consultar a ficha de anamnese no Firestore.',
     };
   }
 }

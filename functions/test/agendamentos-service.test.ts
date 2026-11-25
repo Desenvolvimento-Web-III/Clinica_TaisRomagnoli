@@ -101,6 +101,121 @@ describe('Agendamentos Service (Functions Backend)', () => {
       expect(agendamento.origem).toBe('presencial_admin');
     });
 
+    it('copia ID, nome, e-mail e telefone do perfil cadastrado ao criar agendamento para cliente', async () => {
+      const clientesRepo = new InMemoryClientesRepository();
+      await clientesRepo.salvar({
+        uid: clienteUser.uid,
+        nome: 'Nome oficial do perfil',
+        email: 'perfil@example.com',
+        telefone: '(11) 91234-5678',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: '2026-10-01T10:00:00.000Z',
+      });
+      const input = {
+        clienteId: clienteUser.uid,
+        clienteNome: 'Nome alterado no navegador',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      const agendamento = await solicitarNovoAgendamento(
+        input,
+        adminUser,
+        repo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        clientesRepo,
+      );
+
+      expect(agendamento.clienteId).toBe(clienteUser.uid);
+      expect(agendamento.clienteNome).toBe('Nome oficial do perfil');
+      expect(agendamento.clienteEmail).toBe('perfil@example.com');
+      expect(agendamento.clienteTelefone).toBe('(11) 91234-5678');
+    });
+
+    it('usa o UID autenticado e busca os dados do perfil sem recebê-los no pedido do cliente', async () => {
+      const clientesRepo = new InMemoryClientesRepository();
+      await clientesRepo.salvar({
+        uid: clienteUser.uid,
+        nome: 'Nome do cadastro',
+        email: 'cadastro@example.com',
+        telefone: '(21) 99876-5432',
+        role: 'cliente',
+        status: 'ativo',
+        createdAt: '2026-10-01T10:00:00.000Z',
+      });
+      const input = {
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      const agendamento = await solicitarNovoAgendamento(
+        input,
+        clienteUser,
+        repo,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        clientesRepo,
+      );
+
+      expect(agendamento.clienteId).toBe(clienteUser.uid);
+      expect(agendamento.clienteNome).toBe('Nome do cadastro');
+      expect(agendamento.clienteEmail).toBe('cadastro@example.com');
+      expect(agendamento.clienteTelefone).toBe('(21) 99876-5432');
+    });
+
+    it('não cria agendamento pelo backend quando o perfil do cliente não existe', async () => {
+      const clientesRepo = new InMemoryClientesRepository();
+      const input = {
+        clienteId: 'cliente-sem-perfil',
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix' as const,
+      };
+
+      await expect(
+        solicitarNovoAgendamento(
+          input,
+          adminUser,
+          repo,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          clientesRepo,
+        ),
+      ).rejects.toThrow(/perfil do cliente não encontrado/i);
+      expect(await repo.listarTodos()).toHaveLength(0);
+    });
+
     it('rejeita agendamento em dia de folga da clínica (ex: Domingo ou Terça-feira)', async () => {
       // 2026-10-25 é Domingo (dia 0 = inativo)
       const inputDomingo = {
