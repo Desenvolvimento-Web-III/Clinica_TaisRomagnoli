@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   avaliarBloqueioContraindicacao,
+  CONFIGURACAO_HORARIOS_PADRAO,
+  type HorariosFuncionamento,
   type ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';
 import { serviceCatalog } from '@/features/services/catalog';
@@ -16,7 +18,10 @@ import {
   criarAgendamentoFirestore,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
-import { consultarHorariosDisponiveis } from '@/services/horarios-service';
+import {
+  buscarHorariosFuncionamento,
+  consultarHorariosDisponiveis,
+} from '@/services/horarios-service';
 import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
   maskCardNumber,
@@ -61,24 +66,6 @@ function loadLocalAnamneseEvaluation(
 type FlowStep = 'calendario' | 'confirmacao' | 'pagamento' | 'concluido';
 type MetodoPagamento = 'pix' | 'cartao' | 'boleto';
 
-interface DiaOpcao {
-  isoDate: string;
-  diaSemana: string;
-  dataCurta: string;
-  disponivel: boolean;
-}
-
-const DIAS_DISPONIVEIS_MOCK: DiaOpcao[] = [
-  { isoDate: '2026-10-21', diaSemana: 'Quarta-feira', dataCurta: '21 Out', disponivel: true },
-  { isoDate: '2026-10-22', diaSemana: 'Quinta-feira', dataCurta: '22 Out', disponivel: true },
-  { isoDate: '2026-10-23', diaSemana: 'Sexta-feira', dataCurta: '23 Out', disponivel: true },
-  { isoDate: '2026-10-24', diaSemana: 'Sábado', dataCurta: '24 Out', disponivel: true },
-  { isoDate: '2026-10-25', diaSemana: 'Domingo', dataCurta: '25 Out', disponivel: false },
-  { isoDate: '2026-10-26', diaSemana: 'Segunda-feira', dataCurta: '26 Out', disponivel: true },
-  { isoDate: '2026-10-27', diaSemana: 'Terça-feira', dataCurta: '27 Out', disponivel: false },
-  { isoDate: '2026-10-28', diaSemana: 'Quarta-feira', dataCurta: '28 Out', disponivel: true },
-];
-
 function calcularFimHorario(inicio: string, duracaoMin: number) {
   const parts = inicio.split(':');
   const h = Number(parts[0] ?? '0');
@@ -87,6 +74,11 @@ function calcularFimHorario(inicio: string, duracaoMin: number) {
   const finalH = Math.floor(totalMin / 60) % 24;
   const finalM = totalMin % 60;
   return `${String(finalH).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
+}
+
+function hojeIsoLocal(): string {
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 }
 
 export function AgendamentoFlowPage() {
@@ -117,13 +109,20 @@ export function AgendamentoFlowPage() {
   // Estados do fluxo
   const [step, setStep] = useState<FlowStep>('calendario');
   const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Entre na sua conta';
+  const [configuracaoHorarios, setConfiguracaoHorarios] = useState<HorariosFuncionamento>(
+    CONFIGURACAO_HORARIOS_PADRAO,
+  );
   const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
     const agora = new Date();
     const d = new Date(agora);
     if (d.getHours() >= 18) {
       d.setDate(d.getDate() + 1);
     }
-    while (d.getDay() === 0 || d.getDay() === 2) {
+    while (
+      !CONFIGURACAO_HORARIOS_PADRAO.dias.some(
+        (dia) => dia.dia === d.getDay() && dia.ativo && dia.turnos.length > 0,
+      )
+    ) {
       d.setDate(d.getDate() + 1);
     }
     const y = d.getFullYear();
@@ -141,6 +140,37 @@ export function AgendamentoFlowPage() {
   } | null>(null);
   const [submittingAgendamento, setSubmittingAgendamento] = useState(false);
   const [erroAgendamento, setErroAgendamento] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    void buscarHorariosFuncionamento('prof-tais-romagnoli').then((configuracao) => {
+      if (!ativo) return;
+      setConfiguracaoHorarios(configuracao);
+      setDataSelecionada((atual) => {
+        const dataAtual = new Date(`${atual}T12:00:00`);
+        const diaAtualEstaAberto = configuracao.dias.some(
+          (dia) => dia.dia === dataAtual.getDay() && dia.ativo && dia.turnos.length > 0,
+        );
+        if (atual >= hojeIsoLocal() && diaAtualEstaAberto) return atual;
+
+        const proximaData = new Date();
+        if (proximaData.getHours() >= 18) proximaData.setDate(proximaData.getDate() + 1);
+        for (let i = 0; i < 14; i += 1) {
+          const diaAberto = configuracao.dias.some(
+            (dia) => dia.dia === proximaData.getDay() && dia.ativo && dia.turnos.length > 0,
+          );
+          if (diaAberto) {
+            return `${proximaData.getFullYear()}-${String(proximaData.getMonth() + 1).padStart(2, '0')}-${String(proximaData.getDate()).padStart(2, '0')}`;
+          }
+          proximaData.setDate(proximaData.getDate() + 1);
+        }
+        return atual;
+      });
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   useEffect(() => {
     const uid = currentUser?.uid;
@@ -206,10 +236,11 @@ export function AgendamentoFlowPage() {
   const valorSinalReais = Math.round(valorTotalReais * 0.3 * 100) / 100;
   const saldoRestanteReais = Math.round((valorTotalReais - valorSinalReais) * 100) / 100;
 
-  const diaSelecionadoObj = DIAS_DISPONIVEIS_MOCK.find((d) => d.isoDate === dataSelecionada);
-  const dataFormatadaTexto = diaSelecionadoObj
-    ? `${diaSelecionadoObj.dataCurta} • ${diaSelecionadoObj.diaSemana}`
-    : dataSelecionada;
+  const dataFormatadaTexto = new Date(`${dataSelecionada}T12:00:00`).toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+  });
 
   const cardBrand = useMemo(() => detectCardBrand(cartaoNumero), [cartaoNumero]);
 
@@ -296,6 +327,9 @@ export function AgendamentoFlowPage() {
         dataSelecionada={dataSelecionada}
         horarioSelecionado={horarioSelecionado}
         horariosDisponiveis={horariosDisponiveis}
+        diasAtivosClinica={configuracaoHorarios.dias
+          .filter((dia) => dia.ativo && dia.turnos.length > 0)
+          .map((dia) => dia.dia)}
         onSelectData={(isoDate) => setDataSelecionada(isoDate)}
         onSelectHorario={(hora) => setHorarioSelecionado(hora)}
         onConfirmar={() => {

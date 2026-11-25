@@ -6,6 +6,7 @@ interface BookingCalendarProps {
   horarioSelecionado: string; // 'HH:mm'
   horariosDisponiveis?: string[] | null;
   diasLotados?: string[];
+  diasAtivosClinica?: number[];
   onSelectData: (isoDate: string) => void;
   onSelectHorario: (hora: string) => void;
   onConfirmar: () => void;
@@ -53,6 +54,7 @@ export function BookingCalendar({
   horarioSelecionado,
   horariosDisponiveis,
   diasLotados,
+  diasAtivosClinica,
   onSelectData,
   onSelectHorario,
   onConfirmar,
@@ -108,13 +110,16 @@ export function BookingCalendar({
   // Dias inativos na clínica (folgas padrão: 0 = Domingo, 2 = Terça)
   const diasInativosClinica = useMemo(() => {
     const inativos = new Set<number>();
-    CONFIGURACAO_HORARIOS_PADRAO.dias.forEach((d) => {
-      if (!d.ativo) {
-        inativos.add(d.dia);
-      }
-    });
+    const diasAtivos =
+      diasAtivosClinica ??
+      CONFIGURACAO_HORARIOS_PADRAO.dias
+        .filter((dia) => dia.ativo && dia.turnos.length > 0)
+        .map((dia) => dia.dia);
+    for (let dia = 0; dia <= 6; dia += 1) {
+      if (!diasAtivos.includes(dia)) inativos.add(dia);
+    }
     return inativos;
-  }, []);
+  }, [diasAtivosClinica]);
 
   // Montagem da grade do calendário
   const diasGrade = useMemo(() => {
