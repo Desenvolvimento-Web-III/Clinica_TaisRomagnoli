@@ -28,11 +28,13 @@ import { AdminClientsList } from '@/features/admin-dashboard/components/AdminCli
 import { AdminIndicadoresOperacionais } from '@/features/admin-dashboard/components/AdminIndicadoresOperacionais';
 import { AdminRelatoriosSection } from '@/features/admin-dashboard/components/AdminRelatoriosSection';
 import { AdminFilaLembretesWhatsApp } from '@/features/admin-dashboard/components/AdminFilaLembretesWhatsApp';
+import { AdminAgendaCalendario } from '@/features/admin-dashboard/components/AdminAgendaCalendario';
 import { carregarLembretesEnviadosStorage } from '@/features/admin-dashboard/utils/whatsapp-reminders';
 import {
   atualizarStatusAgendamentoBackend,
   buscarAgendamentosAdmin,
   buscarAgendamentosAdminDoDia,
+  alterarAgendamentoBackend,
   criarAgendamentoFirestore,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
@@ -209,6 +211,13 @@ function obterDataHoraPresencialInicial(): string {
   return `${ano}-${mes}-${dia}T10:00`;
 }
 
+function formatarDataHoraLocalInput(dataIso: string): string {
+  const data = new Date(dataIso);
+  if (Number.isNaN(data.getTime())) return obterDataHoraPresencialInicial();
+  const offset = data.getTimezoneOffset() * 60_000;
+  return new Date(data.getTime() - offset).toISOString().slice(0, 16);
+}
+
 export function AdminDashboardPage() {
   const { section } = useParams<{ section?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -224,10 +233,14 @@ export function AdminDashboardPage() {
         : 'agenda';
 
   const [activeSection, setActiveSection] = useState<AdminSection>(resolvedSection);
-  const [agendaSubView, setAgendaSubView] = useState<'lista' | 'lembretes'>(
+  const [agendaSubView, setAgendaSubView] = useState<'lista' | 'calendario' | 'lembretes'>(
     isLembretesRoute || searchParams.get('sub') === 'lembretes' ? 'lembretes' : 'lista',
   );
   const [modalPresencialAberto, setModalPresencialAberto] = useState(false);
+  const [agendamentoParaEdicao, setAgendamentoParaEdicao] = useState<SharedAgendamento | null>(
+    null,
+  );
+  const [motivoAlteracao, setMotivoAlteracao] = useState('');
 
   // Estados da Agenda e Agendamento Presencial
   const [agendaItems, setAgendaItems] = useState<AgendamentoAgendaItem[]>([]);
@@ -473,12 +486,26 @@ export function AdminDashboardPage() {
   };
 
   const handleAbrirModalPresencial = () => {
+    setAgendamentoParaEdicao(null);
+    setMotivoAlteracao('');
     setPresencialErro(null);
     setPresencialAvaliacaoBloqueio(null);
     setPresencialClienteId('');
     setPresencialServicoId(servicos[0]?.id ?? 'srv-1');
     setPresencialDataHora(obterDataHoraPresencialInicial());
     setPresencialIsencaoSinal(true);
+    setModalPresencialAberto(true);
+  };
+
+  const handleAbrirEdicaoAgendamento = (agendamento: SharedAgendamento) => {
+    if (agendamento.status === 'cancelado' || agendamento.status === 'concluido') return;
+    setPresencialErro(null);
+    setAgendamentoParaEdicao(agendamento);
+    setMotivoAlteracao('');
+    setPresencialClienteId(agendamento.clienteId);
+    setPresencialServicoId(agendamento.servicoId);
+    setPresencialDataHora(formatarDataHoraLocalInput(agendamento.dataHoraInicio));
+    setPresencialIsencaoSinal(agendamento.sinalIsento);
     setModalPresencialAberto(true);
   };
 
@@ -547,7 +574,11 @@ export function AdminDashboardPage() {
     e.preventDefault();
     setPresencialErro(null);
 
-    if (presencialIsencaoSinal && presencialAvaliacaoBloqueio?.bloqueado) {
+    if (
+      !agendamentoParaEdicao &&
+      presencialIsencaoSinal &&
+      presencialAvaliacaoBloqueio?.bloqueado
+    ) {
       setPresencialErro(
         presencialAvaliacaoBloqueio.motivoBloqueio || MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
       );
@@ -556,10 +587,12 @@ export function AdminDashboardPage() {
 
     const servicoSelecionado =
       servicos.find((s) => s.id === presencialServicoId) ?? servicos[0] ?? SERVICOS_INICIAIS[0]!;
-    const dataHoraNormalizada =
-      presencialDataHora.length === 16 ? `${presencialDataHora}:00.000Z` : presencialDataHora;
+    const dataSelecionada = new Date(presencialDataHora);
+    const dataHoraNormalizada = Number.isNaN(dataSelecionada.getTime())
+      ? ''
+      : dataSelecionada.toISOString();
 
-    if (verificarDataHoraNoPassado(dataHoraNormalizada)) {
+    if (!dataHoraNormalizada || verificarDataHoraNoPassado(dataHoraNormalizada)) {
       setPresencialErro(MENSAGEM_ERRO_DATA_PASSADA);
       return;
     }
@@ -572,6 +605,29 @@ export function AdminDashboardPage() {
 
     setSubmittingPresencial(true);
     try {
+      if (agendamentoParaEdicao) {
+        const resposta = await alterarAgendamentoBackend({
+          agendamentoId: agendamentoParaEdicao.id,
+          novaDataHoraInicio: dataHoraNormalizada,
+          motivo: motivoAlteracao.trim() || undefined,
+        });
+        if (!resposta.sucesso || !resposta.dados) {
+          setPresencialErro(resposta.erro || 'Não foi possível reagendar o atendimento.');
+          return;
+        }
+        setAgendamentosRelatorio((anteriores) =>
+          anteriores.map((item) => (item.id === resposta.dados!.id ? resposta.dados! : item)),
+        );
+        await carregarAgendaDoDia();
+        setAgendaFeedback({
+          tipo: 'sucesso',
+          texto: `Agendamento de ${resposta.dados.clienteNome} atualizado para ${new Date(resposta.dados.dataHoraInicio).toLocaleString('pt-BR')}.`,
+        });
+        setModalPresencialAberto(false);
+        setAgendamentoParaEdicao(null);
+        return;
+      }
+
       const resposta = await criarAgendamentoFirestore(
         {
           clienteId: clienteSelecionado.id,
@@ -729,7 +785,7 @@ export function AdminDashboardPage() {
             </div>
 
             {/* Sub-navegação interna da Agenda */}
-            <div className="flex border-b border-[var(--color-border-default)]">
+            <div className="flex flex-wrap border-b border-[var(--color-border-default)]">
               <button
                 type="button"
                 onClick={() => setAgendaSubView('lista')}
@@ -740,6 +796,18 @@ export function AdminDashboardPage() {
                 }`}
               >
                 Atendimentos de Hoje ({agendaItems.length})
+              </button>
+              <button
+                type="button"
+                data-testid="tab-calendario-agenda"
+                onClick={() => setAgendaSubView('calendario')}
+                className={`border-b-2 px-4 py-2 text-xs font-bold transition-all ${
+                  agendaSubView === 'calendario'
+                    ? 'border-[var(--color-brand-deep)] text-[var(--color-brand-deep)]'
+                    : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                Calendário
               </button>
               <button
                 type="button"
@@ -765,6 +833,42 @@ export function AdminDashboardPage() {
                 agendamentos={agendaItems}
                 onVoltarAgenda={() => setAgendaSubView('lista')}
               />
+            ) : agendaSubView === 'calendario' ? (
+              <>
+                {agendaFeedback && (
+                  <div
+                    role={agendaFeedback.tipo === 'erro' ? 'alert' : 'status'}
+                    data-testid="agenda-feedback-banner"
+                    className={`rounded-2xl border p-4 text-sm font-medium ${
+                      agendaFeedback.tipo === 'erro'
+                        ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
+                        : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
+                    }`}
+                  >
+                    {agendaFeedback.texto}
+                  </div>
+                )}
+                <AdminAgendaCalendario
+                  agendamentos={agendamentosRelatorio}
+                  isLoading={isLoadingRelatorio}
+                  error={erroAgendamentosRelatorio}
+                  onEditAppointment={handleAbrirEdicaoAgendamento}
+                  onRefresh={() => {
+                    setIsLoadingRelatorio(true);
+                    setErroAgendamentosRelatorio(null);
+                    void buscarAgendamentosAdmin()
+                      .then(setAgendamentosRelatorio)
+                      .catch((error: unknown) =>
+                        setErroAgendamentosRelatorio(
+                          error instanceof Error
+                            ? error.message
+                            : 'Não foi possível carregar a agenda.',
+                        ),
+                      )
+                      .finally(() => setIsLoadingRelatorio(false));
+                  }}
+                />
+              </>
             ) : (
               <>
                 {/* Indicadores Operacionais */}
@@ -911,6 +1015,22 @@ export function AdminDashboardPage() {
                                   {confirmingAgendaId === item.id
                                     ? 'Confirmando…'
                                     : 'Confirmar agendamento'}
+                                </button>
+                              )}
+
+                              {item.status !== 'cancelado' && item.status !== 'concluido' && (
+                                <button
+                                  type="button"
+                                  data-testid={`editar-agendamento-agenda-${item.id}`}
+                                  onClick={() => {
+                                    const agendamento = agendamentosRelatorio.find(
+                                      (registro) => registro.id === item.id,
+                                    );
+                                    if (agendamento) handleAbrirEdicaoAgendamento(agendamento);
+                                  }}
+                                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--color-border-default)] px-3.5 py-2 text-xs font-semibold text-[var(--color-brand-deep)] hover:bg-[var(--color-brand-soft)]"
+                                >
+                                  Editar / reagendar
                                 </button>
                               )}
 
@@ -1248,7 +1368,7 @@ export function AdminDashboardPage() {
         )}
       </main>
 
-      {/* Modal Demonstrativo para Agendamento Presencial */}
+      {/* Formulário administrativo para criar e reagendar atendimentos */}
       {modalPresencialAberto && (
         <div
           role="dialog"
@@ -1258,11 +1378,14 @@ export function AdminDashboardPage() {
           <div className="relative flex flex-col w-full max-w-md max-h-[92dvh] sm:max-h-[88vh] rounded-2xl bg-white shadow-xl overflow-hidden">
             <div className="shrink-0 p-4 sm:p-6 pb-3 sm:pb-4 border-b border-[var(--color-border-default)]">
               <h3 className="text-lg font-bold text-[var(--color-text-primary)]">
-                Novo Agendamento Presencial
+                {agendamentoParaEdicao
+                  ? 'Editar / reagendar atendimento'
+                  : 'Novo agendamento administrativo'}
               </h3>
               <p className="mt-1 text-xs text-[var(--color-text-secondary)] sm:text-sm">
-                Cadastre um atendimento feito no balcão da clínica. Não há exigência de sinal de 30%
-                nesta modalidade.
+                {agendamentoParaEdicao
+                  ? 'Altere a data e o horário. Cliente e serviço permanecem vinculados ao atendimento.'
+                  : 'Cadastre um atendimento feito pela clínica. O agendamento administrativo não exige sinal.'}
               </p>
             </div>
 
@@ -1281,9 +1404,10 @@ export function AdminDashboardPage() {
                   <select
                     id="presencial-cliente-select"
                     required
+                    disabled={Boolean(agendamentoParaEdicao)}
                     value={presencialClienteId}
                     onChange={(e) => void handleSelecionarClientePresencial(e.target.value)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden disabled:bg-gray-100"
                   >
                     <option value="">Selecione um cliente cadastrado</option>
                     {clientes.map((c) => (
@@ -1325,9 +1449,10 @@ export function AdminDashboardPage() {
                   </label>
                   <select
                     id="presencial-servico-select"
+                    disabled={Boolean(agendamentoParaEdicao)}
                     value={presencialServicoId}
                     onChange={(e) => setPresencialServicoId(e.target.value)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden disabled:bg-gray-100"
                   >
                     {servicos.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -1363,11 +1488,31 @@ export function AdminDashboardPage() {
                     id="presencial-isencao-sinal"
                     type="checkbox"
                     checked={presencialIsencaoSinal}
+                    disabled={Boolean(agendamentoParaEdicao)}
                     onChange={(e) => setPresencialIsencaoSinal(e.target.checked)}
                     className="h-4 w-4 rounded border-[var(--color-border-default)] text-[var(--color-brand-deep)]"
                   />
                   <span>Isentar sinal de 30% (confirmar atendimento presencial)</span>
                 </label>
+
+                {agendamentoParaEdicao && (
+                  <div>
+                    <label
+                      htmlFor="presencial-motivo-alteracao"
+                      className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
+                    >
+                      Motivo da alteração (opcional)
+                    </label>
+                    <textarea
+                      id="presencial-motivo-alteracao"
+                      maxLength={300}
+                      rows={3}
+                      value={motivoAlteracao}
+                      onChange={(event) => setMotivoAlteracao(event.target.value)}
+                      className="mt-1.5 w-full resize-y rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
+                    />
+                  </div>
+                )}
 
                 {presencialErro && (
                   <div
@@ -1394,7 +1539,11 @@ export function AdminDashboardPage() {
                   disabled={submittingPresencial}
                   className="min-h-11 w-full sm:w-auto rounded-xl bg-[var(--color-brand-deep)] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-dark)] active:bg-[var(--color-brand-darker)] disabled:cursor-wait disabled:opacity-60"
                 >
-                  {submittingPresencial ? 'Salvando…' : 'Confirmar Agendamento'}
+                  {submittingPresencial
+                    ? 'Salvando…'
+                    : agendamentoParaEdicao
+                      ? 'Salvar alteração'
+                      : 'Confirmar Agendamento'}
                 </button>
               </div>
             </form>
