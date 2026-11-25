@@ -82,6 +82,7 @@ import {
   salvarFichaAnamnese,
   obterFichaAnamnese,
   atualizarLiberacaoMedica,
+  gerarMensagemAssistidaWhatsapp,
 } from '../src/index.js';
 
 type HttpHandler = (req: unknown, res: unknown) => Promise<void> | void;
@@ -234,6 +235,11 @@ describe('[Backend] Validação de ID Token nas Cloud Functions protegidas', () 
     {
       name: 'atualizarLiberacaoMedica',
       handler: atualizarLiberacaoMedica,
+      method: 'POST',
+    },
+    {
+      name: 'gerarMensagemAssistidaWhatsapp',
+      handler: gerarMensagemAssistidaWhatsapp,
       method: 'POST',
     },
   ];

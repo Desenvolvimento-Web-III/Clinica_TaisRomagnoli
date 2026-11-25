@@ -29,6 +29,10 @@ import {
   NotificacaoBusinessError,
 } from './modules/notificacoes/notificacoes-service.js';
 import {
+  gerarMensagemAssistidaWhatsappService,
+  WhatsappBusinessError,
+} from './modules/notificacoes/whatsapp-service.js';
+import {
   FirestoreServicosRepository,
   type ServicosRepository,
 } from './modules/servicos/servicos-repository.js';
@@ -2873,3 +2877,50 @@ export const expirarReservasTemporarias = onRequest({ cors: true }, async (reque
     response.status(500).json({ error: 'Erro interno ao expirar reservas temporárias.' });
   }
 });
+
+/**
+ * Gera mensagem e link assistidos do WhatsApp com cliente, serviço, data e horário.
+ */
+export const gerarMensagemAssistidaWhatsapp = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== 'POST') {
+      response.status(405).json({ error: 'Método não permitido. Use POST.' });
+      return;
+    }
+
+    try {
+      const user = await extrairUsuarioAutenticado(request.headers.authorization);
+
+      const firestore = getFirestore();
+      const repo = new FirestoreAgendamentosRepository(firestore);
+
+      const body = (request.body || {}) as Record<string, unknown>;
+
+      const resultado = await gerarMensagemAssistidaWhatsappService(body, {
+        agendamentosRepo: repo,
+        requesterId: user.uid,
+        requesterIsAdmin: user.isAdmin,
+      });
+
+      response.status(200).json({
+        sucesso: true,
+        mensagem: 'Mensagem assistida do WhatsApp gerada com sucesso.',
+        dados: resultado,
+      });
+    } catch (error: unknown) {
+      if (error instanceof WhatsappBusinessError) {
+        response.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      if (responderErroNegocio(response, error)) {
+        return;
+      }
+      console.error('Erro ao gerar mensagem assistida do WhatsApp:', error);
+      response.status(500).json({ error: 'Erro interno ao gerar mensagem assistida do WhatsApp.' });
+    }
+  },
+);
+
+
+
