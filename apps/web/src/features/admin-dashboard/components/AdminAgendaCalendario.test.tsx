@@ -69,4 +69,22 @@ describe('AdminAgendaCalendario', () => {
 
     expect(screen.getByTestId('calendar-period-title').textContent).not.toBe(periodBefore);
   });
+
+  it('permite iniciar edição do agendamento selecionado', () => {
+    const appointment = agendamentoHoje();
+    const onEditAppointment = vi.fn();
+    render(
+      <AdminAgendaCalendario
+        agendamentos={[appointment]}
+        isLoading={false}
+        error={null}
+        onRefresh={vi.fn()}
+        onEditAppointment={onEditAppointment}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('editar-agendamento-booking-today'));
+
+    expect(onEditAppointment).toHaveBeenCalledWith(appointment);
+  });
 });

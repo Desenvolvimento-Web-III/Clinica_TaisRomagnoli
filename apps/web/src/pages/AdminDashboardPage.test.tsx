@@ -138,6 +138,7 @@ describe('AdminDashboardPage', () => {
     vi.spyOn(agendamentosService, 'buscarAgendamentosAdmin').mockResolvedValue(
       agendamentosDoDiaDeTeste(),
     );
+    vi.spyOn(agendamentosService, 'alterarAgendamentoBackend');
     vi.spyOn(clientesAdminService, 'buscarClientesAdmin').mockResolvedValue(CLIENTES_DEMO_INICIAIS);
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
       DEFAULT_CLINIC_SETTINGS,
@@ -215,6 +216,56 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByTestId('calendar-appointment-ag-1')).toHaveTextContent('Mariana Silva');
     expect(screen.getByTestId('calendar-appointment-ag-1')).toHaveTextContent('Massagem Relaxante');
     expect(agendamentosService.buscarAgendamentosAdmin).toHaveBeenCalled();
+  });
+
+  it('permite reagendar um atendimento pelo formulário administrativo', async () => {
+    const appointment = agendamentosDoDiaDeTeste()[1]!;
+    vi.mocked(agendamentosService.alterarAgendamentoBackend).mockImplementation(async (input) => ({
+      sucesso: true,
+      dados: {
+        ...appointment,
+        dataHoraInicio: input.novaDataHoraInicio,
+        dataHoraFim: new Date(
+          new Date(input.novaDataHoraInicio).getTime() + 60 * 60_000,
+        ).toISOString(),
+      },
+    }));
+
+    renderDashboard();
+    fireEvent.click(screen.getByTestId('tab-calendario-agenda'));
+    fireEvent.click(await screen.findByTestId(`editar-agendamento-${appointment.id}`));
+
+    expect(
+      screen.getByRole('heading', { name: /editar \/ reagendar atendimento/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Cliente cadastrado')).toBeDisabled();
+    expect(screen.getByLabelText('Procedimento')).toBeDisabled();
+
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 2);
+    futureDate.setHours(10, 0, 0, 0);
+    const localDateTime = new Date(futureDate.getTime() - futureDate.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16);
+    fireEvent.change(screen.getByLabelText('Data e horário'), { target: { value: localDateTime } });
+    fireEvent.change(screen.getByLabelText('Motivo da alteração (opcional)'), {
+      target: { value: 'Solicitação da cliente' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alteração' }));
+
+    await waitFor(() => {
+      expect(agendamentosService.alterarAgendamentoBackend).toHaveBeenCalledWith({
+        agendamentoId: appointment.id,
+        novaDataHoraInicio: new Date(localDateTime).toISOString(),
+        motivo: 'Solicitação da cliente',
+      });
+    });
+    expect(await screen.findByTestId('agenda-feedback-banner')).toHaveTextContent(
+      'atualizado para',
+    );
+    expect(
+      screen.queryByRole('heading', { name: /editar \/ reagendar atendimento/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('exibe estado vazio quando o Firestore não tem agendamentos para hoje', async () => {
@@ -386,7 +437,7 @@ describe('AdminDashboardPage', () => {
     fireEvent.click(botaoNovo);
 
     expect(
-      screen.getByRole('heading', { name: /novo agendamento presencial/i }),
+      screen.getByRole('heading', { name: /novo agendamento administrativo/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/cliente cadastrado/i)).toBeRequired();
     expect(screen.queryByLabelText(/nome do cliente/i)).not.toBeInTheDocument();
@@ -395,7 +446,7 @@ describe('AdminDashboardPage', () => {
     fireEvent.click(botaoCancelar);
 
     expect(
-      screen.queryByRole('heading', { name: /novo agendamento presencial/i }),
+      screen.queryByRole('heading', { name: /novo agendamento administrativo/i }),
     ).not.toBeInTheDocument();
   });
 

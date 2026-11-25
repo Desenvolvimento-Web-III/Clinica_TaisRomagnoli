@@ -8,6 +8,7 @@ interface AdminAgendaCalendarioProps {
   isLoading: boolean;
   error: string | null;
   onRefresh: () => void;
+  onEditAppointment?: (appointment: Agendamento) => void;
 }
 
 const NOMES_DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -74,6 +75,7 @@ export function AdminAgendaCalendario({
   isLoading,
   error,
   onRefresh,
+  onEditAppointment,
 }: AdminAgendaCalendarioProps) {
   const [view, setView] = useState<CalendarView>('week');
   const [periodDate, setPeriodDate] = useState(() => dateAtNoon(new Date()));
@@ -314,9 +316,23 @@ export function AdminAgendaCalendario({
                     </p>
                   </div>
                 </div>
-                <span className="w-fit rounded-full border border-[var(--color-border-default)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--color-text-secondary)]">
-                  {appointment.status.replace('_', ' ')}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-fit rounded-full border border-[var(--color-border-default)] px-2.5 py-1 text-xs font-semibold capitalize text-[var(--color-text-secondary)]">
+                    {appointment.status.replace('_', ' ')}
+                  </span>
+                  {onEditAppointment &&
+                    appointment.status !== 'cancelado' &&
+                    appointment.status !== 'concluido' && (
+                      <button
+                        type="button"
+                        data-testid={`editar-agendamento-${appointment.id}`}
+                        onClick={() => onEditAppointment(appointment)}
+                        className="min-h-9 rounded-lg border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-brand-deep)] hover:bg-[var(--color-brand-soft)]"
+                      >
+                        Editar / reagendar
+                      </button>
+                    )}
+                </div>
               </article>
             ))}
           </div>
