@@ -1,6 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import {
   CONFIGURACAO_HORARIOS_PADRAO,
+  ID_PROFISSIONAL_PADRAO,
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
   consultarHorariosDisponiveisInputSchema,
@@ -32,15 +33,29 @@ export class HorariosBusinessError extends Error {
 
 /**
  * Obtém a configuração de horários de funcionamento.
- * Caso o documento ainda não exista no Firestore, retorna a configuração padrão da clínica.
- * Preparado para suportar múltiplos profissionais via professionalId.
+ * Quando `professionalId` é informado e não existe documento específico da profissional,
+ * faz fallback para a configuração geral da clínica (`horarios_funcionamento`) antes de
+ * recorrer à configuração padrão.
  */
 export async function obterHorarios(
   firestore: Firestore,
   professionalId?: string,
 ): Promise<HorariosFuncionamento> {
-  const docId = professionalId ? `${HORARIOS_DOCUMENT}_${professionalId}` : HORARIOS_DOCUMENT;
-  const docRef = firestore.collection(CONFIGURACOES_COLLECTION).doc(docId);
+  if (professionalId) {
+    const docProfRef = firestore
+      .collection(CONFIGURACOES_COLLECTION)
+      .doc(`${HORARIOS_DOCUMENT}_${professionalId}`);
+    const snapshotProf = await docProfRef.get();
+
+    if (snapshotProf.exists) {
+      const parsedProf = horariosFuncionamentoSchema.safeParse(snapshotProf.data());
+      if (parsedProf.success) {
+        return parsedProf.data;
+      }
+    }
+  }
+
+  const docRef = firestore.collection(CONFIGURACOES_COLLECTION).doc(HORARIOS_DOCUMENT);
   const snapshot = await docRef.get();
 
   if (!snapshot.exists) {
@@ -110,20 +125,7 @@ export async function consultarGradeHorariosDisponiveis(
   const dataReferencia =
     dataReferenciaParam ?? (process.env.NODE_ENV === 'test' ? undefined : new Date());
 
-  if (dataReferencia) {
-    const hojeYmd = obterDataAtualIso(dataReferencia);
-    if (parsed.data < hojeYmd) {
-      return {
-        data: parsed.data,
-        duracaoMinutos: parsed.duracaoMinutos ?? 60,
-        intervaloMinutos: 30,
-        slots: [],
-        horarios: [],
-      };
-    }
-  }
-
-  const profissionalId = parsed.profissionalId || 'prof-tais-romagnoli';
+  const profissionalId = parsed.profissionalId || ID_PROFISSIONAL_PADRAO;
 
   if (profissionaisRepo) {
     const profissional = await profissionaisRepo.buscarPorId(profissionalId);
@@ -175,13 +177,23 @@ export async function consultarGradeHorariosDisponiveis(
   }
 
   const config = await obterHorarios(firestore, profissionalId);
+  const intervaloMinutos = config.intervaloPadraoMinutos ?? 30;
 
-  const agendamentos = await agendamentosRepo.listarPorProfissionalEData(
-    profissionalId,
-    parsed.data,
-  );
+  if (dataReferencia) {
+    const hojeYmd = obterDataAtualIso(dataReferencia);
+    if (parsed.data < hojeYmd) {
+      return {
+        data: parsed.data,
+        duracaoMinutos,
+        intervaloMinutos,
+        slots: [],
+        horarios: [],
+      };
+    }
+  }
 
-  const [bloqueios, horariosFixos] = await Promise.all([
+  const [agendamentos, bloqueios, horariosFixos] = await Promise.all([
+    agendamentosRepo.listarPorProfissionalEData(profissionalId, parsed.data),
     bloqueiosRepo.listarAtivos(profissionalId),
     horariosFixosRepo.listarAtivos(profissionalId),
   ]);
@@ -189,10 +201,11 @@ export async function consultarGradeHorariosDisponiveis(
   const slots = gerarHorariosDisponiveis({
     data: parsed.data,
     duracaoMinutos,
-    intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
+    intervaloMinutos,
     passoMinutos: parsed.passoMinutos ?? 30,
     configuracaoHorarios: config,
     agendamentosExistentes: agendamentos,
+    agendamentoIdIgnorado: parsed.agendamentoIdIgnorado,
     bloqueios,
     horariosFixos,
     clienteIdSolicitante,
@@ -213,7 +226,7 @@ export async function consultarGradeHorariosDisponiveis(
   return {
     data: parsed.data,
     duracaoMinutos,
-    intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
+    intervaloMinutos,
     slots: slotsFinais,
     horarios: slotsFinais.map((s) => s.horaInicio),
   };

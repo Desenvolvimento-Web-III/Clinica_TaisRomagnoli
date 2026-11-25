@@ -235,6 +235,8 @@ import {
   removerHorarioFixoCliente as removerHorarioFixoClienteService,
   atualizarHorarioFixoCliente as atualizarHorarioFixoClienteService,
   verificarDisponibilidadeAgenda,
+  calcularDisponibilidadeSlotAgenda,
+  calcularGradeDisponibilidadeAgenda,
 } from './modules/agenda/agenda-bloqueios-service.js';
 import {
   AuthError,
@@ -1592,6 +1594,8 @@ export {
   removerHorarioFixoClienteService,
   atualizarHorarioFixoClienteService,
   verificarDisponibilidadeAgenda,
+  calcularDisponibilidadeSlotAgenda,
+  calcularGradeDisponibilidadeAgenda,
 };
 
 /**
@@ -1946,7 +1950,8 @@ export const atualizarHorarioFixoCliente = onRequest({ cors: true }, async (requ
 });
 
 /**
- * Endpoint para checar disponibilidade de horário considerando bloqueios e clientes fixos.
+ * Endpoint para calcular disponibilidade de um horário específico combinando funcionamento,
+ * duração do atendimento, intervalo de organização, bloqueios, clientes fixos e agendamentos existentes.
  */
 export const verificarDisponibilidadeHorario = onRequest(
   { cors: true },
@@ -1958,28 +1963,48 @@ export const verificarDisponibilidadeHorario = onRequest(
 
     try {
       const caller = await extrairUsuarioOpcional(request.headers.authorization);
-      const { dataHoraInicioIso, dataHoraFimIso, profissionalId } = request.body || {};
+      const {
+        dataHoraInicioIso,
+        dataHoraFimIso,
+        duracaoMinutos,
+        servicoId,
+        profissionalId,
+        agendamentoIdIgnorado,
+      } = request.body || {};
 
-      if (!dataHoraInicioIso || !dataHoraFimIso) {
-        response
-          .status(400)
-          .json({ error: 'dataHoraInicioIso e dataHoraFimIso são obrigatórios.' });
+      if (!dataHoraInicioIso || (!dataHoraFimIso && duracaoMinutos === undefined && !servicoId)) {
+        response.status(400).json({
+          error:
+            'dataHoraInicioIso e ao menos um de dataHoraFimIso, duracaoMinutos ou servicoId são obrigatórios.',
+        });
         return;
       }
 
       const firestore = getFirestore();
       const bloqueiosRepo = new FirestoreBloqueiosRepository(firestore);
       const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
+      const agendamentosRepo = new FirestoreAgendamentosRepository(firestore);
+      const servicosRepo = new FirestoreServicosRepository(firestore);
+      const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
 
-      const resultado = await verificarDisponibilidadeAgenda(
+      const resultado = await calcularDisponibilidadeSlotAgenda(
         {
           dataHoraInicioIso,
           dataHoraFimIso,
+          duracaoMinutos: duracaoMinutos !== undefined ? Number(duracaoMinutos) : undefined,
+          servicoId,
           clienteIdSolicitante: caller?.uid,
           profissionalId,
+          agendamentoIdIgnorado,
         },
-        bloqueiosRepo,
-        horariosFixosRepo,
+        {
+          firestore,
+          agendamentosRepo,
+          bloqueiosRepo,
+          horariosFixosRepo,
+          servicosRepo,
+          profissionaisRepo,
+        },
       );
 
       response.status(200).json({ dados: resultado });
@@ -2921,6 +2946,3 @@ export const gerarMensagemAssistidaWhatsapp = onRequest(
     }
   },
 );
-
-
-

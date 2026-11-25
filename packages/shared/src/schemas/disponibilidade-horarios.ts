@@ -108,12 +108,14 @@ export interface GerarHorariosDisponiveisParams {
   passoMinutos?: number; // incremento entre slots candidatos (padrão 30 minutos)
   configuracaoHorarios?: HorariosFuncionamento;
   agendamentosExistentes?: Array<{
+    id?: string;
     dataHoraInicio: string;
     dataHoraFim: string;
     intervaloAposMinutos?: number;
     status?: string;
     reservaExpiraEm?: string;
   }>;
+  agendamentoIdIgnorado?: string;
   bloqueios?: BloqueioAgenda[];
   horariosFixos?: HorarioFixoCliente[];
   clienteIdSolicitante?: string;
@@ -137,6 +139,7 @@ export function gerarHorariosDisponiveis(params: GerarHorariosDisponiveisParams)
     passoMinutos = 30,
     configuracaoHorarios = CONFIGURACAO_HORARIOS_PADRAO,
     agendamentosExistentes = [],
+    agendamentoIdIgnorado,
     bloqueios = [],
     horariosFixos = [],
     clienteIdSolicitante,
@@ -162,7 +165,11 @@ export function gerarHorariosDisponiveis(params: GerarHorariosDisponiveisParams)
   const slotsDisponiveis: SlotDisponivel[] = [];
   const dataReferenciaObj = dataReferencia ? new Date(dataReferencia) : new Date();
   const agendamentosValidos = agendamentosExistentes.filter(
-    (a) => a.status !== 'cancelado' && !verificarReservaExpirada(a, dataReferenciaObj),
+    (a) =>
+      a.status !== 'cancelado' &&
+      a.status !== 'reagendado' &&
+      (!agendamentoIdIgnorado || a.id !== agendamentoIdIgnorado) &&
+      !verificarReservaExpirada(a, dataReferenciaObj),
   );
 
   for (const turno of diaConfig.turnos) {
@@ -252,6 +259,7 @@ export const consultarHorariosDisponiveisInputSchema = z
     servicoId: z.string().min(1).optional(),
     profissionalId: z.string().optional().default('prof-tais-romagnoli'),
     passoMinutos: z.coerce.number().int().min(15).max(120).optional().default(30),
+    agendamentoIdIgnorado: z.string().min(1).optional(),
   })
   .refine((data) => data.duracaoMinutos !== undefined || data.servicoId !== undefined, {
     message:

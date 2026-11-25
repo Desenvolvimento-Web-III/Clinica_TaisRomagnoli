@@ -114,6 +114,19 @@ describe('service-firestore-repository', () => {
       expect(service.active).toBe(true);
     });
 
+    it('mapeia campo duracaoMinutos salvo pelo backend no Firestore', () => {
+      const service = mapFirestoreDocToService('pedras-90', {
+        nome: 'Massagem com Pedras Quentes',
+        descricao: 'Sessão estendida de 90 minutos.',
+        duracaoMinutos: 90,
+        preco: 250,
+        ativo: true,
+      });
+
+      expect(service.durationMinutes).toBe(90);
+      expect(service.priceInCents).toBe(25000);
+    });
+
     it('mapeia campos em inglês (name, description, durationMinutes) e atribui imagem do projeto', () => {
       const service = mapFirestoreDocToService('liberacao-456', {
         name: 'Liberação Miofascial',

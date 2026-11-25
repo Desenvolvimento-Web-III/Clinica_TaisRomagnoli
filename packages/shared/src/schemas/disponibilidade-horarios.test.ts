@@ -189,6 +189,37 @@ describe('disponibilidade-horarios', () => {
       expect(horariosInicio).toContain('10:00');
     });
 
+    it('ignora agendamentos reagendados e o agendamentoIdIgnorado ao calcular horários disponíveis', () => {
+      const agendamentosExistentes = [
+        {
+          id: 'ag-reagendado',
+          dataHoraInicio: '2026-11-16T09:00:00.000Z',
+          dataHoraFim: '2026-11-16T10:00:00.000Z',
+          intervaloAposMinutos: 30,
+          status: 'reagendado',
+        },
+        {
+          id: 'ag-proprio',
+          dataHoraInicio: '2026-11-16T14:00:00.000Z',
+          dataHoraFim: '2026-11-16T15:00:00.000Z',
+          intervaloAposMinutos: 30,
+          status: 'confirmado',
+        },
+      ];
+
+      const slots = gerarHorariosDisponiveis({
+        data: '2026-11-16',
+        duracaoMinutos: 60,
+        configuracaoHorarios: CONFIGURACAO_HORARIOS_PADRAO,
+        agendamentosExistentes,
+        agendamentoIdIgnorado: 'ag-proprio',
+      });
+
+      const horariosInicio = slots.map((s) => s.horaInicio);
+      expect(horariosInicio).toContain('09:00');
+      expect(horariosInicio).toContain('14:00');
+    });
+
     it('bloqueia horários sobrepostos a bloqueios de agenda da clínica', () => {
       const bloqueios: BloqueioAgenda[] = [
         {
