@@ -1,9 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { INITIAL_ANAMNESE_DATA, type Agendamento as SharedAgendamento } from '@clinica/shared';
+import {
+  CONFIGURACAO_HORARIOS_PADRAO,
+  INITIAL_ANAMNESE_DATA,
+  type Agendamento as SharedAgendamento,
+} from '@clinica/shared';
 import * as anamneseService from '@/services/anamnese-service';
 import * as agendamentosService from '@/services/agendamentos-service';
+import * as horariosService from '@/services/horarios-service';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
 
 const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
@@ -76,6 +81,23 @@ describe('AgendamentoFlowPage', () => {
       screen.getByText(/Intervalos de 30 minutos são reservados automaticamente/i),
     ).toBeInTheDocument();
     expect(screen.getByTestId('confirmar-agendamento-btn')).toBeInTheDocument();
+  });
+
+  it('libera no calendário os dias ativos retornados pela configuração da clínica', async () => {
+    const configuracaoComTercaAberta = {
+      ...CONFIGURACAO_HORARIOS_PADRAO,
+      dias: CONFIGURACAO_HORARIOS_PADRAO.dias.map((dia) =>
+        dia.dia === 2 ? { ...dia, ativo: true, turnos: [{ inicio: '09:00', fim: '17:00' }] } : dia,
+      ),
+    };
+    vi.spyOn(horariosService, 'buscarHorariosFuncionamento').mockResolvedValue(
+      configuracaoComTercaAberta,
+    );
+
+    renderFlow('/agendar/massagem-relaxante');
+
+    expect(await screen.findByTestId('dia-disponivel-2026-10-20')).toBeInTheDocument();
+    expect(screen.getByTestId('dia-disponivel-2026-10-21')).toBeInTheDocument();
   });
 
   it('permite selecionar data e horário no Calendário e avançar para confirmação', () => {
