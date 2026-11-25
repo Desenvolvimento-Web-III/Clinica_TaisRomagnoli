@@ -32,8 +32,8 @@ import { carregarLembretesEnviadosStorage } from '@/features/admin-dashboard/uti
 import {
   atualizarStatusAgendamentoBackend,
   buscarAgendamentosAdmin,
-  getAuthToken,
-  solicitarAgendamentoBackend,
+  buscarAgendamentosAdminDoDia,
+  criarAgendamentoFirestore,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { buscarClientesAdmin } from '@/services/clientes-admin-service';
@@ -50,6 +50,7 @@ interface AgendamentoAgendaItem {
   horario: string;
   clienteNome: string;
   clienteTelefone: string;
+  clienteEmail: string;
   servicoNome: string;
   duracao: string;
   valor: number;
@@ -57,57 +58,6 @@ interface AgendamentoAgendaItem {
     'confirmado' | 'pendente' | 'concluido' | 'cancelado' | 'em_andamento' | 'reagendado' | 'falta';
   sinalPago: boolean;
 }
-
-const AGENDAMENTOS_DEMO: AgendamentoAgendaItem[] = [
-  {
-    id: 'ag-1',
-    clienteId: 'demo-client-1',
-    horario: '09:00 - 10:00',
-    clienteNome: 'Mariana Silva',
-    clienteTelefone: '(11) 98765-4321',
-    servicoNome: 'Massagem Relaxante',
-    duracao: '60 min',
-    valor: 150,
-    status: 'concluido',
-    sinalPago: true,
-  },
-  {
-    id: 'ag-2',
-    clienteId: 'demo-client-2',
-    horario: '10:30 - 12:00',
-    clienteNome: 'Ana Carolina Santos',
-    clienteTelefone: '(11) 97654-3210',
-    servicoNome: 'Massagem com Pedras Quentes',
-    duracao: '90 min',
-    valor: 200,
-    status: 'confirmado',
-    sinalPago: true,
-  },
-  {
-    id: 'ag-3',
-    clienteId: 'demo-client-3',
-    horario: '14:00 - 15:00',
-    clienteNome: 'Juliana Lima',
-    clienteTelefone: '(11) 96543-2109',
-    servicoNome: 'Drenagem Linfática',
-    duracao: '60 min',
-    valor: 160,
-    status: 'confirmado',
-    sinalPago: true,
-  },
-  {
-    id: 'ag-4',
-    clienteId: 'demo-client-4',
-    horario: '15:30 - 16:30',
-    clienteNome: 'Carlos Eduardo',
-    clienteTelefone: '(11) 95432-1098',
-    servicoNome: 'Liberação Miofascial',
-    duracao: '60 min',
-    valor: 170,
-    status: 'pendente',
-    sinalPago: false,
-  },
-];
 
 function mapSharedAgendamentoToAgendaItem(item: SharedAgendamento): AgendamentoAgendaItem {
   const inicio = new Date(item.dataHoraInicio);
@@ -125,6 +75,7 @@ function mapSharedAgendamentoToAgendaItem(item: SharedAgendamento): AgendamentoA
     horario: `${horaInicio} - ${horaFim}`,
     clienteNome: item.clienteNome || 'Cliente presencial',
     clienteTelefone: item.clienteTelefone || '—',
+    clienteEmail: item.clienteEmail || '—',
     servicoNome: item.servicoNome,
     duracao: `${item.duracaoMinutos} min`,
     valor: item.valorTotalEmCentavos / 100,
@@ -279,7 +230,9 @@ export function AdminDashboardPage() {
   const [modalPresencialAberto, setModalPresencialAberto] = useState(false);
 
   // Estados da Agenda e Agendamento Presencial
-  const [agendaItems, setAgendaItems] = useState<AgendamentoAgendaItem[]>(AGENDAMENTOS_DEMO);
+  const [agendaItems, setAgendaItems] = useState<AgendamentoAgendaItem[]>([]);
+  const [isLoadingAgenda, setIsLoadingAgenda] = useState(true);
+  const [erroAgenda, setErroAgenda] = useState<string | null>(null);
   const [agendamentosRelatorio, setAgendamentosRelatorio] = useState<SharedAgendamento[]>([]);
   const [isLoadingRelatorio, setIsLoadingRelatorio] = useState(true);
   const [erroAgendamentosRelatorio, setErroAgendamentosRelatorio] = useState<string | null>(null);
@@ -290,7 +243,6 @@ export function AdminDashboardPage() {
     clienteId?: string;
   } | null>(null);
   const [presencialClienteId, setPresencialClienteId] = useState('');
-  const [presencialClienteNome, setPresencialClienteNome] = useState('');
   const [presencialServicoId, setPresencialServicoId] = useState(
     SERVICOS_INICIAIS[0]?.id ?? 'srv-1',
   );
@@ -333,6 +285,24 @@ export function AdminDashboardPage() {
     }
   }, []);
 
+  const carregarAgendaDoDia = useCallback(async () => {
+    setIsLoadingAgenda(true);
+    setErroAgenda(null);
+    try {
+      const lista = await buscarAgendamentosAdminDoDia();
+      setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
+    } catch (error) {
+      setAgendaItems([]);
+      setErroAgenda(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível carregar os agendamentos do dia.',
+      );
+    } finally {
+      setIsLoadingAgenda(false);
+    }
+  }, []);
+
   useEffect(() => {
     let ativo = true;
     void buscarClientesAdmin()
@@ -353,11 +323,30 @@ export function AdminDashboardPage() {
       .finally(() => {
         if (ativo) setIsLoadingClientes(false);
       });
+    void buscarAgendamentosAdminDoDia()
+      .then((lista) => {
+        if (ativo) {
+          setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
+          setErroAgenda(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (ativo) {
+          setAgendaItems([]);
+          setErroAgenda(
+            error instanceof Error
+              ? error.message
+              : 'Não foi possível carregar os agendamentos do dia.',
+          );
+        }
+      })
+      .finally(() => {
+        if (ativo) setIsLoadingAgenda(false);
+      });
     void buscarAgendamentosAdmin()
       .then((lista) => {
         if (ativo) {
           setAgendamentosRelatorio(lista);
-          if (lista.length > 0) setAgendaItems(lista.map(mapSharedAgendamentoToAgendaItem));
         }
       })
       .catch((error: unknown) => {
@@ -487,7 +476,6 @@ export function AdminDashboardPage() {
     setPresencialErro(null);
     setPresencialAvaliacaoBloqueio(null);
     setPresencialClienteId('');
-    setPresencialClienteNome('');
     setPresencialServicoId(servicos[0]?.id ?? 'srv-1');
     setPresencialDataHora(obterDataHoraPresencialInicial());
     setPresencialIsencaoSinal(true);
@@ -501,11 +489,6 @@ export function AdminDashboardPage() {
 
     if (!selectedId) {
       return;
-    }
-
-    const clienteEncontrado = clientes.find((c) => c.id === selectedId);
-    if (clienteEncontrado) {
-      setPresencialClienteNome(clienteEncontrado.nome);
     }
 
     const fichaRes = await obterFichaAnamneseApi(selectedId);
@@ -573,7 +556,6 @@ export function AdminDashboardPage() {
 
     const servicoSelecionado =
       servicos.find((s) => s.id === presencialServicoId) ?? servicos[0] ?? SERVICOS_INICIAIS[0]!;
-    const nomeClienteFinal = presencialClienteNome.trim() || 'Cliente presencial';
     const dataHoraNormalizada =
       presencialDataHora.length === 16 ? `${presencialDataHora}:00.000Z` : presencialDataHora;
 
@@ -582,72 +564,42 @@ export function AdminDashboardPage() {
       return;
     }
 
+    const clienteSelecionado = clientes.find((cliente) => cliente.id === presencialClienteId);
+    if (!clienteSelecionado) {
+      setPresencialErro('Selecione um cliente cadastrado para criar o agendamento.');
+      return;
+    }
+
     setSubmittingPresencial(true);
     try {
-      const token = await getAuthToken();
+      const resposta = await criarAgendamentoFirestore(
+        {
+          clienteId: clienteSelecionado.id,
+          servicoId: servicoSelecionado.id,
+          servicoNome: servicoSelecionado.name,
+          duracaoMinutos: servicoSelecionado.durationMinutes,
+          valorTotalEmCentavos: servicoSelecionado.priceInCents,
+          dataHoraInicio: dataHoraNormalizada,
+          metodoPagamento: 'presencial',
+          profissionalId: 'prof-tais-romagnoli',
+          profissionalNome: 'Tais Romagnoli',
+          isencaoSinalAdmin: presencialIsencaoSinal,
+        },
+        clienteSelecionado.id,
+      );
 
-      if (token) {
-        const resposta = await solicitarAgendamentoBackend(
-          {
-            ...(presencialClienteId ? { clienteId: presencialClienteId } : {}),
-            clienteNome: nomeClienteFinal,
-            servicoId: servicoSelecionado.id,
-            servicoNome: servicoSelecionado.name,
-            duracaoMinutos: servicoSelecionado.durationMinutes,
-            valorTotalEmCentavos: servicoSelecionado.priceInCents,
-            dataHoraInicio: dataHoraNormalizada,
-            metodoPagamento: 'presencial',
-            profissionalId: 'prof-tais-romagnoli',
-            profissionalNome: 'Tais Romagnoli',
-            isencaoSinalAdmin: presencialIsencaoSinal,
-          },
-          token,
+      if (!resposta.sucesso || !resposta.dados) {
+        setPresencialErro(
+          resposta.erro || 'Não foi possível salvar o agendamento no banco de dados.',
         );
-
-        if (!resposta.sucesso) {
-          if (!resposta.networkError) {
-            setPresencialErro(resposta.erro || 'Não foi possível criar o agendamento presencial.');
-            return;
-          }
-        } else if (resposta.dados) {
-          setAgendaItems((prev) => [mapSharedAgendamentoToAgendaItem(resposta.dados!), ...prev]);
-          setAgendaFeedback({
-            tipo: 'sucesso',
-            texto: `Agendamento presencial de ${nomeClienteFinal} criado com sucesso.`,
-          });
-          setModalPresencialAberto(false);
-          return;
-        }
+        return;
       }
 
-      const inicio = new Date(dataHoraNormalizada);
-      const fim = new Date(inicio.getTime() + servicoSelecionado.durationMinutes * 60 * 1000);
-      const horaIni = Number.isNaN(inicio.getTime())
-        ? '10:00'
-        : inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      const horaFim = Number.isNaN(fim.getTime())
-        ? '11:00'
-        : fim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-      const clienteLista = clientes.find((c) => c.id === presencialClienteId);
-      setAgendaItems((prev) => [
-        {
-          id: `ag-${Date.now()}`,
-          clienteId: presencialClienteId || undefined,
-          horario: `${horaIni} - ${horaFim}`,
-          clienteNome: nomeClienteFinal,
-          clienteTelefone: clienteLista?.telefone || 'Presencial',
-          servicoNome: servicoSelecionado.name,
-          duracao: `${servicoSelecionado.durationMinutes} min`,
-          valor: servicoSelecionado.priceInCents / 100,
-          status: presencialIsencaoSinal ? 'confirmado' : 'pendente',
-          sinalPago: false,
-        },
-        ...prev,
-      ]);
+      setAgendamentosRelatorio((prev) => [resposta.dados!, ...prev]);
+      await carregarAgendaDoDia();
       setAgendaFeedback({
         tipo: 'sucesso',
-        texto: `Agendamento presencial de ${nomeClienteFinal} registrado com sucesso.`,
+        texto: `Agendamento presencial de ${clienteSelecionado.nome} salvo no banco de dados.`,
       });
       setModalPresencialAberto(false);
     } finally {
@@ -824,121 +776,180 @@ export function AdminDashboardPage() {
                   presenciais cadastrados pela administradora não exigem sinal obrigatório de 30%.
                 </div>
 
-                {agendaFeedback && (
-                  <div
-                    role={agendaFeedback.tipo === 'erro' ? 'alert' : 'status'}
-                    data-testid="agenda-feedback-banner"
-                    className={`flex flex-col gap-3 rounded-2xl border p-4 text-xs/5 sm:flex-row sm:items-center sm:justify-between sm:text-sm/6 ${
-                      agendaFeedback.tipo === 'erro'
-                        ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
-                        : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
-                    }`}
-                  >
-                    <div className="space-y-1 font-medium">
-                      <p>{agendaFeedback.texto}</p>
-                      {agendaFeedback.clienteId && (
-                        <Link
-                          to={`/admin/clientes/${agendaFeedback.clienteId}`}
-                          className="inline-block font-semibold underline underline-offset-4"
-                        >
-                          Revisar ficha e liberação médica
-                        </Link>
-                      )}
+                <section aria-labelledby="agenda-do-dia-titulo" className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2
+                        id="agenda-do-dia-titulo"
+                        className="text-lg font-bold text-[var(--color-text-primary)]"
+                      >
+                        Agenda do dia
+                      </h2>
+                      <p className="text-sm capitalize text-[var(--color-text-secondary)]">
+                        {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date())}
+                      </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setAgendaFeedback(null)}
-                      className="self-start text-xs font-bold underline-offset-4 hover:underline sm:self-center"
+                      onClick={() => void carregarAgendaDoDia()}
+                      disabled={isLoadingAgenda}
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-brand-deep)] shadow-sm hover:bg-[var(--color-brand-soft)] disabled:cursor-wait disabled:opacity-60"
                     >
-                      Fechar
+                      {isLoadingAgenda ? 'Atualizando…' : 'Atualizar agenda'}
                     </button>
                   </div>
-                )}
 
-                {/* Lista de Atendimentos */}
-                <div className="grid gap-4">
-                  {agendaItems.map((item) => (
-                    <div
-                      key={item.id}
-                      data-testid={`agenda-item-${item.id}`}
-                      className="flex flex-col gap-3 rounded-2xl border border-[var(--color-border-default)] bg-white p-4 shadow-sm transition-all hover:border-[var(--color-brand-deep)]/40 sm:flex-row sm:items-center sm:justify-between"
+                  {isLoadingAgenda ? (
+                    <p
+                      role="status"
+                      className="rounded-2xl border bg-white p-6 text-center text-sm"
                     >
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-xs font-bold text-[var(--color-brand-deep)]">
-                          {item.horario.split(' - ')[0]}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-[var(--color-text-primary)]">
-                              {item.clienteNome}
-                            </h3>
-                            <span className="text-xs text-[var(--color-text-secondary)]">
-                              {item.clienteTelefone}
-                            </span>
-                          </div>
-                          <p className="text-sm text-[var(--color-text-secondary)]">
-                            {item.servicoNome} • {item.duracao}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border-default)] pt-2 sm:border-0 sm:pt-0">
-                        <div className="text-right sm:text-left">
-                          <p className="font-bold text-[var(--color-text-primary)]">
-                            R$ {item.valor.toFixed(2).replace('.', ',')}
-                          </p>
-                          <span className="text-[11px] text-[var(--color-text-secondary)]">
-                            {item.sinalPago ? 'Sinal pago (30%)' : 'Sinal pendente/isento'}
-                          </span>
-                        </div>
-
-                        {item.status === 'pendente' && (
-                          <button
-                            type="button"
-                            data-testid={`confirmar-agendamento-btn-${item.id}`}
-                            disabled={confirmingAgendaId === item.id}
-                            onClick={() => void handleConfirmarAgendamentoAgenda(item)}
-                            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-wait disabled:opacity-60"
-                          >
-                            {confirmingAgendaId === item.id
-                              ? 'Confirmando…'
-                              : 'Confirmar agendamento'}
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          data-testid={`enviar-lembrete-rapido-btn-${item.id}`}
-                          onClick={() => setAgendaSubView('lembretes')}
-                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
-                          title="Abrir mensagem de lembrete no WhatsApp"
-                        >
-                          <svg
-                            className="h-3.5 w-3.5 fill-current text-emerald-600"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-                          </svg>
-                          <span>Lembrete</span>
-                        </button>
-
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
-                            item.status === 'concluido'
-                              ? 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
-                              : item.status === 'confirmado'
-                                ? 'border-[var(--color-info-border)] bg-[var(--color-info-bg)] text-[var(--color-info-text)]'
-                                : item.status === 'cancelado' || item.status === 'falta'
-                                  ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
-                                  : 'border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]'
+                      Carregando agendamentos do dia…
+                    </p>
+                  ) : erroAgenda ? (
+                    <div
+                      role="alert"
+                      className="flex flex-col gap-3 rounded-2xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-4 text-sm text-[var(--color-error-text)] sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <p>{erroAgenda}</p>
+                      <button
+                        type="button"
+                        onClick={() => void carregarAgendaDoDia()}
+                        className="font-semibold underline underline-offset-4"
+                      >
+                        Tentar novamente
+                      </button>
+                    </div>
+                  ) : agendaItems.length === 0 ? (
+                    <p
+                      data-testid="agenda-do-dia-vazia"
+                      className="rounded-2xl border border-dashed border-[var(--color-border-default)] bg-white p-6 text-center text-sm text-[var(--color-text-secondary)]"
+                    >
+                      Nenhum agendamento cadastrado para hoje.
+                    </p>
+                  ) : (
+                    <>
+                      {agendaFeedback && (
+                        <div
+                          role={agendaFeedback.tipo === 'erro' ? 'alert' : 'status'}
+                          data-testid="agenda-feedback-banner"
+                          className={`flex flex-col gap-3 rounded-2xl border p-4 text-xs/5 sm:flex-row sm:items-center sm:justify-between sm:text-sm/6 ${
+                            agendaFeedback.tipo === 'erro'
+                              ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
+                              : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
                           }`}
                         >
-                          {item.status.toUpperCase()}
-                        </span>
+                          <div className="space-y-1 font-medium">
+                            <p>{agendaFeedback.texto}</p>
+                            {agendaFeedback.clienteId && (
+                              <Link
+                                to={`/admin/clientes/${agendaFeedback.clienteId}`}
+                                className="inline-block font-semibold underline underline-offset-4"
+                              >
+                                Revisar ficha e liberação médica
+                              </Link>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAgendaFeedback(null)}
+                            className="self-start text-xs font-bold underline-offset-4 hover:underline sm:self-center"
+                          >
+                            Fechar
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Lista de Atendimentos */}
+                      <div className="grid gap-4">
+                        {agendaItems.map((item) => (
+                          <div
+                            key={item.id}
+                            data-testid={`agenda-item-${item.id}`}
+                            className="flex flex-col gap-3 rounded-2xl border border-[var(--color-border-default)] bg-white p-4 shadow-sm transition-all hover:border-[var(--color-brand-deep)]/40 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-brand-soft)] text-xs font-bold text-[var(--color-brand-deep)]">
+                                {item.horario.split(' - ')[0]}
+                              </div>
+                              <div>
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <h3 className="font-bold text-[var(--color-text-primary)]">
+                                    {item.clienteNome}
+                                  </h3>
+                                  <span className="text-xs text-[var(--color-text-secondary)]">
+                                    {item.clienteTelefone}
+                                  </span>
+                                  <span className="text-xs text-[var(--color-text-secondary)]">
+                                    {item.clienteEmail}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-[var(--color-text-secondary)]">
+                                  {item.servicoNome} • {item.duracao}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border-default)] pt-2 sm:border-0 sm:pt-0">
+                              <div className="text-right sm:text-left">
+                                <p className="font-bold text-[var(--color-text-primary)]">
+                                  R$ {item.valor.toFixed(2).replace('.', ',')}
+                                </p>
+                                <span className="text-[11px] text-[var(--color-text-secondary)]">
+                                  {item.sinalPago ? 'Sinal pago (30%)' : 'Sinal pendente/isento'}
+                                </span>
+                              </div>
+
+                              {item.status === 'pendente' && (
+                                <button
+                                  type="button"
+                                  data-testid={`confirmar-agendamento-btn-${item.id}`}
+                                  disabled={confirmingAgendaId === item.id}
+                                  onClick={() => void handleConfirmarAgendamentoAgenda(item)}
+                                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-wait disabled:opacity-60"
+                                >
+                                  {confirmingAgendaId === item.id
+                                    ? 'Confirmando…'
+                                    : 'Confirmar agendamento'}
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                data-testid={`enviar-lembrete-rapido-btn-${item.id}`}
+                                onClick={() => setAgendaSubView('lembretes')}
+                                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                                title="Abrir mensagem de lembrete no WhatsApp"
+                              >
+                                <svg
+                                  className="h-3.5 w-3.5 fill-current text-emerald-600"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                                </svg>
+                                <span>Lembrete</span>
+                              </button>
+
+                              <span
+                                className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
+                                  item.status === 'concluido'
+                                    ? 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success-text)]'
+                                    : item.status === 'confirmado'
+                                      ? 'border-[var(--color-info-border)] bg-[var(--color-info-bg)] text-[var(--color-info-text)]'
+                                      : item.status === 'cancelado' || item.status === 'falta'
+                                        ? 'border-[var(--color-error-border)] bg-[var(--color-error-bg)] text-[var(--color-error-text)]'
+                                        : 'border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]'
+                                }`}
+                              >
+                                {item.status.toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    </>
+                  )}
+                </section>
               </>
             )}
           </section>
@@ -1265,15 +1276,16 @@ export function AdminDashboardPage() {
                     htmlFor="presencial-cliente-select"
                     className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
                   >
-                    Cliente cadastrado (opcional)
+                    Cliente cadastrado
                   </label>
                   <select
                     id="presencial-cliente-select"
+                    required
                     value={presencialClienteId}
                     onChange={(e) => void handleSelecionarClientePresencial(e.target.value)}
                     className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] bg-white px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-hidden"
                   >
-                    <option value="">Atendimento avulso (sem vínculo prévio)</option>
+                    <option value="">Selecione um cliente cadastrado</option>
                     {clientes.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.nome}
@@ -1303,24 +1315,6 @@ export function AdminDashboardPage() {
                     )}
                   </div>
                 )}
-
-                <div>
-                  <label
-                    htmlFor="presencial-cliente-nome"
-                    className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]"
-                  >
-                    Nome do Cliente
-                  </label>
-                  <input
-                    id="presencial-cliente-nome"
-                    type="text"
-                    required
-                    value={presencialClienteNome}
-                    onChange={(e) => setPresencialClienteNome(e.target.value)}
-                    placeholder="Nome do cliente"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[var(--color-border-default)] px-3.5 py-2.5 text-sm focus:border-[var(--color-brand-deep)] focus:outline-none"
-                  />
-                </div>
 
                 <div>
                   <label

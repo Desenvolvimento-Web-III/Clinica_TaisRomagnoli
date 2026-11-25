@@ -95,6 +95,7 @@ export async function solicitarNovoAgendamento(
   profissionaisRepo?: ProfissionaisRepository,
   anamneseRepo?: AnamneseRepository,
   dataReferenciaParam?: Date,
+  clientesRepo?: ClientesRepository,
 ): Promise<Agendamento> {
   const parsed = solicitarAgendamentoInputSchema.parse(input);
 
@@ -113,10 +114,21 @@ export async function solicitarNovoAgendamento(
   }
 
   const clienteIdAlvo = user.isAdmin && parsed.clienteId ? parsed.clienteId : user.uid;
-  const clienteNomeAlvo =
-    user.isAdmin && parsed.clienteId && parsed.clienteId !== user.uid
-      ? parsed.clienteNome || 'Cliente presencial'
-      : user.nome;
+  if (clientesRepo && user.isAdmin && !parsed.clienteId) {
+    throw new AgendamentoBusinessError('Selecione um cliente cadastrado para criar o agendamento.');
+  }
+
+  const perfilCliente = clientesRepo ? await clientesRepo.buscarPorUid(clienteIdAlvo) : null;
+  if (clientesRepo && !perfilCliente) {
+    throw new AgendamentoBusinessError(
+      'Perfil do cliente não encontrado. Confira se o cliente está cadastrado antes de agendar.',
+      404,
+    );
+  }
+
+  const clienteNomeAlvo = perfilCliente?.nome || user.nome || parsed.clienteNome || 'Cliente';
+  const clienteEmailAlvo = perfilCliente?.email || user.email;
+  const clienteTelefoneAlvo = perfilCliente?.telefone || user.telefone;
 
   let profissionalNomeFinal = parsed.profissionalNome;
 
@@ -272,8 +284,8 @@ export async function solicitarNovoAgendamento(
     id: `ag-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     clienteId: clienteIdAlvo,
     clienteNome: clienteNomeAlvo,
-    clienteEmail: clienteIdAlvo === user.uid ? user.email : undefined,
-    clienteTelefone: clienteIdAlvo === user.uid ? user.telefone : undefined,
+    ...(clienteEmailAlvo ? { clienteEmail: clienteEmailAlvo } : {}),
+    ...(clienteTelefoneAlvo ? { clienteTelefone: clienteTelefoneAlvo } : {}),
     servicoId: parsed.servicoId,
     servicoNome: parsed.servicoNome,
     duracaoMinutos: parsed.duracaoMinutos,

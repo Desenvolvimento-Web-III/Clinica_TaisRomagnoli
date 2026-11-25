@@ -12,6 +12,14 @@
       "collectionGroup": "agendamentos",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "dataHoraInicio", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "agendamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "profissionalId", "order": "ASCENDING" },
         { "fieldPath": "dataHoraInicio", "order": "ASCENDING" }
       ]
@@ -55,6 +63,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "agendamentoId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notificacoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lida", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }

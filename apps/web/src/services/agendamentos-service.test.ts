@@ -13,10 +13,41 @@ import {
 import type { Agendamento as SharedAgendamento } from '@clinica/shared';
 import { environment } from '@/config/env';
 
+const { mockGetDocs, mockCollection, mockQuery, mockWhere, mockOrderBy, mockAuth } = vi.hoisted(
+  () => ({
+    mockGetDocs: vi.fn(),
+    mockCollection: vi.fn(),
+    mockQuery: vi.fn(),
+    mockWhere: vi.fn(),
+    mockOrderBy: vi.fn(),
+    mockAuth: {
+      currentUser: { uid: 'user-456', getIdToken: async () => 'fake-jwt-token' } as {
+        uid: string;
+        getIdToken: () => Promise<string>;
+      } | null,
+    },
+  }),
+);
+
+vi.mock('firebase/firestore', () => ({
+  collection: (...args: unknown[]) => mockCollection(...args),
+  doc: vi.fn(),
+  getDoc: vi.fn(),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  orderBy: (...args: unknown[]) => mockOrderBy(...args),
+  query: (...args: unknown[]) => mockQuery(...args),
+  setDoc: vi.fn(),
+  where: (...args: unknown[]) => mockWhere(...args),
+}));
+
+vi.mock('@/lib/firebase', () => ({ auth: mockAuth, db: { app: {} } }));
+
 describe('agendamentos-service', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();
+    global.fetch = vi.fn();
+    mockAuth.currentUser = { uid: 'user-456', getIdToken: async () => 'fake-jwt-token' };
   });
 
   const agendamentoMock: SharedAgendamento = {
@@ -151,17 +182,22 @@ describe('agendamentos-service', () => {
     expect(resultado.dados?.dataHoraInicio).toBe('2026-10-23T14:00:00.000Z');
   });
 
-  it('listarAgendamentosBackend retorna lista de agendamentos do backend', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ dados: [agendamentoMock] }),
-    } as Response);
+  it('listarAgendamentosBackend consulta diretamente os agendamentos do usuário no Firestore', async () => {
+    mockCollection.mockReturnValue({});
+    mockWhere.mockReturnValue({});
+    mockOrderBy.mockReturnValue({});
+    mockQuery.mockReturnValue({});
+    mockGetDocs.mockResolvedValue({
+      docs: [{ id: agendamentoMock.id, data: () => agendamentoMock }],
+    });
 
     const resultado = await listarAgendamentosBackend('fake-jwt-token');
 
     expect(resultado.sucesso).toBe(true);
     expect(resultado.dados).toHaveLength(1);
     expect(resultado.dados[0]?.id).toBe('ag-123');
+    expect(mockWhere).toHaveBeenCalledWith('clienteId', '==', 'user-456');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('criarAgendamento cria localmente em modo fallback caso não haja token', async () => {
@@ -252,17 +288,16 @@ describe('agendamentos-service', () => {
     );
   });
 
-  it('listarAgendamentosBackend inclui clienteId na querystring quando informado', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ dados: [agendamentoMock] }),
-    } as Response);
+  it('listarAgendamentosBackend limita a consulta ao cliente solicitado', async () => {
+    mockCollection.mockReturnValue({});
+    mockWhere.mockReturnValue({});
+    mockOrderBy.mockReturnValue({});
+    mockQuery.mockReturnValue({});
+    mockGetDocs.mockResolvedValue({ docs: [] });
 
     await listarAgendamentosBackend('admin-jwt', 'user-456');
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/listarMeusAgendamentos?clienteId=user-456'),
-      expect.objectContaining({ method: 'GET' }),
-    );
+    expect(mockWhere).toHaveBeenCalledWith('clienteId', '==', 'user-456');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

@@ -9,14 +9,29 @@ import {
 } from './notificacoes-service';
 import type { ClientNotification, NotificacaoInterna } from '@clinica/shared';
 
-const mockGetDocs = vi.fn();
-const mockOnSnapshot = vi.fn();
-const mockCollection = vi.fn();
-const mockQuery = vi.fn();
-const mockDoc = vi.fn();
-const mockUpdateDoc = vi.fn();
-const mockOrderBy = vi.fn();
-const mockLimit = vi.fn();
+const {
+  mockGetDocs,
+  mockOnSnapshot,
+  mockCollection,
+  mockQuery,
+  mockDoc,
+  mockUpdateDoc,
+  mockOrderBy,
+  mockLimit,
+  mockWhere,
+  mockAuth,
+} = vi.hoisted(() => ({
+  mockGetDocs: vi.fn(),
+  mockOnSnapshot: vi.fn(),
+  mockCollection: vi.fn(),
+  mockQuery: vi.fn(),
+  mockDoc: vi.fn(),
+  mockUpdateDoc: vi.fn(),
+  mockOrderBy: vi.fn(),
+  mockLimit: vi.fn(),
+  mockWhere: vi.fn(),
+  mockAuth: { currentUser: { uid: 'user-1' } as { uid: string } | null },
+}));
 
 vi.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -27,6 +42,7 @@ vi.mock('firebase/firestore', () => ({
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
   orderBy: (...args: unknown[]) => mockOrderBy(...args),
   limit: (...args: unknown[]) => mockLimit(...args),
+  where: (...args: unknown[]) => mockWhere(...args),
 }));
 
 const mockGetAuthToken = vi.fn();
@@ -36,7 +52,7 @@ vi.mock('./agendamentos-service', () => ({
 }));
 
 vi.mock('@/lib/firebase', () => ({
-  auth: null,
+  auth: mockAuth,
   db: { app: {} },
 }));
 
@@ -44,6 +60,7 @@ describe('notificacoes-service', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockGetAuthToken.mockResolvedValue(null);
+    mockAuth.currentUser = { uid: 'user-1' };
   });
 
   describe('mapNotificacaoInternaToClientNotification', () => {
@@ -142,15 +159,17 @@ describe('notificacoes-service', () => {
   describe('listarNotificacoesBackend', () => {
     it('retorna erro se usuário não estiver autenticado e nenhum token for fornecido', async () => {
       mockGetAuthToken.mockResolvedValue(null);
+      mockAuth.currentUser = null;
 
       const res = await listarNotificacoesBackend(null);
 
       expect(res.sucesso).toBe(false);
       expect(res.erro).toContain('não autenticado');
       expect(res.dados).toEqual([]);
+      mockAuth.currentUser = { uid: 'user-1' };
     });
 
-    it('faz requisição com os parâmetros de consulta e headers corretos', async () => {
+    it('consulta as notificações no Firestore respeitando filtros e limite', async () => {
       const mockNotifs: NotificacaoInterna[] = [
         {
           id: 'notif-100',
@@ -165,10 +184,14 @@ describe('notificacoes-service', () => {
         },
       ];
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ sucesso: true, dados: mockNotifs }),
-      } as Response);
+      mockCollection.mockReturnValue({});
+      mockOrderBy.mockReturnValue({});
+      mockLimit.mockReturnValue({});
+      mockWhere.mockReturnValue({});
+      mockQuery.mockReturnValue({});
+      mockGetDocs.mockResolvedValue({
+        docs: mockNotifs.map((item) => ({ id: item.id, data: () => item })),
+      });
 
       const res = await listarNotificacoesBackend('token-abc', true, 5);
 
@@ -177,77 +200,36 @@ describe('notificacoes-service', () => {
       expect(res.dados[0]?.id).toBe('notif-100');
       expect(res.dados[0]?.tipo).toBe('comunicado');
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('listarMinhasNotificacoes?apenasNaoLidas=true&limite=5'),
-        expect.objectContaining({
-          method: 'GET',
-          headers: { Authorization: 'Bearer token-abc' },
-        }),
+      expect(mockCollection).toHaveBeenCalledWith(
+        expect.anything(),
+        'clientes',
+        'user-1',
+        'notificacoes',
       );
+      expect(mockWhere).toHaveBeenCalledWith('lida', '==', false);
+      expect(mockLimit).toHaveBeenCalledWith(5);
     });
 
-    it('trata resposta com erro da Cloud Function', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 403,
-        json: async () => ({ error: 'Acesso negado' }),
-      } as Response);
-
-      const res = await listarNotificacoesBackend('token-invalido');
-
-      expect(res.sucesso).toBe(false);
-      expect(res.erro).toBe('Acesso negado');
-      expect(res.statusCode).toBe(403);
-    });
-
-    it('trata falha de rede/exceção', async () => {
-      global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
-
+    it('retorna erro quando o Firestore falha', async () => {
+      mockGetDocs.mockRejectedValue(new Error('Firestore indisponível'));
       const res = await listarNotificacoesBackend('token-qualquer');
-
       expect(res.sucesso).toBe(false);
-      expect(res.erro).toBe('Network error');
+      expect(res.erro).toBe('Firestore indisponível');
     });
   });
 
   describe('marcarNotificacaoLidaBackend', () => {
-    it('executa chamada à Cloud Function com sucesso', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ sucesso: true }),
-      } as Response);
-
-      const res = await marcarNotificacaoLidaBackend('notif-1', 'user-1', 'token-valido');
-
-      expect(res.sucesso).toBe(true);
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/marcarNotificacaoLida'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer token-valido',
-          }),
-          body: JSON.stringify({ notificacaoId: 'notif-1' }),
-        }),
-      );
-    });
-
-    it('usa fallback no Firestore quando a Cloud Function falha', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-      } as Response);
-
+    it('atualiza a notificação diretamente no Firestore do usuário autenticado', async () => {
       mockDoc.mockReturnValue({ id: 'doc-ref' });
       mockUpdateDoc.mockResolvedValue(undefined);
 
-      const res = await marcarNotificacaoLidaBackend('notif-2', 'user-2', 'token-invalido');
+      const res = await marcarNotificacaoLidaBackend('notif-2', 'user-1');
 
       expect(res.sucesso).toBe(true);
       expect(mockDoc).toHaveBeenCalledWith(
         expect.anything(),
         'clientes',
-        'user-2',
+        'user-1',
         'notificacoes',
         'notif-2',
       );
@@ -267,36 +249,7 @@ describe('notificacoes-service', () => {
       expect(res).toEqual([]);
     });
 
-    it('retorna notificações do backend quando a função responder com dados', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          sucesso: true,
-          dados: [
-            {
-              id: 'notif-remota',
-              tipo: 'sistema',
-              titulo: 'Aviso',
-              mensagem: 'Mensagem remota',
-              lida: false,
-              createdAt: '2026-10-10T10:00:00.000Z',
-            },
-          ],
-        }),
-      } as Response);
-
-      const res = await buscarNotificacoesRemotas('user-1', 'token-valido');
-
-      expect(res).toHaveLength(1);
-      expect(res[0]?.id).toBe('notif-remota');
-    });
-
-    it('faz fallback para Firestore getDocs quando a função retorna vazio', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ sucesso: true, dados: [] }),
-      } as Response);
-
+    it('consulta as notificações remotas diretamente no Firestore', async () => {
       mockCollection.mockReturnValue({});
       mockOrderBy.mockReturnValue({});
       mockLimit.mockReturnValue({});
@@ -317,7 +270,7 @@ describe('notificacoes-service', () => {
         ],
       });
 
-      const res = await buscarNotificacoesRemotas('user-1', 'token-valido');
+      const res = await buscarNotificacoesRemotas('user-1');
 
       expect(res).toHaveLength(1);
       expect(res[0]?.id).toBe('notif-firestore');

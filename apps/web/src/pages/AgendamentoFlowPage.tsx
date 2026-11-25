@@ -2,8 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   avaliarBloqueioContraindicacao,
-  calcularDataHoraFim,
-  verificarConflitoHorarios,
   type ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';
 import { serviceCatalog } from '@/features/services/catalog';
@@ -12,17 +10,13 @@ import { useOptionalAuth } from '@/features/auth/auth-context';
 import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
+import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
 import {
-  addAgendamentoStorage,
-  getTodosAgendamentosStorage,
-} from '@/features/agendamentos/data/agendamentos-storage';
-import {
-  getAuthToken,
   mapBackendAgendamentoToUi,
-  solicitarAgendamentoBackend,
+  criarAgendamentoFirestore,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
-import { consultarHorariosDisponiveisBackend } from '@/services/horarios-service';
+import { consultarHorariosDisponiveis } from '@/services/horarios-service';
 import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
   maskCardNumber,
@@ -85,10 +79,6 @@ const DIAS_DISPONIVEIS_MOCK: DiaOpcao[] = [
   { isoDate: '2026-10-28', diaSemana: 'Quarta-feira', dataCurta: '28 Out', disponivel: true },
 ];
 
-function generateAppointmentId() {
-  return `ag-${Date.now()}`;
-}
-
 function calcularFimHorario(inicio: string, duracaoMin: number) {
   const parts = inicio.split(':');
   const h = Number(parts[0] ?? '0');
@@ -126,7 +116,7 @@ export function AgendamentoFlowPage() {
 
   // Estados do fluxo
   const [step, setStep] = useState<FlowStep>('calendario');
-  const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Mariana Souza';
+  const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Entre na sua conta';
   const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
     const agora = new Date();
     const d = new Date(agora);
@@ -188,7 +178,7 @@ export function AgendamentoFlowPage() {
     async function carregarHorarios() {
       if (!dataSelecionada) return;
       const duracao = servicoAtual?.durationMinutes || 60;
-      const slots = await consultarHorariosDisponiveisBackend({
+      const slots = await consultarHorariosDisponiveis({
         data: dataSelecionada,
         duracaoMinutos: duracao,
         servicoId: selectedServiceId,
@@ -238,7 +228,7 @@ export function AgendamentoFlowPage() {
     setStep('concluido');
   };
 
-  // Finalizar agendamento com validação de pagamento e sincronização com backend/Firestore
+  // Finalizar solicitação de agendamento e gravá-la diretamente no Firestore.
   const handleFinalizar = async () => {
     setErroAgendamento(null);
 
@@ -265,89 +255,32 @@ export function AgendamentoFlowPage() {
       return;
     }
 
-    const fimHora = calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes);
-    const inicioIso = `${dataSelecionada}T${horarioSelecionado}:00`;
-    const fimIso = `${dataSelecionada}T${fimHora}:00`;
-
-    const todosAgendamentos = getTodosAgendamentosStorage();
-    const conflitoExistente = todosAgendamentos.some(
-      (existente) =>
-        existente.status !== 'cancelado' &&
-        verificarConflitoHorarios(
-          { inicioIso, fimIso, intervaloMinutos: 30 },
-          {
-            inicioIso: existente.dataHoraIso,
-            fimIso: calcularDataHoraFim(existente.dataHoraIso, existente.duracaoMinutos),
-            intervaloMinutos: 30,
-          },
-        ),
-    );
-
-    if (conflitoExistente) {
-      setErroAgendamento(
-        'O horário selecionado não está mais disponível pois já foi reservado por outro cliente.',
-      );
-      return;
-    }
-    const novo: Agendamento = {
-      id: generateAppointmentId(),
-      clienteId: currentUser?.uid,
-      servicoNome: servicoAtual.name,
-      servicoCategoria: 'Massoterapia',
-      duracaoMinutos: servicoAtual.durationMinutes,
-      profissionalNome: 'Tais Romagnoli',
-      dataHoraIso: `${dataSelecionada}T${horarioSelecionado}:00`,
-      dataFormatada: diaSelecionadoObj
-        ? `${diaSelecionadoObj.diaSemana.substring(0, 3)}, ${diaSelecionadoObj.dataCurta}`
-        : dataSelecionada,
-      horarioFormatado: `${horarioSelecionado} - ${calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes)}`,
-      valorTotal: valorTotalReais,
-      sinalPago: valorSinalReais,
-      status: 'pendente',
-      imagemUrl: servicoAtual.imageSrc,
-      observacao: `Agendado via aplicativo por ${nomeCliente}. Método: ${metodoPagamento.toUpperCase()}.`,
-    };
-
     if (!currentUser?.uid) {
-      concluirSolicitacaoLocal(novo);
+      setErroAgendamento('Entre na sua conta para salvar e confirmar o agendamento.');
       return;
     }
 
     setSubmittingAgendamento(true);
     try {
-      const token = await getAuthToken();
-      if (!token) {
-        concluirSolicitacaoLocal(novo);
-        return;
-      }
+      const resposta = await criarAgendamentoFirestore({
+        servicoId: servicoAtual.id,
+        servicoNome: servicoAtual.name,
+        duracaoMinutos: servicoAtual.durationMinutes,
+        valorTotalEmCentavos: servicoAtual.priceInCents,
+        dataHoraInicio: dataHoraInicioIso,
+        metodoPagamento,
+        profissionalId: 'prof-tais-romagnoli',
+        profissionalNome: 'Tais Romagnoli',
+      });
 
-      const resposta = await solicitarAgendamentoBackend(
-        {
-          servicoId: servicoAtual.id,
-          servicoNome: servicoAtual.name,
-          duracaoMinutos: servicoAtual.durationMinutes,
-          valorTotalEmCentavos: servicoAtual.priceInCents,
-          dataHoraInicio: dataHoraInicioIso,
-          metodoPagamento,
-          profissionalId: 'prof-tais-romagnoli',
-          profissionalNome: 'Tais Romagnoli',
-          observacoes: novo.observacao,
-        },
-        token,
-      );
-
-      if (!resposta.sucesso) {
-        if (resposta.networkError) {
-          concluirSolicitacaoLocal(novo);
-          return;
-        }
+      if (!resposta.sucesso || !resposta.dados) {
         setErroAgendamento(
           resposta.erro || 'Não foi possível concluir a solicitação de agendamento.',
         );
         return;
       }
 
-      const agendamentoFinal = resposta.dados ? mapBackendAgendamentoToUi(resposta.dados) : novo;
+      const agendamentoFinal = mapBackendAgendamentoToUi(resposta.dados);
       concluirSolicitacaoLocal(agendamentoFinal);
     } finally {
       setSubmittingAgendamento(false);
@@ -412,7 +345,7 @@ export function AgendamentoFlowPage() {
           </div>
 
           <h1 className="text-2xl font-black tracking-tight text-white sm:text-4xl">
-            Agendamento Concluído!
+            Solicitação registrada!
           </h1>
 
           <p className="mt-2 text-sm text-white/90 sm:text-base">
@@ -439,9 +372,9 @@ export function AgendamentoFlowPage() {
                 <span className="font-bold text-white">Tais Romagnoli</span>
               </div>
               <div className="flex justify-between border-b border-white/20 pb-2">
-                <span className="text-white/80">Sinal de 30%:</span>
+                <span className="text-white/80">Sinal previsto (30%):</span>
                 <span className="font-bold text-white">
-                  {formatServicePrice(valorSinalReais * 100)} (Registrado)
+                  {formatServicePrice(valorSinalReais * 100)}
                 </span>
               </div>
               <div className="flex justify-between">

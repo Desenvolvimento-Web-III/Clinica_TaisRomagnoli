@@ -507,6 +507,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
     const horariosFixosRepo = new FirestoreHorariosFixosRepository(firestore);
     const profissionaisRepo = new FirestoreProfissionaisRepository(firestore);
     const anamneseRepo = new FirestoreAnamneseRepository(firestore);
+    const clientesRepo = new FirestoreClientesRepository(firestore);
 
     const agendamento = await solicitarNovoAgendamento(
       request.body,
@@ -520,6 +521,7 @@ export const solicitarAgendamento = onRequest({ cors: true }, async (request, re
       profissionaisRepo,
       anamneseRepo,
       new Date(),
+      clientesRepo,
     );
 
     await registrarAuditoriaOperacao({

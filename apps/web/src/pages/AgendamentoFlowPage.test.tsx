@@ -1,12 +1,37 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
+import { INITIAL_ANAMNESE_DATA, type Agendamento as SharedAgendamento } from '@clinica/shared';
 import * as anamneseService from '@/services/anamnese-service';
 import * as agendamentosService from '@/services/agendamentos-service';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
 
 const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
+
+const agendamentoSalvoMock: SharedAgendamento = {
+  id: 'ag-salvo-no-firestore',
+  clienteId: 'cli-1',
+  clienteNome: 'Mariana Souza',
+  clienteEmail: 'mariana@example.com',
+  clienteTelefone: '(11) 99999-0000',
+  servicoId: 'massagem-relaxante',
+  servicoNome: 'Massagem Relaxante',
+  duracaoMinutos: 60,
+  valorTotalEmCentavos: 17000,
+  valorSinalEmCentavos: 5100,
+  saldoRestanteEmCentavos: 11900,
+  dataHoraInicio: '2026-10-22T11:00:00.000Z',
+  dataHoraFim: '2026-10-22T12:00:00.000Z',
+  intervaloAposMinutos: 30,
+  profissionalId: 'prof-tais-romagnoli',
+  profissionalNome: 'Tais Romagnoli',
+  status: 'pendente',
+  metodoPagamento: 'pix',
+  origem: 'app_cliente',
+  sinalIsento: false,
+  createdAt: '2026-10-20T10:00:00.000Z',
+  updatedAt: '2026-10-20T10:00:00.000Z',
+};
 
 vi.mock('@/features/auth/auth-context', () => ({
   useOptionalAuth: () => mockUseOptionalAuth(),
@@ -54,6 +79,9 @@ describe('AgendamentoFlowPage', () => {
   });
 
   it('permite selecionar data e horário no Calendário e avançar para confirmação', () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
+    });
     renderFlow('/agendar/massagem-relaxante');
 
     // Seleciona um dia disponível (ex: dia 23)
@@ -93,7 +121,14 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.getByText('Calendário')).toBeInTheDocument();
   });
 
-  it('avança pelo fluxo completo: Calendário -> Confirmação -> Pagamento (PIX) -> Agendamento Concluído', async () => {
+  it('conclui o fluxo somente depois que o Firestore salva o agendamento', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
+    });
+    const spySolicitar = vi
+      .spyOn(agendamentosService, 'criarAgendamentoFirestore')
+      .mockResolvedValue({ sucesso: true, dados: agendamentoSalvoMock });
+
     renderFlow('/agendar/massagem-relaxante');
 
     // Calendário -> Confirmação
@@ -109,14 +144,30 @@ describe('AgendamentoFlowPage', () => {
     fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
 
     // Agendamento Concluído (fundo verde)
-    expect(screen.getByTestId('pagina-confirmacao-concluido')).toBeInTheDocument();
-    expect(screen.getByText('Agendamento Concluído!')).toBeInTheDocument();
+    expect(await screen.findByTestId('pagina-confirmacao-concluido')).toBeInTheDocument();
+    expect(screen.getByText('Solicitação registrada!')).toBeInTheDocument();
+    expect(spySolicitar).toHaveBeenCalledWith(
+      expect.objectContaining({ servicoId: 'massagem-relaxante' }),
+    );
 
     // Clica para ver agendamentos
     fireEvent.click(screen.getByTestId('ver-meus-agendamentos-btn'));
     await waitFor(() => {
       expect(screen.getByText('Página de Meus Agendamentos')).toBeInTheDocument();
     });
+  });
+
+  it('não conclui o agendamento de visitante sem salvar no backend', async () => {
+    renderFlow('/agendar/massagem-relaxante');
+
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    expect(await screen.findByTestId('erro-finalizar-agendamento')).toHaveTextContent(
+      'Entre na sua conta para salvar e confirmar o agendamento.',
+    );
+    expect(screen.queryByText('Solicitação registrada!')).not.toBeInTheDocument();
   });
 
   it('permite alternar métodos de pagamento no passo de Pagamento', () => {
@@ -135,7 +186,14 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.getByTestId('copiar-boleto-btn')).toBeInTheDocument();
   });
 
-  it('valida campos do cartão de crédito e aplica máscaras antes de finalizar', () => {
+  it('valida campos do cartão de crédito e aplica máscaras antes de finalizar', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
+    });
+    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+      sucesso: true,
+      dados: agendamentoSalvoMock,
+    });
     renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
@@ -175,7 +233,7 @@ describe('AgendamentoFlowPage', () => {
 
     // Finaliza com sucesso
     fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
-    expect(screen.getByText('Agendamento Concluído!')).toBeInTheDocument();
+    expect(await screen.findByText('Solicitação registrada!')).toBeInTheDocument();
   });
 
   it('exibe aviso de liberação médica pendente na confirmação e no resumo concluído para cliente bloqueado', async () => {
@@ -198,7 +256,10 @@ describe('AgendamentoFlowPage', () => {
         liberacaoMedicaAprovada: false,
       },
     });
-    vi.spyOn(agendamentosService, 'getAuthToken').mockResolvedValue(null);
+    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+      sucesso: true,
+      dados: agendamentoSalvoMock,
+    });
 
     renderFlow('/agendar/massagem-relaxante');
 
@@ -222,7 +283,7 @@ describe('AgendamentoFlowPage', () => {
     });
   });
 
-  it('exibe erro e impede conclusão quando backend retorna falha de negócio ao finalizar', async () => {
+  it('exibe erro e impede conclusão quando a gravação no Firestore falha', async () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'cli-1', displayName: 'Mariana' },
     });
@@ -230,11 +291,9 @@ describe('AgendamentoFlowPage', () => {
       sucesso: true,
       dados: undefined,
     });
-    vi.spyOn(agendamentosService, 'getAuthToken').mockResolvedValue('jwt-token');
-    vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend').mockResolvedValue({
+    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
       sucesso: false,
-      statusCode: 422,
-      erro: 'Agendamento recusado pela regra de liberação médica.',
+      erro: 'O Firebase recusou a gravação.',
     });
 
     renderFlow('/agendar/massagem-relaxante');
@@ -244,8 +303,8 @@ describe('AgendamentoFlowPage', () => {
     fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
 
     const erro = await screen.findByTestId('erro-finalizar-agendamento');
-    expect(erro).toHaveTextContent('Agendamento recusado pela regra de liberação médica.');
-    expect(screen.queryByText('Agendamento Concluído!')).not.toBeInTheDocument();
+    expect(erro).toHaveTextContent('O Firebase recusou a gravação.');
+    expect(screen.queryByText('Solicitação registrada!')).not.toBeInTheDocument();
   });
 
   it('desabilita navegação para meses anteriores ao mês atual', () => {

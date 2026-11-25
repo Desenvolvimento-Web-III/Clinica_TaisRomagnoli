@@ -13,7 +13,7 @@ import {
 } from '@/services/agendamentos-service';
 import {
   buscarHorariosFuncionamento,
-  consultarHorariosDisponiveisBackend,
+  consultarHorariosDisponiveis,
 } from '@/services/horarios-service';
 import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 import { gerarDiasReagendamento } from '@/features/agendamentos/utils/reagendamento-utils';
@@ -109,7 +109,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
     if (!dataSelecionadaEfetiva || !agendamentoId || !duracaoMinutos) return;
 
     let ativo = true;
-    consultarHorariosDisponiveisBackend({
+    consultarHorariosDisponiveis({
       data: dataSelecionadaEfetiva,
       duracaoMinutos,
       servicoId,

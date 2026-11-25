@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { INITIAL_ANAMNESE_DATA, type FichaAnamneseRecord } from '@clinica/shared';
+
+const { mockGetDoc, mockAuth } = vi.hoisted(() => ({
+  mockGetDoc: vi.fn(),
+  mockAuth: {
+    currentUser: null as null | { uid: string; getIdToken: ReturnType<typeof vi.fn> },
+  },
+}));
+
+vi.mock('firebase/firestore', () => ({
+  doc: vi.fn((_db: unknown, ...parts: string[]) => parts.join('/')),
+  getDoc: mockGetDoc,
+}));
+vi.mock('@/lib/firebase', () => ({ db: {}, auth: mockAuth }));
+
 import {
   salvarFichaAnamneseApi,
   obterFichaAnamneseApi,
@@ -9,6 +23,11 @@ import {
 describe('anamnese-service', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockGetDoc.mockReset();
+    mockAuth.currentUser = {
+      uid: 'cli-1',
+      getIdToken: vi.fn().mockResolvedValue('token-jwt'),
+    };
   });
 
   const fichaMock: FichaAnamneseRecord = {
@@ -28,6 +47,7 @@ describe('anamnese-service', () => {
   };
 
   it('salvarFichaAnamneseApi retorna erro quando usuário não está autenticado', async () => {
+    mockAuth.currentUser = null;
     const res = await salvarFichaAnamneseApi(
       { ...INITIAL_ANAMNESE_DATA, consentimentoConfirmado: true },
       'cli-1',
@@ -60,35 +80,26 @@ describe('anamnese-service', () => {
     );
   });
 
-  it('obterFichaAnamneseApi trata status 404 como ficha ainda não preenchida', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-      json: async () => ({ error: 'Não encontrada' }),
-    } as Response);
+  it('obterFichaAnamneseApi consulta o Firestore e trata ausência como ficha ainda não preenchida', async () => {
+    mockGetDoc
+      .mockResolvedValueOnce({ exists: () => false })
+      .mockResolvedValueOnce({ exists: () => false });
 
-    const res = await obterFichaAnamneseApi('cli-1', 'token-jwt');
+    const res = await obterFichaAnamneseApi('cli-1');
 
     expect(res.sucesso).toBe(true);
     expect(res.dados).toBeUndefined();
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/obterFichaAnamnese?clienteId=cli-1'),
-      expect.objectContaining({ method: 'GET' }),
-    );
+    expect(mockGetDoc).toHaveBeenNthCalledWith(1, 'anamneses/cli-1');
+    expect(mockGetDoc).toHaveBeenNthCalledWith(2, 'clientes/cli-1/anamneses/atual');
   });
 
-  it('obterFichaAnamneseApi repassa erro e statusCode quando ocorre falha 403', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 403,
-      json: async () => ({ error: 'Acesso negado.' }),
-    } as Response);
+  it('obterFichaAnamneseApi repassa erro de permissão do Firestore', async () => {
+    mockGetDoc.mockRejectedValueOnce(new Error('Missing or insufficient permissions.'));
 
-    const res = await obterFichaAnamneseApi('cli-2', 'token-jwt');
+    const res = await obterFichaAnamneseApi('cli-2');
 
     expect(res.sucesso).toBe(false);
-    expect(res.statusCode).toBe(403);
-    expect(res.erro).toBe('Acesso negado.');
+    expect(res.erro).toBe('Missing or insufficient permissions.');
   });
 
   it('atualizarLiberacaoMedicaApi envia POST autenticado e retorna ficha liberada', async () => {

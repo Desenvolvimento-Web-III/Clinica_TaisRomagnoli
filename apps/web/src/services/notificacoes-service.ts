@@ -8,10 +8,10 @@ import {
   orderBy,
   query,
   updateDoc,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
+import { auth, db } from '@/lib/firebase';
 
 /**
  * Converte a notificação interna do Firestore/Functions no formato padronizado de exibição da UI.
@@ -56,7 +56,7 @@ export function mesclarNotificacoes(
 }
 
 /**
- * Consulta a lista de notificações internas do cliente autenticado via Cloud Function.
+ * Consulta notificações do próprio cliente diretamente na subcoleção do Firestore.
  */
 export async function listarNotificacoesBackend(
   token?: string | null,
@@ -68,36 +68,24 @@ export async function listarNotificacoesBackend(
   erro?: string;
   statusCode?: number;
 }> {
-  const authToken = token ?? (await getAuthToken());
-  if (!authToken) {
+  void token;
+  const userUid = auth?.currentUser?.uid;
+  if (!db || !userUid) {
     return { sucesso: false, dados: [], erro: 'Usuário não autenticado no Firebase.' };
   }
 
   try {
-    const params = new URLSearchParams();
-    if (apenasNaoLidas) params.set('apenasNaoLidas', 'true');
-    if (limite && limite > 0) params.set('limite', String(limite));
-    const qs = params.toString() ? `?${params.toString()}` : '';
-
-    const url = `${getFunctionsBaseUrl()}/listarMinhasNotificacoes${qs}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    const body = await response.json();
-    if (!response.ok) {
-      return {
-        sucesso: false,
-        dados: [],
-        erro: body.error || 'Erro ao consultar notificações no servidor.',
-        statusCode: response.status,
-      };
-    }
-
-    const items: NotificacaoInterna[] = Array.isArray(body.dados) ? body.dados : [];
+    const q = query(
+      collection(db, 'clientes', userUid, 'notificacoes'),
+      ...(apenasNaoLidas ? [where('lida', '==', false)] : []),
+      orderBy('createdAt', 'desc'),
+      ...(limite && limite > 0 ? [firestoreLimit(limite)] : []),
+    );
+    const snapshot = await getDocs(q);
+    const items = snapshot.docs.map((docSnap) => ({
+      ...(docSnap.data() as Partial<NotificacaoInterna>),
+      id: docSnap.id,
+    }));
     return {
       sucesso: true,
       dados: items.map(mapNotificacaoInternaToClientNotification),
@@ -112,42 +100,20 @@ export async function listarNotificacoesBackend(
 }
 
 /**
- * Marca uma notificação como lida no servidor via Cloud Function, com fallback direto para Firestore.
+ * Marca como lida uma notificação da subcoleção do cliente autenticado.
  */
 export async function marcarNotificacaoLidaBackend(
   notificacaoId: string,
   userUid?: string | null,
-  token?: string | null,
+  _token?: string | null,
 ): Promise<{
   sucesso: boolean;
   erro?: string;
   statusCode?: number;
 }> {
-  const authToken = token ?? (await getAuthToken());
-
-  // 1. Tenta atualizar via Cloud Function quando há token
-  if (authToken) {
-    try {
-      const url = `${getFunctionsBaseUrl()}/marcarNotificacaoLida`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ notificacaoId }),
-      });
-
-      if (response.ok) {
-        return { sucesso: true };
-      }
-    } catch {
-      // Falha na function segue para fallback direto no Firestore
-    }
-  }
-
-  // 2. Fallback direto no Firestore (respeitando Security Rules: afetar apenas 'lida' e 'updatedAt')
-  if (db && userUid) {
+  void _token;
+  const uidAutenticado = auth?.currentUser?.uid;
+  if (db && userUid && uidAutenticado === userUid) {
     try {
       const notifRef = doc(db, 'clientes', userUid, 'notificacoes', notificacaoId);
       await updateDoc(notifRef, {
@@ -156,7 +122,7 @@ export async function marcarNotificacaoLidaBackend(
       });
       return { sucesso: true };
     } catch {
-      // Ignora erro no fallback
+      // Deixa a interface informar que a atualização não foi sincronizada.
     }
   }
 
@@ -164,22 +130,16 @@ export async function marcarNotificacaoLidaBackend(
 }
 
 /**
- * Busca notificações remotas do cliente através de Cloud Function ou consulta direta ao Firestore.
+ * Busca notificações remotas do próprio cliente diretamente no Firestore.
  */
 export async function buscarNotificacoesRemotas(
   userUid: string,
-  token?: string | null,
+  _token?: string | null,
 ): Promise<ClientNotification[]> {
+  void _token;
   if (!userUid) return [];
 
-  // 1. Consulta via Cloud Function
-  const res = await listarNotificacoesBackend(token);
-  if (res.sucesso && res.dados.length > 0) {
-    return res.dados;
-  }
-
-  // 2. Fallback via Firestore direto
-  if (db) {
+  if (db && auth?.currentUser?.uid === userUid) {
     try {
       const q = query(
         collection(db, 'clientes', userUid, 'notificacoes'),

@@ -22,11 +22,119 @@ vi.mock('@/features/auth/auth-context', () => ({
   useAuth: vi.fn(),
 }));
 
+function agendamentosDoDiaDeTeste(): SharedAgendamento[] {
+  const data = new Date();
+  data.setHours(0, 0, 0, 0);
+  const horario = (hora: number) => {
+    const value = new Date(data);
+    value.setHours(hora);
+    return value.toISOString();
+  };
+  return [
+    {
+      id: 'ag-1',
+      clienteId: 'demo-client-1',
+      clienteNome: 'Mariana Silva',
+      clienteEmail: 'mariana@example.com',
+      clienteTelefone: '(11) 98765-4321',
+      servicoId: 'srv-1',
+      servicoNome: 'Massagem Relaxante',
+      duracaoMinutos: 60,
+      valorTotalEmCentavos: 15000,
+      valorSinalEmCentavos: 4500,
+      saldoRestanteEmCentavos: 10500,
+      dataHoraInicio: horario(9),
+      dataHoraFim: horario(10),
+      intervaloAposMinutos: 30,
+      profissionalId: 'prof-tais-romagnoli',
+      profissionalNome: 'Tais Romagnoli',
+      status: 'concluido',
+      metodoPagamento: 'pix',
+      origem: 'app_cliente',
+      sinalIsento: false,
+      createdAt: horario(8),
+      updatedAt: horario(8),
+    },
+    {
+      id: 'ag-2',
+      clienteId: 'demo-client-2',
+      clienteNome: 'Ana Carolina Santos',
+      clienteTelefone: '(11) 97654-3210',
+      servicoId: 'srv-2',
+      servicoNome: 'Massagem com Pedras Quentes',
+      duracaoMinutos: 90,
+      valorTotalEmCentavos: 20000,
+      valorSinalEmCentavos: 6000,
+      saldoRestanteEmCentavos: 14000,
+      dataHoraInicio: horario(10),
+      dataHoraFim: horario(11),
+      intervaloAposMinutos: 30,
+      profissionalId: 'prof-tais-romagnoli',
+      profissionalNome: 'Tais Romagnoli',
+      status: 'confirmado',
+      metodoPagamento: 'pix',
+      origem: 'app_cliente',
+      sinalIsento: false,
+      createdAt: horario(8),
+      updatedAt: horario(8),
+    },
+    {
+      id: 'ag-3',
+      clienteId: 'demo-client-3',
+      clienteNome: 'Juliana Lima',
+      clienteTelefone: '(11) 96543-2109',
+      servicoId: 'srv-3',
+      servicoNome: 'Drenagem Linfática',
+      duracaoMinutos: 60,
+      valorTotalEmCentavos: 16000,
+      valorSinalEmCentavos: 4800,
+      saldoRestanteEmCentavos: 11200,
+      dataHoraInicio: horario(14),
+      dataHoraFim: horario(15),
+      intervaloAposMinutos: 30,
+      profissionalId: 'prof-tais-romagnoli',
+      profissionalNome: 'Tais Romagnoli',
+      status: 'confirmado',
+      metodoPagamento: 'pix',
+      origem: 'app_cliente',
+      sinalIsento: false,
+      createdAt: horario(8),
+      updatedAt: horario(8),
+    },
+    {
+      id: 'ag-4',
+      clienteId: 'demo-client-4',
+      clienteNome: 'Carlos Eduardo',
+      clienteTelefone: '(11) 95432-1098',
+      servicoId: 'srv-4',
+      servicoNome: 'Liberação Miofascial',
+      duracaoMinutos: 60,
+      valorTotalEmCentavos: 17000,
+      valorSinalEmCentavos: 5100,
+      saldoRestanteEmCentavos: 11900,
+      dataHoraInicio: horario(15),
+      dataHoraFim: horario(16),
+      intervaloAposMinutos: 30,
+      profissionalId: 'prof-tais-romagnoli',
+      profissionalNome: 'Tais Romagnoli',
+      status: 'pendente',
+      metodoPagamento: 'pix',
+      origem: 'app_cliente',
+      sinalIsento: false,
+      createdAt: horario(8),
+      updatedAt: horario(8),
+    },
+  ];
+}
+
 describe('AdminDashboardPage', () => {
   const mockLogout = vi.fn().mockResolvedValue(undefined);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(agendamentosService, 'buscarAgendamentosAdminDoDia').mockResolvedValue(
+      agendamentosDoDiaDeTeste(),
+    );
     vi.spyOn(clientesAdminService, 'buscarClientesAdmin').mockResolvedValue(CLIENTES_DEMO_INICIAIS);
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
       DEFAULT_CLINIC_SETTINGS,
@@ -78,7 +186,7 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('tab', { name: /configurações/i })).toBeInTheDocument();
   });
 
-  it('inicia na aba Agenda exibindo atendimentos do dia e regra de agendamento presencial', () => {
+  it('carrega os atendimentos do dia do Firestore e não usa dados demonstrativos fixos', async () => {
     renderDashboard();
 
     expect(screen.getByRole('heading', { name: /agenda de atendimentos/i })).toBeInTheDocument();
@@ -87,8 +195,22 @@ describe('AdminDashboardPage', () => {
         /agendamentos presenciais cadastrados pela administradora não exigem sinal/i,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
+    expect(screen.getByText('mariana@example.com')).toBeInTheDocument();
     expect(screen.getByText('Massagem Relaxante • 60 min')).toBeInTheDocument();
+    expect(agendamentosService.buscarAgendamentosAdminDoDia).toHaveBeenCalled();
+    expect(screen.getByTestId('agenda-item-ag-4')).toHaveTextContent('PENDENTE');
+  });
+
+  it('exibe estado vazio quando o Firestore não tem agendamentos para hoje', async () => {
+    vi.mocked(agendamentosService.buscarAgendamentosAdminDoDia).mockResolvedValueOnce([]);
+
+    renderDashboard();
+
+    expect(await screen.findByTestId('agenda-do-dia-vazia')).toHaveTextContent(
+      'Nenhum agendamento cadastrado para hoje.',
+    );
+    expect(screen.queryByText('Mariana Silva')).not.toBeInTheDocument();
   });
 
   it('exibe os indicadores operacionais do painel (agendamentos, atendimentos, cancelamentos/faltas, ocupação) na Agenda', async () => {
@@ -251,6 +373,8 @@ describe('AdminDashboardPage', () => {
     expect(
       screen.getByRole('heading', { name: /novo agendamento presencial/i }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText(/cliente cadastrado/i)).toBeRequired();
+    expect(screen.queryByLabelText(/nome do cliente/i)).not.toBeInTheDocument();
 
     const botaoCancelar = screen.getByRole('button', { name: /cancelar/i });
     fireEvent.click(botaoCancelar);
@@ -291,7 +415,7 @@ describe('AdminDashboardPage', () => {
 
     renderDashboard();
 
-    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn-ag-4'));
+    fireEvent.click(await screen.findByTestId('confirmar-agendamento-btn-ag-4'));
 
     const banner = await screen.findByTestId('agenda-feedback-banner');
     expect(banner).toHaveAttribute('role', 'alert');
@@ -301,7 +425,7 @@ describe('AdminDashboardPage', () => {
       '/admin/clientes/demo-client-4',
     );
     expect(spyAtualizarStatus).not.toHaveBeenCalled();
-    expect(screen.getByTestId('agenda-item-ag-4')).toHaveTextContent('PENDENTE');
+    expect(await screen.findByTestId('agenda-item-ag-4')).toHaveTextContent('PENDENTE');
 
     spyObterAnamnese.mockRestore();
     spyAtualizarStatus.mockRestore();
@@ -354,7 +478,7 @@ describe('AdminDashboardPage', () => {
 
     renderDashboard();
 
-    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn-ag-4'));
+    fireEvent.click(await screen.findByTestId('confirmar-agendamento-btn-ag-4'));
 
     await waitFor(() => {
       expect(screen.getByTestId('agenda-item-ag-4')).toHaveTextContent('CONFIRMADO');
@@ -383,7 +507,7 @@ describe('AdminDashboardPage', () => {
         liberacaoMedicaAprovada: false,
       },
     });
-    const spySolicitar = vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend');
+    const spySolicitar = vi.spyOn(agendamentosService, 'criarAgendamentoFirestore');
 
     renderDashboard();
 
@@ -412,7 +536,7 @@ describe('AdminDashboardPage', () => {
   });
 
   it('impede criação de agendamento presencial com data ou horário no passado', async () => {
-    const spySolicitar = vi.spyOn(agendamentosService, 'solicitarAgendamentoBackend');
+    const spySolicitar = vi.spyOn(agendamentosService, 'criarAgendamentoFirestore');
 
     renderDashboard();
 
@@ -436,6 +560,8 @@ describe('AdminDashboardPage', () => {
   it('permite alternar para a Fila de Lembretes pelo WhatsApp a partir da Agenda', async () => {
     renderDashboard();
 
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
+
     // Na Agenda de atendimentos, o botão da Fila de Lembretes está visível
     const btnToggleFila = screen.getByTestId('toggle-fila-lembretes-btn');
     expect(btnToggleFila).toHaveTextContent(/fila de lembretes whatsapp/i);
@@ -449,7 +575,7 @@ describe('AdminDashboardPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId('fila-lembretes-whatsapp-container')).toBeInTheDocument();
     expect(screen.getByTestId('contador-pendentes')).toBeInTheDocument();
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
 
     // Clica no botão de voltar para os atendimentos
     const btnVoltar = screen.getByLabelText(/voltar para a agenda/i);
@@ -460,13 +586,13 @@ describe('AdminDashboardPage', () => {
     expect(screen.queryByTestId('fila-lembretes-whatsapp-container')).not.toBeInTheDocument();
   });
 
-  it('abre a Fila de Lembretes diretamente através da rota /admin/lembretes', () => {
+  it('abre a Fila de Lembretes diretamente através da rota /admin/lembretes', async () => {
     renderDashboard('/admin/lembretes');
 
     expect(
       screen.getByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('fila-lembretes-whatsapp-container')).toBeInTheDocument();
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
   });
 });

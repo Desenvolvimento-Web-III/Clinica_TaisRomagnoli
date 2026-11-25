@@ -19,6 +19,10 @@
   responsáveis por esses dados.
 - Todo caminho não autorizado explicitamente permanece `deny all`.
 - Configurações públicas do Firebase identificam o projeto, mas não substituem Security Rules.
+- A criação direta de agendamentos aceita somente solicitações pendentes, valida titular/admin,
+  dados pessoais copiados do perfil e a existência/atividade do serviço. Como o catálogo ainda possui
+  formatos legados de preço/duração, esses valores são snapshots enviados pelo cliente e precisam ser
+  conferidos pela administradora. As regras não confirmam horário livre, ficha médica nem pagamento.
 
 LGPD, consentimento, retenção, minimização de dados, trilhas de auditoria e resposta a incidentes são
 requisitos futuros que deverão ser detalhados antes do tratamento de dados reais.
