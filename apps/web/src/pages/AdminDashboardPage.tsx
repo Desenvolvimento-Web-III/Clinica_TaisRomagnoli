@@ -28,6 +28,7 @@ import { AdminClientsList } from '@/features/admin-dashboard/components/AdminCli
 import { AdminIndicadoresOperacionais } from '@/features/admin-dashboard/components/AdminIndicadoresOperacionais';
 import { AdminRelatoriosSection } from '@/features/admin-dashboard/components/AdminRelatoriosSection';
 import { AdminFilaLembretesWhatsApp } from '@/features/admin-dashboard/components/AdminFilaLembretesWhatsApp';
+import { AdminAgendaCalendario } from '@/features/admin-dashboard/components/AdminAgendaCalendario';
 import { carregarLembretesEnviadosStorage } from '@/features/admin-dashboard/utils/whatsapp-reminders';
 import {
   atualizarStatusAgendamentoBackend,
@@ -224,7 +225,7 @@ export function AdminDashboardPage() {
         : 'agenda';
 
   const [activeSection, setActiveSection] = useState<AdminSection>(resolvedSection);
-  const [agendaSubView, setAgendaSubView] = useState<'lista' | 'lembretes'>(
+  const [agendaSubView, setAgendaSubView] = useState<'lista' | 'calendario' | 'lembretes'>(
     isLembretesRoute || searchParams.get('sub') === 'lembretes' ? 'lembretes' : 'lista',
   );
   const [modalPresencialAberto, setModalPresencialAberto] = useState(false);
@@ -729,7 +730,7 @@ export function AdminDashboardPage() {
             </div>
 
             {/* Sub-navegação interna da Agenda */}
-            <div className="flex border-b border-[var(--color-border-default)]">
+            <div className="flex flex-wrap border-b border-[var(--color-border-default)]">
               <button
                 type="button"
                 onClick={() => setAgendaSubView('lista')}
@@ -740,6 +741,18 @@ export function AdminDashboardPage() {
                 }`}
               >
                 Atendimentos de Hoje ({agendaItems.length})
+              </button>
+              <button
+                type="button"
+                data-testid="tab-calendario-agenda"
+                onClick={() => setAgendaSubView('calendario')}
+                className={`border-b-2 px-4 py-2 text-xs font-bold transition-all ${
+                  agendaSubView === 'calendario'
+                    ? 'border-[var(--color-brand-deep)] text-[var(--color-brand-deep)]'
+                    : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                Calendário
               </button>
               <button
                 type="button"
@@ -764,6 +777,26 @@ export function AdminDashboardPage() {
               <AdminFilaLembretesWhatsApp
                 agendamentos={agendaItems}
                 onVoltarAgenda={() => setAgendaSubView('lista')}
+              />
+            ) : agendaSubView === 'calendario' ? (
+              <AdminAgendaCalendario
+                agendamentos={agendamentosRelatorio}
+                isLoading={isLoadingRelatorio}
+                error={erroAgendamentosRelatorio}
+                onRefresh={() => {
+                  setIsLoadingRelatorio(true);
+                  setErroAgendamentosRelatorio(null);
+                  void buscarAgendamentosAdmin()
+                    .then(setAgendamentosRelatorio)
+                    .catch((error: unknown) =>
+                      setErroAgendamentosRelatorio(
+                        error instanceof Error
+                          ? error.message
+                          : 'Não foi possível carregar a agenda.',
+                      ),
+                    )
+                    .finally(() => setIsLoadingRelatorio(false));
+                }}
               />
             ) : (
               <>

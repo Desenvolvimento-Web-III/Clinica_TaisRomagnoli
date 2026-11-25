@@ -135,6 +135,9 @@ describe('AdminDashboardPage', () => {
     vi.spyOn(agendamentosService, 'buscarAgendamentosAdminDoDia').mockResolvedValue(
       agendamentosDoDiaDeTeste(),
     );
+    vi.spyOn(agendamentosService, 'buscarAgendamentosAdmin').mockResolvedValue(
+      agendamentosDoDiaDeTeste(),
+    );
     vi.spyOn(clientesAdminService, 'buscarClientesAdmin').mockResolvedValue(CLIENTES_DEMO_INICIAIS);
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
       DEFAULT_CLINIC_SETTINGS,
@@ -200,6 +203,18 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByText('Massagem Relaxante • 60 min')).toBeInTheDocument();
     expect(agendamentosService.buscarAgendamentosAdminDoDia).toHaveBeenCalled();
     expect(screen.getByTestId('agenda-item-ag-4')).toHaveTextContent('PENDENTE');
+  });
+
+  it('abre o calendário administrativo com agendamentos carregados do banco', async () => {
+    renderDashboard();
+
+    fireEvent.click(screen.getByTestId('tab-calendario-agenda'));
+
+    expect(await screen.findByTestId('admin-calendar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Semana' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('calendar-appointment-ag-1')).toHaveTextContent('Mariana Silva');
+    expect(screen.getByTestId('calendar-appointment-ag-1')).toHaveTextContent('Massagem Relaxante');
+    expect(agendamentosService.buscarAgendamentosAdmin).toHaveBeenCalled();
   });
 
   it('exibe estado vazio quando o Firestore não tem agendamentos para hoje', async () => {
