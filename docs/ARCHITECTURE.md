@@ -21,6 +21,12 @@ Sem Functions, a disponibilidade do cliente usa a configuração da clínica e o
 consulta segura dos horários ocupados por todos os clientes exige uma projeção sem dados pessoais,
 que ainda não existe.
 
+As telas administrativas de bloqueios de agenda e horários fixos leem e gravam diretamente em
+`/bloqueios_agenda` e `/horarios_fixos` pelo SDK web. Essas coleções são autorizadas nas Security
+Rules: a criação valida o formato do registro e o perfil do cliente, e somente a administradora pode
+alterar ou excluir registros. O frontend não usa as Cloud Functions correspondentes, que continuam
+no backend mas não estão implantadas no projeto Firebase atual.
+
 ## Autorização futura
 
 A proteção deverá existir em quatro níveis complementares: interface, rotas, Functions e Firebase
