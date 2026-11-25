@@ -556,4 +556,43 @@ describe('AdminDashboardPage', () => {
 
     spySolicitar.mockRestore();
   });
+
+  it('permite alternar para a Fila de Lembretes pelo WhatsApp a partir da Agenda', async () => {
+    renderDashboard();
+
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
+
+    // Na Agenda de atendimentos, o botão da Fila de Lembretes está visível
+    const btnToggleFila = screen.getByTestId('toggle-fila-lembretes-btn');
+    expect(btnToggleFila).toHaveTextContent(/fila de lembretes whatsapp/i);
+
+    // Clica para abrir a fila
+    fireEvent.click(btnToggleFila);
+
+    // O container da fila e os contatos pendentes são exibidos
+    expect(
+      screen.getByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('fila-lembretes-whatsapp-container')).toBeInTheDocument();
+    expect(screen.getByTestId('contador-pendentes')).toBeInTheDocument();
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
+
+    // Clica no botão de voltar para os atendimentos
+    const btnVoltar = screen.getByLabelText(/voltar para a agenda/i);
+    fireEvent.click(btnVoltar);
+
+    // Retorna para a visualização de atendimentos da agenda
+    expect(screen.getByRole('heading', { name: /agenda de atendimentos/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('fila-lembretes-whatsapp-container')).not.toBeInTheDocument();
+  });
+
+  it('abre a Fila de Lembretes diretamente através da rota /admin/lembretes', async () => {
+    renderDashboard('/admin/lembretes');
+
+    expect(
+      screen.getByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('fila-lembretes-whatsapp-container')).toBeInTheDocument();
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
+  });
 });

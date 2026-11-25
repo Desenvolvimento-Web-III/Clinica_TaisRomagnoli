@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#664EA2" />
+      <stop offset="100%" stop-color="#8F75D0" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.2" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#brandGrad)" />
+  <circle cx="256" cy="256" r="185" fill="#FAF8FF" filter="url(#shadow)" />
+  <!-- Lotus & Floral Motif representing massage, well-being and Tais Romagnoli brand -->
+  <g transform="translate(256, 256) scale(1.15)">
+    <!-- Central petal -->
+    <path d="M 0,-85 C -25,-40 -20,20 0,65 C 20,20 25,-40 0,-85 Z" fill="#664EA2" opacity="0.95"/>
+    <!-- Left petals -->
+    <path d="M -5,10 C -45,-35 -75,-15 -85,25 C -55,45 -25,35 -5,10 Z" fill="#8F75D0" opacity="0.9"/>
+    <path d="M -10,35 C -55,20 -80,55 -60,85 C -35,80 -15,55 -10,35 Z" fill="#B4A1E5" opacity="0.85"/>
+    <!-- Right petals -->
+    <path d="M 5,10 C 45,-35 75,-15 85,25 C 55,45 25,35 5,10 Z" fill="#8F75D0" opacity="0.9"/>
+    <path d="M 10,35 C 55,20 80,55 60,85 C 35,80 15,55 10,35 Z" fill="#B4A1E5" opacity="0.85"/>
+    <!-- Center base droplet -->
+    <circle cx="0" cy="52" r="14" fill="#664EA2"/>
+  </g>
+</svg>
