@@ -6,7 +6,24 @@ import {
   calcularOitoIndicadoresPainel,
   calcularCapacidadeSlotsMes,
 } from '../src/modules/indicadores/indicadores-service.js';
-import type { Agendamento, UserProfile, ServicoModel } from '@clinica/shared';
+import {
+  CONFIGURACAO_HORARIOS_PADRAO,
+  type Agendamento,
+  type UserProfile,
+  type ServicoModel,
+} from '@clinica/shared';
+
+function calcularIndicadoresComConfigTeste(
+  ...args: Parameters<typeof calcularOitoIndicadoresPainel>
+): ReturnType<typeof calcularOitoIndicadoresPainel> {
+  const parametros = [...args];
+  parametros[3] = {
+    ...parametros[3],
+    configuracaoHorarios:
+      parametros[3]?.configuracaoHorarios ?? CONFIGURACAO_HORARIOS_PADRAO,
+  };
+  return calcularOitoIndicadoresPainel(...parametros);
+}
 
 describe('indicadores-service (Cálculo dos 8 indicadores do painel administrativo)', () => {
   let agendamentosRepo: InMemoryAgendamentosRepository;
@@ -20,12 +37,12 @@ describe('indicadores-service (Cálculo dos 8 indicadores do painel administrati
   });
 
   it('calcula capacidade teórica de slots de atendimento no mês', () => {
-    const slots = calcularCapacidadeSlotsMes('2026-11');
+    const slots = calcularCapacidadeSlotsMes('2026-11', CONFIGURACAO_HORARIOS_PADRAO);
     expect(slots).toBeGreaterThan(50);
   });
 
   it('retorna estrutura íntegra quando não há agendamentos nem clientes', async () => {
-    const resultado = await calcularOitoIndicadoresPainel(
+    const resultado = await calcularIndicadoresComConfigTeste(
       agendamentosRepo,
       clientesRepo,
       servicosRepo,
@@ -291,7 +308,7 @@ describe('indicadores-service (Cálculo dos 8 indicadores do painel administrati
     await agendamentosRepo.salvar(a5);
     await agendamentosRepo.salvar(a6);
 
-    const resultado = await calcularOitoIndicadoresPainel(
+    const resultado = await calcularIndicadoresComConfigTeste(
       agendamentosRepo,
       clientesRepo,
       servicosRepo,
@@ -424,7 +441,7 @@ describe('indicadores-service (Cálculo dos 8 indicadores do painel administrati
     });
 
     // Com critério padrão (2), ela é recorrente em Outubro
-    const resPadrao = await calcularOitoIndicadoresPainel(
+    const resPadrao = await calcularIndicadoresComConfigTeste(
       agendamentosRepo,
       clientesRepo,
       servicosRepo,
@@ -433,7 +450,7 @@ describe('indicadores-service (Cálculo dos 8 indicadores do painel administrati
     expect(resPadrao.indicadores.clientesRecorrentes.total).toBe(1);
 
     // Se o critério for 3 sessões, ela não é recorrente
-    const resEstrito = await calcularOitoIndicadoresPainel(
+    const resEstrito = await calcularIndicadoresComConfigTeste(
       agendamentosRepo,
       clientesRepo,
       servicosRepo,
@@ -467,7 +484,7 @@ describe('indicadores-service (Cálculo dos 8 indicadores do painel administrati
       updatedAt: '2026-11-12T11:00:00.000Z',
     });
 
-    const res = await calcularOitoIndicadoresPainel(agendamentosRepo, clientesRepo, servicosRepo, {
+    const res = await calcularIndicadoresComConfigTeste(agendamentosRepo, clientesRepo, servicosRepo, {
       dataReferencia: '2026-11-16',
       mesReferencia: '2026-11',
     });

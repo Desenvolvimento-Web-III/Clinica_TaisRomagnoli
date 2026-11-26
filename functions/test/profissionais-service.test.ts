@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { ID_PROFISSIONAL_PADRAO, type ServicoModel } from '@clinica/shared';
+import { ID_PROFISSIONAL_PADRAO, type Professional, type ServicoModel } from '@clinica/shared';
 import { InMemoryProfissionaisRepository } from '../src/modules/profissionais/profissionais-repository.js';
 import {
   ProfissionalBusinessError,
@@ -46,24 +46,19 @@ describe('ProfissionaisService - Gestão e Vínculo de Profissionais', () => {
   };
 
   beforeEach(async () => {
-    profissionaisRepo = new InMemoryProfissionaisRepository(true);
+    profissionaisRepo = new InMemoryProfissionaisRepository();
     servicosRepo = new InMemoryServicosRepository();
     await servicosRepo.salvar(servicoExemplo);
   });
 
   describe('listarProfissionais', () => {
-    it('retorna a profissional inicial padrão (Tais Romagnoli) na inicialização', async () => {
+    it('não injeta uma profissional estática quando o repositório está vazio', async () => {
       const lista = await listarProfissionais(profissionaisRepo);
-      expect(lista.length).toBeGreaterThanOrEqual(1);
-      const tais = lista.find((p) => p.id === ID_PROFISSIONAL_PADRAO);
-      expect(tais).toBeDefined();
-      expect(tais?.nome).toBe('Tais Romagnoli');
-      expect(tais?.especialidade).toBe('Massoterapeuta');
-      expect(tais?.ativo).toBe(true);
-      expect(tais?.diasFolga).toEqual([0, 2]);
+      expect(lista).toEqual([]);
     });
 
     it('permite filtrar apenas profissionais ativos', async () => {
+      await profissionaisRepo.salvar(criarProfissionalPadrao());
       await profissionaisRepo.salvar({
         id: 'prof-inativo',
         nome: 'Profissional Inativo',
@@ -85,6 +80,7 @@ describe('ProfissionaisService - Gestão e Vínculo de Profissionais', () => {
 
   describe('obterProfissionalPorId', () => {
     it('retorna os dados da profissional inicial quando solicitado por ID', async () => {
+      await profissionaisRepo.salvar(criarProfissionalPadrao());
       const prof = await obterProfissionalPorId(ID_PROFISSIONAL_PADRAO, profissionaisRepo);
       expect(prof.id).toBe(ID_PROFISSIONAL_PADRAO);
       expect(prof.nome).toBe('Tais Romagnoli');
@@ -149,6 +145,7 @@ describe('ProfissionaisService - Gestão e Vínculo de Profissionais', () => {
     });
 
     it('rejeita cadastro com erro 409 se o ID fornecido já existir', async () => {
+      await profissionaisRepo.salvar(criarProfissionalPadrao());
       const input = {
         id: ID_PROFISSIONAL_PADRAO,
         nome: 'Tais Duplicada',
@@ -169,6 +166,7 @@ describe('ProfissionaisService - Gestão e Vínculo de Profissionais', () => {
 
   describe('atualizarProfissional', () => {
     it('atualiza os dados de um profissional existente com sucesso', async () => {
+      await profissionaisRepo.salvar(criarProfissionalPadrao());
       const input = {
         id: ID_PROFISSIONAL_PADRAO,
         especialidade: 'Massoterapeuta Master e Terapeuta Holística',
@@ -306,3 +304,15 @@ describe('ProfissionaisService - Gestão e Vínculo de Profissionais', () => {
     });
   });
 });
+
+function criarProfissionalPadrao(): Professional {
+  return {
+    id: ID_PROFISSIONAL_PADRAO,
+    nome: 'Tais Romagnoli',
+    especialidade: 'Massoterapeuta',
+    ativo: true,
+    diasFolga: [0, 2],
+    intervaloMinutos: 30,
+    createdAt: '2026-09-01T00:00:00.000Z',
+  };
+}
