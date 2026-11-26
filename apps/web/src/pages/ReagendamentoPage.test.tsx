@@ -147,7 +147,7 @@ describe('ReagendamentoPage', () => {
     return result;
   };
 
-  it('renderiza os dados do agendamento original e as regras de reagendamento', () => {
+  it('renderiza os dados do agendamento original e as regras de reagendamento', async () => {
     await renderPage('ag-101');
 
     expect(screen.getByRole('heading', { name: 'Reagendar Atendimento' })).toBeInTheDocument();
@@ -211,7 +211,7 @@ describe('ReagendamentoPage', () => {
     expect(screen.queryByTestId('reagendamento-sucesso-card')).not.toBeInTheDocument();
   });
 
-  it('permite voltar para a lista de agendamentos pelo botão superior', () => {
+  it('permite voltar para a lista de agendamentos pelo botão superior', async () => {
     await renderPage('ag-101');
 
     const btnVoltarTopo = screen.getByTestId('voltar-agendamentos-btn');
@@ -220,7 +220,7 @@ describe('ReagendamentoPage', () => {
     expect(screen.getByText('Lista de Agendamentos')).toBeInTheDocument();
   });
 
-  it('gera opções dinâmicas da semana seguinte excluindo as folgas da dona da clínica (domingos e terças)', () => {
+  it('gera opções dinâmicas da semana seguinte excluindo as folgas da dona da clínica (domingos e terças)', async () => {
     // Definimos a data do sistema como 2026-10-20 (terça-feira)
     vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
     await renderPage('ag-101');
