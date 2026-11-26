@@ -228,7 +228,11 @@ describe('Custom Claims Service (Firebase Admin SDK)', () => {
 
   describe('definirAdministradoraInicial (Bootstrap)', () => {
     it('define a conta padrão da administradora pelo Firebase Admin SDK com Custom Claims', async () => {
-      const result = await definirAdministradoraInicial(mockAuth, mockFirestore);
+      const result = await definirAdministradoraInicial(
+        mockAuth,
+        'admin@clinicataisromagnoli.com.br',
+        mockFirestore,
+      );
 
       expect(result.admin).toBe(true);
       expect(result.role).toBe('admin');

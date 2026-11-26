@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
+import { CONFIGURACAO_HORARIOS_PADRAO, ID_PROFISSIONAL_PADRAO } from '@clinica/shared';
 
 vi.mock('firebase-admin/app', () => ({
   initializeApp: vi.fn(),
@@ -80,6 +80,18 @@ const mockFirestore = {
               ativo: true,
               criadoPor: 'admin-1',
               criadoEm: '2026-11-07T00:00:00.000Z',
+            }),
+          });
+        }
+        if (colName === 'profissionais' && docId === ID_PROFISSIONAL_PADRAO) {
+          return Promise.resolve({
+            exists: true,
+            data: () => ({
+              nome: 'Tais Romagnoli',
+              especialidade: 'Massoterapeuta',
+              ativo: true,
+              diasFolga: [0, 2],
+              intervaloMinutos: 30,
             }),
           });
         }

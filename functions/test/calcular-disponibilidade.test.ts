@@ -904,6 +904,15 @@ describe('[Backend] Calcular disponibilidade da agenda', () => {
         intervaloMinutos: 30,
         createdAt: '2026-09-01T00:00:00.000Z',
       });
+      await profissionaisRepo.salvar({
+        id: 'prof-tais-romagnoli',
+        nome: 'Tais Romagnoli',
+        especialidade: 'Massoterapeuta',
+        ativo: true,
+        diasFolga: [0, 2],
+        intervaloMinutos: 30,
+        createdAt: '2026-09-01T00:00:00.000Z',
+      });
 
       await servicosRepo.salvar({
         id: 'serv-exclusivo-tais',
