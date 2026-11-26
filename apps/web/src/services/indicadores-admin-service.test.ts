@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { consultarPainelIndicadoresAdmin } from './indicadores-admin-service';
 import { indicatorsFixture } from '@/test/fixtures';
 
+vi.mock('@/config/env', () => ({
+  environment: { firebase: { projectId: 'demo-clinica-tests' }, useFirebaseEmulators: true },
+}));
+
 describe('indicadores-admin-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();

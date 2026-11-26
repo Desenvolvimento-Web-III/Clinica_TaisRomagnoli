@@ -394,7 +394,7 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.queryByTestId('slot-hora-16:30')).not.toBeInTheDocument();
 
     // Horário futuro (17:00) deve estar disponível e ser selecionável
-    const slot17 = screen.getByTestId('slot-hora-17:00');
+    const slot17 = await screen.findByTestId('slot-hora-17:00');
     expect(slot17).toBeInTheDocument();
     fireEvent.click(slot17);
 
@@ -471,6 +471,9 @@ describe('AgendamentoFlowPage', () => {
     expect(await screen.findByText('Solicitação registrada!')).toBeInTheDocument();
     unmount();
 
+    vi.spyOn(horariosService, 'consultarHorariosDisponiveis').mockResolvedValue([
+      '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
+    ]);
     await renderFlow('/agendar/massagem-relaxante');
     fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
 

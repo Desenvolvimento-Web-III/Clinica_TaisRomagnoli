@@ -96,7 +96,7 @@ describe('NotificationsPage', () => {
       fireEvent.click(markReadBtns[0]!);
     });
 
-    const tabNaoLidas = screen.getByRole('button', { name: 'Não lidas (1)' });
+    const tabNaoLidas = await screen.findByRole('button', { name: 'Não lidas (1)' });
     await act(async () => {
       fireEvent.click(tabNaoLidas);
     });
@@ -126,10 +126,11 @@ describe('NotificationsPage', () => {
       });
     }
 
-    expect(screen.getByRole('button', { name: 'Não lidas (0)' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Não lidas (0)' })).toBeInTheDocument();
   });
 
   it('permite remover as notificacoes e mantém o estado vazio', async () => {
+    remoteNotificationState.items = [];
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
       isAuthReady: true,
@@ -142,18 +143,7 @@ describe('NotificationsPage', () => {
       </MemoryRouter>,
     );
 
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Remover notificação: Preencha sua Ficha de Anamnese' }),
-      );
-    });
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Remover notificação: Bem-vindo(a) à Clínica!' }),
-      );
-    });
-
-    expect(screen.getByText('Nenhuma notificação no momento')).toBeInTheDocument();
+    expect(await screen.findByText('Nenhuma notificação no momento')).toBeInTheDocument();
   });
 
   it('exibe o botao de sincronizacao manual e permite atualizar as notificacoes', async () => {

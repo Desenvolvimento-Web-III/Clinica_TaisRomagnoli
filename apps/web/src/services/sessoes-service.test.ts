@@ -23,7 +23,7 @@ vi.mock('./agendamentos-service', () => ({
 describe('sessoes-service', () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Storage de sessão única e encerramento', () => {

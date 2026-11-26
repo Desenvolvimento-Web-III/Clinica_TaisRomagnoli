@@ -45,7 +45,7 @@ describe('lembretes-admin-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.currentUser = { uid: 'admin-1' };
-    getDocMock.mockResolvedValue({ exists: () => false });
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => clinicSettingsFixture });
     getDocsMock.mockImplementation(async (ref: { collection: string }) => {
       if (ref.collection === 'agendamentos') {
         return {
