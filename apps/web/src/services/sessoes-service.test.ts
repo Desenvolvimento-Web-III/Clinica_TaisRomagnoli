@@ -87,14 +87,14 @@ describe('sessoes-service', () => {
       expect(getLocalActiveSessionId()).toBe('sessao-gerada-cloud');
     });
 
-    it('gera fallback local seguro quando o fetch falha', async () => {
+    it('não cria sessão local quando o backend falha', async () => {
       const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
       globalThis.fetch = mockFetch;
 
       const resultado = await iniciarSessaoUnicaNoBackend('meu-token', 'sessao-solicitada');
 
-      expect(resultado?.sessionId).toBe('sessao-solicitada');
-      expect(getLocalActiveSessionId()).toBe('sessao-solicitada');
+      expect(resultado).toBeNull();
+      expect(getLocalActiveSessionId()).toBeNull();
     });
   });
 });

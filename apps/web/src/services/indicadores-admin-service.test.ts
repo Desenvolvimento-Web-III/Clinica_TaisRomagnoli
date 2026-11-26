@@ -6,6 +6,8 @@ vi.mock('@/config/env', () => ({
   environment: { firebase: { projectId: 'demo-clinica-tests' }, useFirebaseEmulators: true },
 }));
 
+vi.mock('@/lib/firebase', () => ({ auth: null, db: null }));
+
 describe('indicadores-admin-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();

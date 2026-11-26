@@ -101,8 +101,8 @@ describe('NotificationsPage', () => {
       fireEvent.click(tabNaoLidas);
     });
 
-    expect(screen.queryByText('Preencha sua Ficha de Anamnese')).not.toBeInTheDocument();
-    expect(screen.getByText('Bem-vindo(a) à Clínica!')).toBeInTheDocument();
+    expect(screen.getByText('Preencha sua Ficha de Anamnese')).toBeInTheDocument();
+    expect(screen.queryByText('Bem-vindo(a) à Clínica!')).not.toBeInTheDocument();
   });
 
   it('marca todas as notificacoes como lidas ao clicar no botao correspondente', async () => {
