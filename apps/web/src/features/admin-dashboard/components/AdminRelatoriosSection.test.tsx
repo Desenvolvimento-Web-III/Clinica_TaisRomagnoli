@@ -1,98 +1,53 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Agendamento } from '@clinica/shared';
-import type { AdminClientListItem } from '../types';
+import {
+  consultarRelatorioAdmin,
+  exportarRelatorioAdmin,
+} from '@/services/relatorios-admin-service';
 import { AdminRelatoriosSection } from './AdminRelatoriosSection';
 
-const clients: AdminClientListItem[] = [
-  {
-    id: 'cliente-1',
-    nome: 'Ana Ribeiro',
-    email: 'ana@example.com',
-    telefone: '(11) 99999-0000',
-    status: 'ativo',
-    totalAtendimentosMes: 2,
-  },
-];
+vi.mock('@/services/relatorios-admin-service', () => ({
+  consultarRelatorioAdmin: vi.fn(),
+  exportarRelatorioAdmin: vi.fn(),
+}));
 
-const appointments: Agendamento[] = [
-  {
-    id: 'ag-1',
-    clienteId: 'cliente-1',
-    clienteNome: 'Ana Ribeiro',
-    servicoId: 'servico-1',
-    servicoNome: 'Massagem relaxante',
-    duracaoMinutos: 60,
-    valorTotalEmCentavos: 20000,
-    valorSinalEmCentavos: 6000,
-    saldoRestanteEmCentavos: 14000,
-    dataHoraInicio: '2026-11-03T10:00:00.000Z',
-    dataHoraFim: '2026-11-03T11:00:00.000Z',
-    intervaloAposMinutos: 30,
-    profissionalId: 'prof-1',
-    profissionalNome: 'Tais Romagnoli',
-    status: 'concluido',
-    metodoPagamento: 'pix',
-    origem: 'app_cliente',
-    sinalIsento: false,
-    createdAt: '2026-11-01T10:00:00.000Z',
-    updatedAt: '2026-11-03T11:00:00.000Z',
-  },
-  {
-    id: 'ag-2',
-    clienteId: 'cliente-1',
-    clienteNome: 'Ana Ribeiro',
-    servicoId: 'servico-1',
-    servicoNome: 'Massagem relaxante',
-    duracaoMinutos: 60,
-    valorTotalEmCentavos: 20000,
-    valorSinalEmCentavos: 6000,
-    saldoRestanteEmCentavos: 14000,
-    dataHoraInicio: '2026-11-10T10:00:00.000Z',
-    dataHoraFim: '2026-11-10T11:00:00.000Z',
-    intervaloAposMinutos: 30,
-    profissionalId: 'prof-1',
-    profissionalNome: 'Tais Romagnoli',
-    status: 'confirmado',
-    metodoPagamento: 'pix',
-    origem: 'app_cliente',
-    sinalIsento: false,
-    createdAt: '2026-11-01T10:00:00.000Z',
-    updatedAt: '2026-11-01T10:00:00.000Z',
-  },
-  {
-    id: 'ag-3',
-    clienteId: 'cliente-1',
-    clienteNome: 'Ana Ribeiro',
-    servicoId: 'servico-1',
-    servicoNome: 'Massagem relaxante',
-    duracaoMinutos: 60,
-    valorTotalEmCentavos: 20000,
-    valorSinalEmCentavos: 6000,
-    saldoRestanteEmCentavos: 14000,
-    dataHoraInicio: '2026-11-17T10:00:00.000Z',
-    dataHoraFim: '2026-11-17T11:00:00.000Z',
-    intervaloAposMinutos: 30,
-    profissionalId: 'prof-1',
-    profissionalNome: 'Tais Romagnoli',
-    status: 'concluido',
-    metodoPagamento: 'pix',
-    origem: 'app_cliente',
-    sinalIsento: false,
-    createdAt: '2026-11-01T10:00:00.000Z',
-    updatedAt: '2026-11-17T11:00:00.000Z',
-  },
-];
+const consultarMock = vi.mocked(consultarRelatorioAdmin);
+const exportarMock = vi.mocked(exportarRelatorioAdmin);
+
+const report = {
+  categoria: 'agenda' as const,
+  mesReferencia: '2026-11',
+  geradoEmIso: '2026-11-25T12:00:00.000Z',
+  headers: ['Data', 'Cliente', 'Serviço', 'Status'],
+  rows: [
+    {
+      id: 'ag-1',
+      values: ['03/11/2026', 'Ana Ribeiro', 'Massagem relaxante', 'Concluído'],
+      searchText: '03/11/2026 ana ribeiro massagem relaxante concluído',
+      status: 'concluido',
+    },
+    {
+      id: 'ag-2',
+      values: ['10/11/2026', 'Ana Ribeiro', 'Massagem relaxante', 'Confirmado'],
+      searchText: '10/11/2026 ana ribeiro massagem relaxante confirmado',
+      status: 'confirmado',
+    },
+  ],
+};
 
 describe('AdminRelatoriosSection', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    consultarMock.mockReset();
+    exportarMock.mockReset();
   });
 
-  it('filtra a agenda por mês, status e texto', () => {
-    render(<AdminRelatoriosSection clients={clients} appointments={appointments} />);
+  it('carrega do serviço e filtra por mês, status e texto', async () => {
+    consultarMock.mockResolvedValue(report);
+    render(<AdminRelatoriosSection />);
 
+    await screen.findByText('03/11/2026');
     fireEvent.change(screen.getByLabelText('Mês de referência do relatório'), {
       target: { value: '2026-11' },
     });
@@ -106,31 +61,34 @@ describe('AdminRelatoriosSection', () => {
     expect(screen.getByText('10/11/2026')).toBeInTheDocument();
     expect(screen.queryByText('03/11/2026')).not.toBeInTheDocument();
     expect(screen.getByText('1 registro(s)')).toBeInTheDocument();
+    expect(consultarMock).toHaveBeenCalledWith(expect.objectContaining({ categoria: 'agenda' }));
   });
 
-  it('mostra clientes recorrentes e exporta apenas as linhas visíveis em CSV', () => {
+  it('solicita a exportação ao backend com os filtros aplicados', async () => {
+    consultarMock.mockResolvedValue(report);
+    const blob = new Blob(['csv'], { type: 'text/csv' });
+    exportarMock.mockResolvedValue({ blob, nomeArquivo: 'relatorio-agenda-2026-11.csv' });
     const createObjectURL = vi.fn(() => 'blob:relatorio');
     const revokeObjectURL = vi.fn();
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
-    render(<AdminRelatoriosSection clients={clients} appointments={appointments} />);
-    fireEvent.change(screen.getByLabelText('Mês de referência do relatório'), {
-      target: { value: '2026-11' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Recorrência' }));
-
-    expect(screen.getByText('Ana Ribeiro')).toBeInTheDocument();
-    expect(screen.getByText('2', { selector: 'td' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Clientes' }));
-    expect(screen.getByText('Ana Ribeiro')).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Buscar nos dados do relatório'), {
-      target: { value: 'Ana Ribeiro' },
+    render(<AdminRelatoriosSection />);
+    await screen.findByText('03/11/2026');
+    fireEvent.change(screen.getByLabelText('Status do relatório'), {
+      target: { value: 'confirmado' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Exportar CSV/ }));
 
-    expect(createObjectURL).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(exportarMock).toHaveBeenCalledWith({
+        categoria: 'agenda',
+        mesReferencia: expect.any(String),
+        busca: '',
+        status: 'confirmado',
+      }),
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:relatorio');
   });

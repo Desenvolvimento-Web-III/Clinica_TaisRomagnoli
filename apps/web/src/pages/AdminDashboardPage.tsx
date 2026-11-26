@@ -1281,12 +1281,7 @@ export function AdminDashboardPage() {
               </div>
             </div>
 
-            <AdminRelatoriosSection
-              clients={clientes}
-              appointments={agendamentosRelatorio}
-              isLoading={isLoadingClientes || isLoadingRelatorio}
-              error={erroClientes || erroAgendamentosRelatorio}
-            />
+            <AdminRelatoriosSection />
           </section>
         )}
 
