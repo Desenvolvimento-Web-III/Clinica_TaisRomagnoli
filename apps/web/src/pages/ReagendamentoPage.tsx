@@ -65,7 +65,6 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
   useEffect(() => {
     let ativo = true;
-    setCarregandoAgendamentos(true);
     carregarAgendamentos(userId).then((resultado) => {
       if (ativo) setAgendamentosLocais(resultado.agendamentos);
     }).finally(() => {

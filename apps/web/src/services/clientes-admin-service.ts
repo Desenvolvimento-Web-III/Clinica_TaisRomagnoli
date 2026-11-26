@@ -94,7 +94,6 @@ export async function buscarPerfilClienteAdmin(
   const registeredAt = data.createdAt;
   const birthDate = data.dataNascimento;
   let anamnesis: ClientAnamnesis | null = null;
-  }
 
   const anamneseRes = await obterFichaAnamneseApi(clientId);
   if (anamneseRes.sucesso && anamneseRes.dados) {

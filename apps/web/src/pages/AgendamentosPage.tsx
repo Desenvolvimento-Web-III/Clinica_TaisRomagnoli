@@ -43,7 +43,6 @@ function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
 
   useEffect(() => {
     let ativo = true;
-    setLoading(true);
     carregarAgendamentos(userId)
       .then((res) => {
         if (!ativo) return;

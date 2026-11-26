@@ -81,7 +81,9 @@ export function useClientNotifications(userUid?: string | null) {
 
   useEffect(() => {
     let ativo = true;
-    setNotifications([]);
+    Promise.resolve().then(() => {
+      if (ativo) setNotifications([]);
+    });
     if (!userUid) return () => { ativo = false; };
 
     void buscarNotificacoesRemotas(userUid).then((items) => {
