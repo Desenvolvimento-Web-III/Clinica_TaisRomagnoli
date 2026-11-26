@@ -2,10 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
-import {
-  ANAMNESE_NOTIFICATION_ID,
-  markClientNotificationAsRead,
-} from '@/features/notifications/notifications-store';
 import { AnamneseRadioGroup } from '@/features/anamnese/components/AnamneseRadioGroup';
 import { BodyRegionSelector } from '@/features/anamnese/components/BodyRegionSelector';
 import { PainScaleSelector } from '@/features/anamnese/components/PainScaleSelector';
@@ -35,8 +31,6 @@ import type {
   FrequenciaAtividadeFisica,
 } from '@/features/anamnese/types/anamnese';
 
-const STORAGE_KEY_PREFIX = 'clinica_anamnese_data_';
-
 interface LiberacaoState {
   exigeLiberacaoMedica: boolean;
   contraindicacoes: string[];
@@ -45,80 +39,25 @@ interface LiberacaoState {
   liberacaoMedicaObservacoes?: string;
 }
 
-function loadSavedAnamnese(uid?: string | null): {
-  data: FichaAnamneseData;
-  updatedAt?: string;
-  pontosAtencao: string[];
-  liberacao: LiberacaoState;
-} {
-  const defaultLiberacao: LiberacaoState = {
-    exigeLiberacaoMedica: false,
-    contraindicacoes: [],
-    liberacaoMedicaAprovada: false,
-  };
-
-  if (typeof window === 'undefined') {
-    return {
-      data: INITIAL_ANAMNESE_DATA,
-      updatedAt: undefined,
-      pontosAtencao: [],
-      liberacao: defaultLiberacao,
-    };
-  }
-  const storageKey = uid ? `${STORAGE_KEY_PREFIX}${uid}` : `${STORAGE_KEY_PREFIX}guest`;
-  try {
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object') {
-        const mergedData = { ...INITIAL_ANAMNESE_DATA, ...parsed.data } as FichaAnamneseData;
-        const avaliacao = avaliarBloqueioContraindicacao({
-          ...mergedData,
-          exigeLiberacaoMedica: parsed.exigeLiberacaoMedica,
-          contraindicacoes: parsed.contraindicacoes,
-          liberacaoMedicaAprovada: parsed.liberacaoMedicaAprovada,
-        });
-        return {
-          data: mergedData,
-          updatedAt: parsed.updatedAt as string | undefined,
-          pontosAtencao: (parsed.pontosAtencao as string[]) || [],
-          liberacao: {
-            exigeLiberacaoMedica: avaliacao.exigeLiberacaoMedica,
-            contraindicacoes: avaliacao.contraindicacoes,
-            liberacaoMedicaAprovada: avaliacao.liberacaoMedicaAprovada,
-            liberacaoMedicaAprovadaEm: parsed.liberacaoMedicaAprovadaEm as string | undefined,
-            liberacaoMedicaObservacoes: parsed.liberacaoMedicaObservacoes as string | undefined,
-          },
-        };
-      }
-    }
-  } catch {
-    // fallback
-  }
-  return {
-    data: INITIAL_ANAMNESE_DATA,
-    updatedAt: undefined,
-    pontosAtencao: [],
-    liberacao: defaultLiberacao,
-  };
-}
-
 export function FichaAnamnesePage() {
   const authContext = useOptionalAuth();
   const currentUser = authContext?.currentUser ?? null;
 
-  const initialSaved = loadSavedAnamnese(currentUser?.uid);
-  const [formData, setFormData] = useState<FichaAnamneseData>(initialSaved.data);
+  const [formData, setFormData] = useState<FichaAnamneseData>(INITIAL_ANAMNESE_DATA);
   const [currentSection, setCurrentSection] = useState<AnamneseSectionId>('queixa');
   const [completedSections, setCompletedSections] = useState<Set<AnamneseSectionId>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [savedUpdatedAt, setSavedUpdatedAt] = useState<string | undefined>(initialSaved.updatedAt);
-  const [pontosAtencao, setPontosAtencao] = useState<string[]>(initialSaved.pontosAtencao);
-  const [liberacaoState, setLiberacaoState] = useState<LiberacaoState>(initialSaved.liberacao);
+  const [savedUpdatedAt, setSavedUpdatedAt] = useState<string | undefined>();
+  const [pontosAtencao, setPontosAtencao] = useState<string[]>([]);
+  const [liberacaoState, setLiberacaoState] = useState<LiberacaoState>({
+    exigeLiberacaoMedica: false,
+    contraindicacoes: [],
+    liberacaoMedicaAprovada: false,
+  });
   const [previousContraindicationKeys, setPreviousContraindicationKeys] = useState<string[]>(() =>
-    listarChavesContraindicacao(initialSaved.data),
+    listarChavesContraindicacao(INITIAL_ANAMNESE_DATA),
   );
 
   useEffect(() => {
@@ -172,17 +111,6 @@ export function FichaAnamnesePage() {
       setLiberacaoState(nextLiberacao);
       setPreviousContraindicationKeys(listarChavesContraindicacao(syncedData));
 
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(
-          `${STORAGE_KEY_PREFIX}${uid}`,
-          JSON.stringify({
-            data: syncedData,
-            updatedAt: ficha.updatedAt,
-            pontosAtencao: pontos,
-            ...nextLiberacao,
-          }),
-        );
-      }
     });
 
     return () => {
@@ -254,6 +182,11 @@ export function FichaAnamnesePage() {
       return;
     }
 
+    if (!currentUser?.uid) {
+      setErrors({ form: 'Entre na sua conta para salvar a ficha de anamnese.' });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -285,52 +218,28 @@ export function FichaAnamnesePage() {
         liberacaoMedicaObservacoes: liberacaoState.liberacaoMedicaObservacoes,
       };
 
-      let finalUpdatedAt = new Date().toISOString();
       let finalPontos = pontos;
-
-      if (currentUser?.uid) {
-        try {
-          const apiRes = await salvarFichaAnamneseApi(formData, currentUser.uid);
-          if (apiRes.sucesso && apiRes.dados) {
-            const avaliacaoApi = avaliarBloqueioContraindicacao(apiRes.dados);
-            nextLiberacao = {
-              exigeLiberacaoMedica: avaliacaoApi.exigeLiberacaoMedica,
-              contraindicacoes: avaliacaoApi.contraindicacoes,
-              liberacaoMedicaAprovada: avaliacaoApi.liberacaoMedicaAprovada,
-              liberacaoMedicaAprovadaEm: apiRes.dados.liberacaoMedicaAprovadaEm,
-              liberacaoMedicaObservacoes: apiRes.dados.liberacaoMedicaObservacoes,
-            };
-            finalUpdatedAt = apiRes.dados.updatedAt || finalUpdatedAt;
-            if (Array.isArray(apiRes.dados.pontosAtencao)) {
-              finalPontos = apiRes.dados.pontosAtencao;
-              setPontosAtencao(finalPontos);
-            }
-          }
-        } catch {
-          // Mantém persistência local caso ocorra falha de rede ou backend indisponível
-        }
+      const apiRes = await salvarFichaAnamneseApi(formData, currentUser.uid);
+      if (!apiRes.sucesso || !apiRes.dados) {
+        throw new Error(apiRes.erro || 'O Firebase não confirmou o salvamento da ficha.');
+      }
+      const avaliacaoApi = avaliarBloqueioContraindicacao(apiRes.dados);
+      nextLiberacao = {
+        exigeLiberacaoMedica: avaliacaoApi.exigeLiberacaoMedica,
+        contraindicacoes: avaliacaoApi.contraindicacoes,
+        liberacaoMedicaAprovada: avaliacaoApi.liberacaoMedicaAprovada,
+        liberacaoMedicaAprovadaEm: apiRes.dados.liberacaoMedicaAprovadaEm,
+        liberacaoMedicaObservacoes: apiRes.dados.liberacaoMedicaObservacoes,
+      };
+      const finalUpdatedAt = apiRes.dados.updatedAt;
+      if (Array.isArray(apiRes.dados.pontosAtencao)) {
+        finalPontos = apiRes.dados.pontosAtencao;
+        setPontosAtencao(finalPontos);
       }
 
       setSavedUpdatedAt(finalUpdatedAt);
       setLiberacaoState(nextLiberacao);
       setPreviousContraindicationKeys(chavesAtuais);
-
-      // Salva localmente
-      const storageKey = currentUser
-        ? `${STORAGE_KEY_PREFIX}${currentUser.uid}`
-        : `${STORAGE_KEY_PREFIX}guest`;
-
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          data: formData,
-          updatedAt: finalUpdatedAt,
-          pontosAtencao: finalPontos,
-          ...nextLiberacao,
-        }),
-      );
-
-      markClientNotificationAsRead(currentUser?.uid, ANAMNESE_NOTIFICATION_ID);
 
       // Marca seções como concluídas
       setCompletedSections(new Set(['queixa', 'saude', 'habitos', 'consentimento']));

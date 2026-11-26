@@ -19,11 +19,6 @@ import { environment } from '@/config/env';
 import { auth, db } from '@/lib/firebase';
 import type { Agendamento as UiAgendamento } from '@/features/agendamentos/types/agendamento';
 import {
-  getAgendamentosStorage,
-  saveAgendamentosStorage,
-  addAgendamentoStorage,
-} from '@/features/agendamentos/data/agendamentos-storage';
-import {
   mapFirestoreDocToService,
   resolveLocalServiceImage,
   type FirestoreServiceData,
@@ -33,8 +28,11 @@ import {
  * Obtém a URL base das Cloud Functions para o ambiente atual.
  */
 export function getFunctionsBaseUrl(): string {
-  const projectId = environment.firebase?.projectId || 'demo-clinica-local';
-  if (environment.useFirebaseEmulators || !environment.firebase) {
+  const projectId = environment.firebase?.projectId;
+  if (!projectId) {
+    throw new Error('Firebase não está configurado.');
+  }
+  if (environment.useFirebaseEmulators) {
     return `http://127.0.0.1:5001/${projectId}/us-central1`;
   }
   return `https://us-central1-${projectId}.cloudfunctions.net`;
@@ -436,32 +434,24 @@ export async function criarAgendamentoFirestore(
 }
 
 /**
- * Sincroniza e busca agendamentos para a UI:
- * Se logado com Firebase, busca os agendamentos no Firestore e atualiza o storage local.
- * Caso contrário, consulta o storage local (modo offline / convidado / fallback).
+ * Busca agendamentos persistidos no backend para a UI.
  */
 export async function carregarAgendamentos(
   userId?: string | null,
 ): Promise<{ agendamentos: UiAgendamento[]; sincronizadoComBackend: boolean; erro?: string }> {
-  if (userId && auth?.currentUser?.uid === userId) {
-    const resultado = await listarAgendamentosBackend();
-    if (resultado.sucesso && Array.isArray(resultado.dados)) {
-      const mapeados = resultado.dados.map(mapBackendAgendamentoToUi);
-
-      saveAgendamentosStorage(mapeados, userId);
-      return { agendamentos: mapeados, sincronizadoComBackend: true };
-    }
+  if (!userId || auth?.currentUser?.uid !== userId) {
+    return { agendamentos: [], sincronizadoComBackend: false, erro: 'Entre na sua conta para consultar os agendamentos.' };
   }
-
-  // Fallback: storage local
-  const locais = getAgendamentosStorage(userId);
-  return { agendamentos: locais, sincronizadoComBackend: false };
+  const resultado = await listarAgendamentosBackend();
+  if (!resultado.sucesso) {
+    return { agendamentos: [], sincronizadoComBackend: false, erro: resultado.erro };
+  }
+  return { agendamentos: resultado.dados.map(mapBackendAgendamentoToUi), sincronizadoComBackend: true };
 }
 
 /**
  * Criação de agendamento pela UI:
- * Se autenticado, realiza a chamada para a Cloud Function com gravação no Firestore.
- * Também mantém o cache local atualizado e funciona em fallback caso offline.
+ * Realiza a solicitação autenticada no backend e retorna apenas o resultado persistido.
  */
 export async function criarAgendamento(
   input: SolicitarAgendamentoInput,
@@ -469,49 +459,12 @@ export async function criarAgendamento(
 ): Promise<{ sucesso: boolean; agendamento?: UiAgendamento; erro?: string }> {
   const token = await getAuthToken();
 
-  if (userId && token) {
-    const resposta = await solicitarAgendamentoBackend(input, token);
-    if (resposta.sucesso && resposta.dados) {
-      const uiAgendamento = mapBackendAgendamentoToUi(resposta.dados);
-      addAgendamentoStorage(uiAgendamento, userId);
-      return { sucesso: true, agendamento: uiAgendamento };
-    }
-
-    // Se houve erro de regra de negócio vindo do backend, retorne o erro
-    if (resposta.erro) {
-      return { sucesso: false, erro: resposta.erro };
-    }
+  if (!userId || !token) {
+    return { sucesso: false, erro: 'Entre na sua conta para salvar o agendamento.' };
   }
-
-  // Fallback local caso sem Firebase autenticado
-  const dataInicio = new Date(input.dataHoraInicio);
-  const dataFim = new Date(dataInicio.getTime() + input.duracaoMinutos * 60 * 1000);
-  const diaSemana = dataInicio.toLocaleDateString('pt-BR', { weekday: 'short' });
-  const dia = dataInicio.getDate().toString().padStart(2, '0');
-  const mes = dataInicio.toLocaleDateString('pt-BR', { month: 'short' });
-  const horaInicio = dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const horaFim = dataFim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-  const valorTotal = input.valorTotalEmCentavos / 100;
-  const sinalPago = Math.round(valorTotal * 0.3 * 100) / 100;
-
-  const fallbackAgendamento: UiAgendamento = {
-    id: `ag-${Date.now()}`,
-    clienteId: userId ?? undefined,
-    servicoNome: input.servicoNome,
-    servicoCategoria: 'Massoterapia',
-    duracaoMinutos: input.duracaoMinutos,
-    profissionalNome: input.profissionalNome || 'Tais Romagnoli',
-    dataHoraIso: input.dataHoraInicio,
-    dataFormatada: `${diaSemana}, ${dia} ${mes}`,
-    horarioFormatado: `${horaInicio} - ${horaFim}`,
-    valorTotal,
-    sinalPago,
-    status: 'pendente',
-    imagemUrl: resolveLocalServiceImage(input.servicoId, input.servicoNome),
-    observacao: input.observacoes,
-  };
-
-  addAgendamentoStorage(fallbackAgendamento, userId);
-  return { sucesso: true, agendamento: fallbackAgendamento };
+  const resposta = await solicitarAgendamentoBackend(input, token);
+  if (!resposta.sucesso || !resposta.dados) {
+    return { sucesso: false, erro: resposta.erro || 'O backend não confirmou a gravação do agendamento.' };
+  }
+  return { sucesso: true, agendamento: mapBackendAgendamentoToUi(resposta.dados) };
 }

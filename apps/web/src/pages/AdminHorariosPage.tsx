@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CONFIGURACAO_HORARIOS_PADRAO,
   NOMES_DIAS_SEMANA,
   salvarHorariosInputSchema,
   type DiaFuncionamento,
@@ -13,8 +12,19 @@ import {
 } from '@/services/horarios-service';
 import { auth } from '@/lib/firebase';
 
+const configuracaoVazia: HorariosFuncionamento = {
+  intervaloPadraoMinutos: 30,
+  dias: Array.from({ length: 7 }, (_, dia) => ({
+    dia,
+    ativo: false,
+    turnos: [],
+    intervaloMinutos: 30,
+    intervalosManutencao: [],
+  })),
+};
+
 export function AdminHorariosPage() {
-  const [config, setConfig] = useState<HorariosFuncionamento>(CONFIGURACAO_HORARIOS_PADRAO);
+  const [config, setConfig] = useState<HorariosFuncionamento>(configuracaoVazia);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [diasExpandidos, setDiasExpandidos] = useState<Set<number>>(() => new Set([1]));
@@ -34,6 +44,9 @@ export function AdminHorariosPage() {
         }
       } catch (err) {
         console.error('Falha ao carregar horários:', err);
+        if (isMounted) {
+          setErrorMessage(err instanceof Error ? err.message : 'Não foi possível carregar os horários.');
+        }
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -229,7 +242,7 @@ export function AdminHorariosPage() {
         'Deseja realmente restaurar os horários para a configuração padrão da clínica?',
       )
     ) {
-      setConfig(CONFIGURACAO_HORARIOS_PADRAO);
+      setConfig(configuracaoVazia);
       setSuccessMessage(
         'Configuração padrão restaurada. Clique em "Salvar alterações" para confirmar no sistema.',
       );

@@ -1,7 +1,6 @@
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { avaliarBloqueioContraindicacao, type FichaAnamneseRecord } from '@clinica/shared';
 import { db } from '@/lib/firebase';
-import { demoAdministrativeClientProfile } from '@/features/admin-client-profile/demo-profile';
 import type {
   AdministrativeClientProfile,
   AppointmentStatus,
@@ -11,45 +10,6 @@ import type { AdminClientListItem } from '@/features/admin-dashboard/types';
 import type { Firestore } from 'firebase/firestore';
 import { obterFichaAnamneseApi } from './anamnese-service';
 import { listarAgendamentosBackend } from './agendamentos-service';
-
-export const CLIENTES_DEMO_INICIAIS: AdminClientListItem[] = [
-  {
-    id: 'demo-client-1',
-    nome: 'Mariana Silva',
-    email: 'mariana.silva@exemplo.com',
-    telefone: '(11) 98765-4321',
-    status: 'ativo',
-    totalAtendimentosMes: 3,
-    ultimoAtendimento: '26/09/2026',
-  },
-  {
-    id: 'demo-client-2',
-    nome: 'Ana Carolina Santos',
-    email: 'ana.santos@exemplo.com',
-    telefone: '(11) 97654-3210',
-    status: 'ativo',
-    totalAtendimentosMes: 2,
-    ultimoAtendimento: '25/09/2026',
-  },
-  {
-    id: 'demo-client-3',
-    nome: 'Juliana Lima',
-    email: 'juliana.lima@exemplo.com',
-    telefone: '(11) 96543-2109',
-    status: 'ativo',
-    totalAtendimentosMes: 1,
-    ultimoAtendimento: '20/09/2026',
-  },
-  {
-    id: 'demo-client-4',
-    nome: 'Carlos Eduardo',
-    email: 'carlos.eduardo@exemplo.com',
-    telefone: '(11) 95432-1098',
-    status: 'inativo',
-    totalAtendimentosMes: 0,
-    ultimoAtendimento: '22/09/2026',
-  },
-];
 
 /** Converte um documento da coleção /clientes para o formato da listagem administrativa. */
 export function mapFirestoreClientToAdminListItem(
@@ -123,59 +83,26 @@ export function mapFichaAnamneseToAdminView(ficha: Partial<FichaAnamneseRecord>)
 export async function buscarPerfilClienteAdmin(
   clientId: string,
 ): Promise<AdministrativeClientProfile> {
-  const demoListMatch = CLIENTES_DEMO_INICIAIS.find((c) => c.id === clientId);
-  let fullName = demoListMatch?.nome || demoAdministrativeClientProfile.fullName;
-  let email = demoListMatch?.email || demoAdministrativeClientProfile.email;
-  let phone = demoListMatch?.telefone || demoAdministrativeClientProfile.phone;
-  let status: 'ativo' | 'inativo' =
-    demoListMatch?.status === 'inativo' ? 'inativo' : demoAdministrativeClientProfile.status;
-  let registeredAt = demoListMatch?.createdAt || demoAdministrativeClientProfile.registeredAt;
-  let birthDate = demoAdministrativeClientProfile.birthDate;
-
-  let anamnesis: ClientAnamnesis | null =
-    clientId === demoAdministrativeClientProfile.id || demoListMatch
-      ? demoAdministrativeClientProfile.anamnesis
-      : null;
-
-  if (db) {
-    try {
-      const clientSnap = await getDoc(doc(db, 'clientes', clientId));
-      if (clientSnap.exists()) {
-        const data = clientSnap.data();
-        fullName = data.nome || fullName;
-        email = data.email || email;
-        phone = data.telefone || phone;
-        status = data.status === 'inativo' ? 'inativo' : 'ativo';
-        registeredAt = data.createdAt || registeredAt;
-        birthDate = data.dataNascimento || birthDate;
-      }
-    } catch {
-      // fallback silencioso caso cliente seja demonstrativo ou sem doc
-    }
+  if (!db) throw new Error('Firebase não está configurado para carregar o perfil do cliente.');
+  const clientSnap = await getDoc(doc(db, 'clientes', clientId));
+  if (!clientSnap.exists()) throw new Error('Cliente não encontrado.');
+  const data = clientSnap.data();
+  const fullName = typeof data.nome === 'string' ? data.nome : 'Cliente sem nome';
+  const email = typeof data.email === 'string' ? data.email : '';
+  const phone = typeof data.telefone === 'string' ? data.telefone : '';
+  const status: 'ativo' | 'inativo' = data.status === 'inativo' ? 'inativo' : 'ativo';
+  const registeredAt = data.createdAt;
+  const birthDate = data.dataNascimento;
+  let anamnesis: ClientAnamnesis | null = null;
   }
 
   const anamneseRes = await obterFichaAnamneseApi(clientId);
   if (anamneseRes.sucesso && anamneseRes.dados) {
     anamnesis = mapFichaAnamneseToAdminView(anamneseRes.dados);
-  } else if (db && (!anamneseRes.sucesso || !anamneseRes.dados)) {
-    try {
-      const fichaSnap = await getDoc(doc(db, 'anamneses', clientId));
-      if (fichaSnap.exists()) {
-        anamnesis = mapFichaAnamneseToAdminView(fichaSnap.data() as Partial<FichaAnamneseRecord>);
-      }
-    } catch {
-      // mantém anamnesis obtida anteriormente ou null
-    }
   }
 
-  let appointments =
-    clientId === demoAdministrativeClientProfile.id || demoListMatch
-      ? demoAdministrativeClientProfile.appointments
-      : [];
-  let payments =
-    clientId === demoAdministrativeClientProfile.id || demoListMatch
-      ? demoAdministrativeClientProfile.payments
-      : [];
+  let appointments: AdministrativeClientProfile['appointments'] = [];
+  let payments: AdministrativeClientProfile['payments'] = [];
 
   const agendamentosRes = await listarAgendamentosBackend(undefined, clientId);
   if (agendamentosRes.sucesso && agendamentosRes.dados.length > 0) {

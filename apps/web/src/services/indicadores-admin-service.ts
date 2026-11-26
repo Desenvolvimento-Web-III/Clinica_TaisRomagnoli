@@ -2,150 +2,6 @@ import type { PainelIndicadores } from '@clinica/shared';
 import { painelIndicadoresSchema } from '@clinica/shared';
 import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
 
-export const PAINEL_INDICADORES_PADRAO: PainelIndicadores = {
-  dataReferencia: new Date().toISOString().slice(0, 10),
-  mesReferencia: new Date().toISOString().slice(0, 7),
-  geradoEmIso: new Date().toISOString(),
-  indicadores: {
-    agendamentosDoDia: {
-      total: 6,
-      concluidos: 4,
-      pendentes: 2,
-      emAndamento: 0,
-      cancelados: 0,
-      detalhe: '4 concluídos, 2 pendentes',
-    },
-    clientesCadastrados: {
-      total: 148,
-      novosNoMes: 12,
-      detalhe: '+12 novos neste mês',
-    },
-    clientesRecorrentes: {
-      total: 32,
-      criterioMinimoAtendimentosMes: 2,
-      percentualSobreTotal: 21.6,
-      detalhe: '≥ 2 atendimentos no mesmo mês',
-    },
-    atendimentosRealizadosMes: {
-      total: 74,
-      totalMinutos: 4440,
-      detalhe: 'Sessões concluídas',
-    },
-    cancelamentosEFaltas: {
-      totalCancelamentos: 4,
-      cancelamentosNoPrazo: 3,
-      cancelamentosTardios: 1,
-      faltas: 1,
-      taxaCancelamentoPercentual: 5.4,
-      detalhe: '3 com aviso ≥ 3h, 1 falta',
-    },
-    ocupacaoAgenda: {
-      taxaOcupacaoPercentual: 82,
-      slotsOcupados: 74,
-      slotsDisponiveis: 90,
-      metaOcupacaoPercentual: 80,
-      metaSuperada: true,
-      detalhe: 'Meta mensal de 80% superada',
-    },
-    valoresRecebidosEPrevistos: {
-      valorTotalRecebidoCentavos: 894000,
-      valorTotalPrevistoCentavos: 383000,
-      valorTotalRecebidoReais: 8940,
-      valorTotalPrevistoReais: 3830,
-      valorSinaisRetidosCentavos: 3900,
-      detalhe: 'R$ 3.830 previstos (sinal 30% retido)',
-    },
-    servicoMaisAgendado: {
-      servicoId: 'servico-massagem-relaxante',
-      nome: 'Massagem Relaxante',
-      totalAgendamentos: 38,
-      detalhe: '38 atendimentos realizados',
-      rankingTopServicos: [
-        {
-          servicoId: 'servico-massagem-relaxante',
-          nome: 'Massagem Relaxante',
-          totalAgendamentos: 38,
-          totalAtendimentosConcluidos: 35,
-          receitaCentavos: 532000,
-        },
-      ],
-    },
-  },
-  categorias: {
-    operacionais: {
-      agendamentosDoDia: {
-        total: 6,
-        concluidos: 4,
-        pendentes: 2,
-        emAndamento: 0,
-        cancelados: 0,
-        detalhe: '4 concluídos, 2 pendentes',
-      },
-      cancelamentosEFaltas: {
-        totalCancelamentos: 4,
-        cancelamentosNoPrazo: 3,
-        cancelamentosTardios: 1,
-        faltas: 1,
-        taxaCancelamentoPercentual: 5.4,
-        detalhe: '3 com aviso ≥ 3h, 1 falta',
-      },
-      ocupacaoAgenda: {
-        taxaOcupacaoPercentual: 82,
-        slotsOcupados: 74,
-        slotsDisponiveis: 90,
-        metaOcupacaoPercentual: 80,
-        metaSuperada: true,
-        detalhe: 'Meta mensal de 80% superada',
-      },
-    },
-    clientes: {
-      clientesCadastrados: {
-        total: 148,
-        novosNoMes: 12,
-        detalhe: '+12 novos neste mês',
-      },
-      clientesRecorrentes: {
-        total: 32,
-        criterioMinimoAtendimentosMes: 2,
-        percentualSobreTotal: 21.6,
-        detalhe: '≥ 2 atendimentos no mesmo mês',
-      },
-    },
-    financeiras: {
-      valoresRecebidosEPrevistos: {
-        valorTotalRecebidoCentavos: 894000,
-        valorTotalPrevistoCentavos: 383000,
-        valorTotalRecebidoReais: 8940,
-        valorTotalPrevistoReais: 3830,
-        valorSinaisRetidosCentavos: 3900,
-        detalhe: 'R$ 3.830 previstos (sinal 30% retido)',
-      },
-    },
-    servicos: {
-      atendimentosRealizadosMes: {
-        total: 74,
-        totalMinutos: 4440,
-        detalhe: 'Sessões concluídas',
-      },
-      servicoMaisAgendado: {
-        servicoId: 'servico-massagem-relaxante',
-        nome: 'Massagem Relaxante',
-        totalAgendamentos: 38,
-        detalhe: '38 atendimentos realizados',
-        rankingTopServicos: [
-          {
-            servicoId: 'servico-massagem-relaxante',
-            nome: 'Massagem Relaxante',
-            totalAgendamentos: 38,
-            totalAtendimentosConcluidos: 35,
-            receitaCentavos: 532000,
-          },
-        ],
-      },
-    },
-  },
-};
-
 export interface ConsultarIndicadoresOptions {
   dataReferencia?: string;
   mesReferencia?: string;
@@ -154,15 +10,15 @@ export interface ConsultarIndicadoresOptions {
 
 /**
  * Consulta os 8 indicadores consolidados da clínica no backend (Cloud Function),
- * com validação de token administrativo e fallback seguro caso a API não esteja disponível.
+ * com validação de token administrativo. Sem dados reais, retorna null.
  */
 export async function consultarPainelIndicadoresAdmin(
   options: ConsultarIndicadoresOptions = {},
-): Promise<PainelIndicadores> {
+): Promise<PainelIndicadores | null> {
   try {
     const authToken = options.token ?? (await getAuthToken());
     if (!authToken) {
-      return PAINEL_INDICADORES_PADRAO;
+      return null;
     }
 
     const queryParams = new URLSearchParams();
@@ -189,8 +45,8 @@ export async function consultarPainelIndicadoresAdmin(
       }
     }
   } catch (err) {
-    console.warn('Aviso: Falha ao consultar indicadores do painel no backend, usando padrão:', err);
+    console.warn('Falha ao consultar indicadores do painel no backend:', err);
   }
 
-  return PAINEL_INDICADORES_PADRAO;
+  return null;
 }

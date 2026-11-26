@@ -10,7 +10,6 @@ import {
   verificarConflitoBloqueioOuHorarioFixo,
   verificarAntecedenciaCancelamento,
   validarEncaixeHorariosFuncionamento,
-  CONFIGURACAO_HORARIOS_PADRAO,
   verificarProfissionalHabilitadoParaServico,
   avaliarBloqueioContraindicacao,
   verificarDataHoraNoPassado,
@@ -200,15 +199,7 @@ export async function solicitarNovoAgendamento(
       );
     }
   } else {
-    const inicioDate = new Date(parsed.dataHoraInicio);
-    const diaSemana = inicioDate.getDay();
-    const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
-    if (diaConfig && !diaConfig.ativo) {
-      throw new AgendamentoBusinessError(
-        'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
-        422,
-      );
-    }
+    throw new AgendamentoBusinessError('A configuração de horários da clínica não está disponível.', 409);
   }
 
   // 2. Cálculo da data/hora de término garantindo a duração exata do serviço
@@ -409,15 +400,7 @@ export async function alterarAgendamentoExistente(
       );
     }
   } else {
-    const inicioDate = new Date(parsed.novaDataHoraInicio);
-    const diaSemana = inicioDate.getDay();
-    const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
-    if (diaConfig && !diaConfig.ativo) {
-      throw new AgendamentoBusinessError(
-        'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
-        422,
-      );
-    }
+    throw new AgendamentoBusinessError('A configuração de horários da clínica não está disponível.', 409);
   }
 
   // 2. Novo cálculo de término

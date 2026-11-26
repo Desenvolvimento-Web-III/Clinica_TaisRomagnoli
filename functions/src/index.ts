@@ -1437,7 +1437,7 @@ export const inicializarContaAdministradora = onRequest(
 
       const auth = getAuth();
       const firestore = getFirestore();
-      const resultado = await definirAdministradoraInicial(auth, firestore);
+      const resultado = await definirAdministradoraInicial(auth, firestore, caller.email || '');
 
       response.status(200).json({
         sucesso: true,
@@ -2567,6 +2567,7 @@ export const obterPainelIndicadoresAdmin = onRequest({ cors: true }, async (requ
         dataReferencia,
         mesReferencia,
         criterioMinimoRecorrencia,
+        configuracaoHorarios: await obterHorarios(firestore),
       },
     );
 

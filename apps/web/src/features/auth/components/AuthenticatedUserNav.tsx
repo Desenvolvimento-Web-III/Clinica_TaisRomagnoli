@@ -316,7 +316,7 @@ export function AuthenticatedUserNav() {
                   <span>Horários da Clínica</span>
                 </Link>
                 <Link
-                  to="/admin/clientes/demo-client-1"
+                  to="/admin/clientes"
                   role="menuitem"
                   onClick={() => setIsOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)] hover:text-[var(--color-brand-deep)]"

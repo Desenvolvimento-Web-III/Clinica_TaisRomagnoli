@@ -119,16 +119,5 @@ export async function iniciarSessaoUnicaNoBackend(
   } catch (error) {
     console.warn('Aviso: Falha ao contatar endpoint de sessão única:', error);
   }
-
-  // Fallback seguro em ambientes offline ou testes
-  const fallbackSessionId =
-    sessionIdDesejado || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  setLocalActiveSessionId(fallbackSessionId);
-  return {
-    uid: '',
-    sessionId: fallbackSessionId,
-    revogadoEm: new Date().toISOString(),
-    mensagem: 'Sessão iniciada localmente.',
-    politicaSessaoUnica: true,
-  };
+  return null;
 }

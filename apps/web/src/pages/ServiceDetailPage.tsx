@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
-import { serviceCatalog } from '@/features/services/catalog';
 import {
   formatServiceDuration,
   formatServicePrice,
@@ -43,7 +42,7 @@ export function ServiceDetailPage() {
     return () => unsubscribe();
   }, []);
 
-  const allServices = firestoreServices ?? serviceCatalog;
+  const allServices = firestoreServices ?? [];
   const service = useMemo(() => {
     return allServices.find((s) => s.id === serviceId);
   }, [allServices, serviceId]);

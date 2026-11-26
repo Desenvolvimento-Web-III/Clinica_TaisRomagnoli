@@ -11,7 +11,6 @@ import type {
   ServicoRankingItem,
   HorariosFuncionamento,
 } from '@clinica/shared';
-import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 import type { AgendamentosRepository } from '../agendamentos/agendamentos-repository.js';
 import type { ClientesRepository } from '../clientes/clientes-repository.js';
 import type { ServicosRepository } from '../servicos/servicos-repository.js';
@@ -29,12 +28,15 @@ export interface ParametrosCalculoIndicadores {
  */
 export function calcularCapacidadeSlotsMes(
   mesYm: string,
-  config: HorariosFuncionamento = CONFIGURACAO_HORARIOS_PADRAO,
+  config: HorariosFuncionamento,
   duracaoSlotMinutos = 90, // Média padrão: 60min sessão + 30min intervalo de organização
 ): number {
-  const [anoStr, mesStr] = mesYm.split('-');
-  const ano = parseInt(anoStr ?? '2026', 10);
-  const mes = parseInt(mesStr ?? '11', 10);
+  const correspondencia = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(mesYm);
+  if (!correspondencia) {
+    throw new Error('Mês de referência inválido. Use o formato YYYY-MM.');
+  }
+  const ano = Number(correspondencia[1]);
+  const mes = Number(correspondencia[2]);
 
   // Total de dias no mês
   const ultimoDia = new Date(ano, mes, 0).getDate();
@@ -84,8 +86,7 @@ export function calcularCapacidadeSlotsMes(
     }
   }
 
-  // Se por alguma razão o cálculo resultar em 0, adota um piso razoável (ex: 20 dias * 5 slots = 100)
-  return totalSlotsMes > 0 ? totalSlotsMes : 100;
+  return totalSlotsMes;
 }
 
 /**
@@ -113,7 +114,10 @@ export async function calcularOitoIndicadoresPainel(
   const dataReferencia = params.dataReferencia ?? agoraIso.slice(0, 10);
   const mesReferencia = params.mesReferencia ?? dataReferencia.slice(0, 7);
   const criterioMinimoRecorrencia = params.criterioMinimoRecorrencia ?? 2;
-  const configHorarios = params.configuracaoHorarios ?? CONFIGURACAO_HORARIOS_PADRAO;
+  const configHorarios = params.configuracaoHorarios;
+  if (!configHorarios) {
+    throw new Error('A configuração de horários da clínica não está disponível.');
+  }
 
   // Carrega agendamentos, clientes e serviços
   const [todosAgendamentos, todosClientes, todosServicos] = await Promise.all([
@@ -206,7 +210,7 @@ export async function calcularOitoIndicadoresPainel(
   // --- 4. ATENDIMENTOS REALIZADOS NO MÊS ---
   const totalConcluidosMes = concluidosMes.length;
   const totalMinutosConcluidos = concluidosMes.reduce(
-    (acc, a) => acc + (a.duracaoMinutos || 60),
+    (acc, a) => acc + (a.duracaoMinutos ?? 0),
     0,
   );
 

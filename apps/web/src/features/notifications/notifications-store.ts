@@ -3,116 +3,31 @@ import type { ClientNotification, ClientNotificationType } from '@clinica/shared
 import {
   buscarNotificacoesRemotas,
   marcarNotificacaoLidaBackend,
-  mesclarNotificacoes,
   ouvirNotificacoesClienteEmTempoReal,
 } from '@/services/notificacoes-service';
 
-const STORAGE_PREFIX = 'clinica:notificacoes:v2:';
-
 export const WELCOME_NOTIFICATION_ID = 'notif-boas-vindas';
 export const ANAMNESE_NOTIFICATION_ID = 'notif-ficha-anamnese';
+export const DEFAULT_NOTIFICATIONS: ReadonlyArray<ClientNotification> = [];
 
-function normalizeUserUid(userUid?: string | null): string | null {
-  const trimmed = userUid?.trim();
-  return trimmed ? trimmed : null;
+export function createInitialProfileNotifications(_displayName?: string | null): ClientNotification[] {
+  return [];
 }
-
-export function createInitialProfileNotifications(
-  displayName?: string | null,
-): ClientNotification[] {
-  const now = Date.now();
-  const cleanName = displayName?.trim();
-  const saudacao = cleanName
-    ? `Olá, ${cleanName}! Seja muito bem-vindo(a) à Clínica Tais Romagnoli.`
-    : 'Seja muito bem-vindo(a) à Clínica Tais Romagnoli!';
-
-  return [
-    {
-      id: ANAMNESE_NOTIFICATION_ID,
-      tipo: 'lembrete',
-      titulo: 'Preencha sua Ficha de Anamnese',
-      mensagem:
-        'Antes do seu primeiro atendimento, preencha sua ficha de avaliação e histórico de saúde para que a terapeuta personalize sua sessão com total segurança.',
-      lida: false,
-      createdAt: new Date(now - 1000 * 60).toISOString(),
-      link: '/anamnese',
-    },
-    {
-      id: WELCOME_NOTIFICATION_ID,
-      tipo: 'sistema',
-      titulo: 'Bem-vindo(a) à Clínica!',
-      mensagem: `${saudacao} Conheça todas as terapias corporais disponíveis e aproveite seu momento de bem-estar.`,
-      lida: false,
-      createdAt: new Date(now - 1000 * 60 * 2).toISOString(),
-      link: '/servicos',
-    },
-  ];
+export function getNotificationsStorageKey(_userUid?: string | null): string | null {
+  return null;
 }
-
-export const DEFAULT_NOTIFICATIONS: ReadonlyArray<ClientNotification> =
-  createInitialProfileNotifications();
-
-export function getNotificationsStorageKey(userUid?: string | null): string | null {
-  const normalized = normalizeUserUid(userUid);
-  if (!normalized) {
-    return null;
-  }
-  return `${STORAGE_PREFIX}${normalized}`;
-}
-
 export function saveClientNotifications(
-  userUid: string | null | undefined,
-  notifications: ClientNotification[],
-): void {
-  const storageKey = getNotificationsStorageKey(userUid);
-  if (!storageKey || typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(notifications));
-    window.dispatchEvent(new CustomEvent('clinica:notifications-updated'));
-  } catch {
-    // Falha silenciosa no armazenamento local
-  }
-}
-
+  _userUid: string | null | undefined,
+  _notifications: ClientNotification[],
+): void {}
 export function initializeProfileNotifications(
-  userUid?: string | null,
-  displayName?: string | null,
+  _userUid?: string | null,
+  _displayName?: string | null,
 ): ClientNotification[] {
-  const normalized = normalizeUserUid(userUid);
-  if (!normalized) {
-    return [];
-  }
-  const initial = createInitialProfileNotifications(displayName);
-  saveClientNotifications(normalized, initial);
-  return initial;
+  return [];
 }
-
-export function loadClientNotifications(userUid?: string | null): ClientNotification[] {
-  const normalized = normalizeUserUid(userUid);
-  const storageKey = getNotificationsStorageKey(normalized);
-
-  if (!normalized || !storageKey) {
-    return [];
-  }
-
-  if (typeof window === 'undefined') {
-    return createInitialProfileNotifications();
-  }
-
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (raw === null) {
-      const initial = createInitialProfileNotifications();
-      localStorage.setItem(storageKey, JSON.stringify(initial));
-      return initial;
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? (parsed as ClientNotification[])
-      : createInitialProfileNotifications();
-  } catch {
-    return createInitialProfileNotifications();
-  }
+export function loadClientNotifications(_userUid?: string | null): ClientNotification[] {
+  return [];
 }
 
 export interface CreateClientNotificationInput {
@@ -124,153 +39,70 @@ export interface CreateClientNotificationInput {
   lida?: boolean;
   createdAt?: string;
 }
-
 export function addClientNotification(
-  userUid: string | null | undefined,
-  input: CreateClientNotificationInput,
+  _userUid: string | null | undefined,
+  _input: CreateClientNotificationInput,
 ): ClientNotification | null {
-  const normalized = normalizeUserUid(userUid);
-  if (!normalized) {
-    return null;
-  }
-
-  const current = loadClientNotifications(normalized);
-  const created: ClientNotification = {
-    id: input.id ?? `notif-${Date.now()}`,
-    tipo: input.tipo,
-    titulo: input.titulo,
-    mensagem: input.mensagem,
-    lida: input.lida ?? false,
-    createdAt: input.createdAt ?? new Date().toISOString(),
-    link: input.link,
-  };
-
-  const updated = [created, ...current.filter((item) => item.id !== created.id)];
-  saveClientNotifications(normalized, updated);
-  return created;
+  return null;
 }
-
 export function markClientNotificationAsRead(
   userUid: string | null | undefined,
   notificationId: string,
 ): void {
-  const normalized = normalizeUserUid(userUid);
-  if (!normalized) return;
-
-  const current = loadClientNotifications(normalized);
-  const hasUnreadTarget = current.some((item) => item.id === notificationId && !item.lida);
-  if (!hasUnreadTarget) return;
-
-  const updated = current.map((item) =>
-    item.id === notificationId ? { ...item, lida: true } : item,
-  );
-  saveClientNotifications(normalized, updated);
-  void marcarNotificacaoLidaBackend(notificationId, normalized);
+  if (userUid) void marcarNotificacaoLidaBackend(notificationId, userUid);
 }
 
 export function useClientNotifications(userUid?: string | null) {
-  const [prevUid, setPrevUid] = useState(userUid);
-  const [notifications, setNotifications] = useState<ClientNotification[]>(() =>
-    loadClientNotifications(userUid),
-  );
+  const [notifications, setNotifications] = useState<ClientNotification[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  if (userUid !== prevUid) {
-    setPrevUid(userUid);
-    setNotifications(loadClientNotifications(userUid));
-  }
-
   const sync = useCallback(async () => {
-    if (!userUid) return;
+    if (!userUid) {
+      setNotifications([]);
+      return;
+    }
     setIsSyncing(true);
     try {
-      const remotas = await buscarNotificacoesRemotas(userUid);
-      if (remotas.length > 0) {
-        const locais = loadClientNotifications(userUid);
-        const mescladas = mesclarNotificacoes(locais, remotas);
-        saveClientNotifications(userUid, mescladas);
-        setNotifications(mescladas);
-      }
+      setNotifications(await buscarNotificacoesRemotas(userUid));
     } finally {
       setIsSyncing(false);
     }
   }, [userUid]);
 
   useEffect(() => {
-    const handleSync = () => {
-      setNotifications(loadClientNotifications(userUid));
-    };
-
-    window.addEventListener('clinica:notifications-updated', handleSync);
-    window.addEventListener('storage', handleSync);
-
-    return () => {
-      window.removeEventListener('clinica:notifications-updated', handleSync);
-      window.removeEventListener('storage', handleSync);
-    };
-  }, [userUid]);
-
-  useEffect(() => {
-    if (!userUid) return;
-
     let ativo = true;
+    setNotifications([]);
+    if (!userUid) return () => { ativo = false; };
 
-    void buscarNotificacoesRemotas(userUid).then((remotas) => {
-      if (!ativo || remotas.length === 0) return;
-      const locais = loadClientNotifications(userUid);
-      const mescladas = mesclarNotificacoes(locais, remotas);
-      saveClientNotifications(userUid, mescladas);
-      setNotifications(mescladas);
+    void buscarNotificacoesRemotas(userUid).then((items) => {
+      if (ativo) setNotifications(items);
     });
-
-    const unsubscribe = ouvirNotificacoesClienteEmTempoReal(userUid, (remotas) => {
-      if (!ativo || remotas.length === 0) return;
-      const locais = loadClientNotifications(userUid);
-      const mescladas = mesclarNotificacoes(locais, remotas);
-      saveClientNotifications(userUid, mescladas);
-      setNotifications(mescladas);
+    const unsubscribe = ouvirNotificacoesClienteEmTempoReal(userUid, (items) => {
+      if (ativo) setNotifications(items);
     });
-
     return () => {
       ativo = false;
-      if (unsubscribe) unsubscribe();
+      unsubscribe?.();
     };
   }, [userUid]);
 
-  const unreadCount = notifications.filter((item) => !item.lida).length;
-
   const markAsRead = (notificationId: string) => {
-    const updated = notifications.map((item) =>
-      item.id === notificationId ? { ...item, lida: true } : item,
-    );
-    setNotifications(updated);
-    saveClientNotifications(userUid, updated);
-    if (userUid) {
-      void marcarNotificacaoLidaBackend(notificationId, userUid);
-    }
+    if (userUid) void marcarNotificacaoLidaBackend(notificationId, userUid).then(() => sync());
   };
-
   const markAllAsRead = () => {
-    const unread = notifications.filter((item) => !item.lida);
-    const updated = notifications.map((item) => ({ ...item, lida: true }));
-    setNotifications(updated);
-    saveClientNotifications(userUid, updated);
     if (userUid) {
-      for (const item of unread) {
-        void marcarNotificacaoLidaBackend(item.id, userUid);
-      }
+      void Promise.all(
+        notifications.filter((item) => !item.lida).map((item) => marcarNotificacaoLidaBackend(item.id, userUid)),
+      ).then(() => sync());
     }
   };
-
   const clearNotification = (notificationId: string) => {
-    const updated = notifications.filter((item) => item.id !== notificationId);
-    setNotifications(updated);
-    saveClientNotifications(userUid, updated);
+    setNotifications((current) => current.filter((item) => item.id !== notificationId));
   };
 
   return {
     notifications,
-    unreadCount,
+    unreadCount: notifications.filter((item) => !item.lida).length,
     markAsRead,
     markAllAsRead,
     clearNotification,

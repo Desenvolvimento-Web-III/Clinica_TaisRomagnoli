@@ -3,10 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 import {
-  getAgendamentosStorage,
-  saveAgendamentosStorage,
-} from '@/features/agendamentos/data/agendamentos-storage';
-import {
   alterarAgendamentoBackend,
   carregarAgendamentos,
   mapBackendAgendamentoToUi,
@@ -15,9 +11,20 @@ import {
   buscarHorariosFuncionamento,
   consultarHorariosDisponiveis,
 } from '@/services/horarios-service';
-import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
+import type { HorariosFuncionamento } from '@clinica/shared';
 import { gerarDiasReagendamento } from '@/features/agendamentos/utils/reagendamento-utils';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
+
+const configuracaoHorariosVazia: HorariosFuncionamento = {
+  intervaloPadraoMinutos: 30,
+  dias: Array.from({ length: 7 }, (_, dia) => ({
+    dia,
+    ativo: false,
+    turnos: [],
+    intervaloMinutos: 30,
+    intervalosManutencao: [],
+  })),
+};
 
 export function ReagendamentoPage() {
   const auth = useOptionalAuth();
@@ -34,10 +41,9 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>(() =>
-    getAgendamentosStorage(userId),
-  );
-  const [configuracaoHorarios, setConfiguracaoHorarios] = useState(CONFIGURACAO_HORARIOS_PADRAO);
+  const [agendamentosLocais, setAgendamentosLocais] = useState<Agendamento[]>([]);
+  const [carregandoAgendamentos, setCarregandoAgendamentos] = useState(true);
+  const [configuracaoHorarios, setConfiguracaoHorarios] = useState(configuracaoHorariosVazia);
   const [gradeHorarios, setGradeHorarios] = useState<{
     data: string;
     horarios: string[];
@@ -59,10 +65,11 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
   useEffect(() => {
     let ativo = true;
+    setCarregandoAgendamentos(true);
     carregarAgendamentos(userId).then((resultado) => {
-      if (ativo && resultado.agendamentos.length > 0) {
-        setAgendamentosLocais(resultado.agendamentos);
-      }
+      if (ativo) setAgendamentosLocais(resultado.agendamentos);
+    }).finally(() => {
+      if (ativo) setCarregandoAgendamentos(false);
     });
     return () => {
       ativo = false;
@@ -71,9 +78,13 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
   useEffect(() => {
     let ativo = true;
-    buscarHorariosFuncionamento(agendamentoAtual?.profissionalId).then((config) => {
-      if (ativo) setConfiguracaoHorarios(config);
-    });
+    buscarHorariosFuncionamento(agendamentoAtual?.profissionalId)
+      .then((config) => {
+        if (ativo) setConfiguracaoHorarios(config);
+      })
+      .catch(() => {
+        if (ativo) setErroReagendamento('Não foi possível carregar os horários da clínica.');
+      });
     return () => {
       ativo = false;
     };
@@ -88,7 +99,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
       agendamentoAtual?.dataHoraIso,
       agora,
       6,
-      CONFIGURACAO_HORARIOS_PADRAO,
+      configuracaoHorarios,
     );
     return dias[0]?.isoDate || '';
   });
@@ -99,7 +110,7 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
     ? dataSelecionada
     : (opcoesDatasDisponiveis[0]?.isoDate ?? '');
 
-  const [horarioSelecionadoRaw, setHorarioSelecionado] = useState<string>('10:00');
+  const [horarioSelecionadoRaw, setHorarioSelecionado] = useState<string>('');
   const agendamentoId = agendamentoAtual?.id;
   const duracaoMinutos = agendamentoAtual?.duracaoMinutos;
   const servicoId = agendamentoAtual?.servicoId;
@@ -151,6 +162,10 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
   const [motivo, setMotivo] = useState<string>('');
   const [isSucesso, setIsSucesso] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  if (carregandoAgendamentos) {
+    return <AppShell activeTab="agendamentos" title="Carregando agendamento"><p role="status">Consultando seus dados no Firebase…</p></AppShell>;
+  }
 
   if (!agendamentoAtual) {
     return (
@@ -204,11 +219,9 @@ function ReagendamentoPageContent({ userId }: ReagendamentoPageContentProps) {
 
     const agendamentoAtualizado = mapBackendAgendamentoToUi(resposta.dados);
     setAgendamentosLocais((prev) => {
-      const atualizados = prev.map((item) =>
+      return prev.map((item) =>
         item.id === agendamentoAtualizado.id ? agendamentoAtualizado : item,
       );
-      saveAgendamentosStorage(atualizados, userId);
-      return atualizados;
     });
     setSubmitting(false);
     setIsSucesso(true);

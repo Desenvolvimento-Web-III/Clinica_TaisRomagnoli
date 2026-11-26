@@ -1,10 +1,5 @@
 import type { Firestore } from 'firebase-admin/firestore';
-import {
-  DEFAULT_INITIAL_PROFESSIONAL,
-  ID_PROFISSIONAL_PADRAO,
-  type Professional,
-  type DayOfWeek,
-} from '@clinica/shared';
+import { type Professional, type DayOfWeek } from '@clinica/shared';
 
 export const PROFISSIONAIS_COLLECTION = 'profissionais';
 
@@ -29,9 +24,9 @@ function mapFirestoreDocToProfessional(id: string, data: Record<string, unknown>
       : data['active'] !== undefined
         ? Boolean(data['active'])
         : true;
-  const diasFolga = (Array.isArray(data['diasFolga']) ? data['diasFolga'] : [0, 2]) as DayOfWeek[];
-  const intervaloMinutos = Number(data['intervaloMinutos'] ?? 30);
-  const createdAt = (data['createdAt'] as string) || new Date().toISOString();
+  const diasFolga = (Array.isArray(data['diasFolga']) ? data['diasFolga'] : []) as DayOfWeek[];
+  const intervaloMinutos = Number(data['intervaloMinutos'] ?? 0);
+  const createdAt = (data['createdAt'] as string) || '';
   const updatedAt = (data['updatedAt'] as string) || undefined;
 
   return {
@@ -47,17 +42,10 @@ function mapFirestoreDocToProfessional(id: string, data: Record<string, unknown>
 }
 
 /**
- * Repositório em memória para desacoplamento e testes unitários.
- * Inicializa automaticamente com a profissional inicial da clínica (Tais Romagnoli).
+ * Repositório em memória vazio para desacoplamento e testes unitários.
  */
 export class InMemoryProfissionaisRepository implements ProfissionaisRepository {
   private profissionais: Map<string, Professional> = new Map();
-
-  constructor(inicializarPadrao = true) {
-    if (inicializarPadrao) {
-      this.redefinirPadrao();
-    }
-  }
 
   async salvar(profissional: Professional): Promise<Professional> {
     this.profissionais.set(profissional.id, { ...profissional });
@@ -66,21 +54,12 @@ export class InMemoryProfissionaisRepository implements ProfissionaisRepository 
 
   async buscarPorId(id: string): Promise<Professional | null> {
     const item = this.profissionais.get(id);
-    if (!item) {
-      // Se for o ID da profissional padrão inicial e não estiver na lista, recria
-      if (id === ID_PROFISSIONAL_PADRAO) {
-        return { ...DEFAULT_INITIAL_PROFESSIONAL };
-      }
-      return null;
-    }
+    if (!item) return null;
     return { ...item };
   }
 
   async listar(apenasAtivos: boolean = false): Promise<Professional[]> {
     let lista = Array.from(this.profissionais.values());
-    if (lista.length === 0) {
-      lista = [{ ...DEFAULT_INITIAL_PROFESSIONAL }];
-    }
     if (apenasAtivos) {
       lista = lista.filter((p) => p.ativo);
     }
@@ -103,11 +82,6 @@ export class InMemoryProfissionaisRepository implements ProfissionaisRepository 
 
   limpar(): void {
     this.profissionais.clear();
-  }
-
-  redefinirPadrao(): void {
-    this.profissionais.clear();
-    this.profissionais.set(DEFAULT_INITIAL_PROFESSIONAL.id, { ...DEFAULT_INITIAL_PROFESSIONAL });
   }
 
   popular(lista: Professional[]): void {
@@ -141,11 +115,6 @@ export class FirestoreProfissionaisRepository implements ProfissionaisRepository
     const snap = await docRef.get();
 
     if (!snap.exists) {
-      // Resiliência: se buscar pela profissional inicial padrão e ela ainda não tiver sido
-      // persistida no Firestore, retorna a profissional padrão oficial da clínica
-      if (id === ID_PROFISSIONAL_PADRAO) {
-        return { ...DEFAULT_INITIAL_PROFESSIONAL };
-      }
       return null;
     }
 
@@ -160,8 +129,7 @@ export class FirestoreProfissionaisRepository implements ProfissionaisRepository
 
     const snapshot = await query.get();
     if (snapshot.empty) {
-      // Caso a coleção ainda esteja vazia, retorna a profissional inicial padrão
-      return [{ ...DEFAULT_INITIAL_PROFESSIONAL }];
+      return [];
     }
 
     const lista = snapshot.docs.map((doc) =>
