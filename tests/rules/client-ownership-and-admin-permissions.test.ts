@@ -712,4 +712,56 @@ describe('Security Rules: Permissões de Administradora e Propriedade de Dados d
       );
     });
   });
+
+  describe('Fila de lembretes administrativos em /fila_lembretes', () => {
+    const lembrete = {
+      agendamentoId: 'ag-joao-1',
+      dataHoraInicio: '2026-10-15T14:00:00Z',
+      status: 'enviado',
+      enviadoEm: '2026-10-14T14:00:00Z',
+      mensagemPersonalizada: 'Olá, João!',
+      updatedAt: '2026-10-14T14:00:00Z',
+    };
+
+    it('permite à administradora ler, criar e atualizar o estado do lembrete do agendamento', async () => {
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+      const ref = adminDb.doc('fila_lembretes/ag-joao-1');
+      await assertSucceeds(ref.set(lembrete));
+      await assertSucceeds(ref.get());
+      await assertSucceeds(ref.update({ status: 'pendente', enviadoEm: null }));
+    });
+
+    it('nega leitura e gravação por clientes e usuários anônimos', async () => {
+      const clientDb = testEnvironment
+        .authenticatedContext('cliente-joao', { role: 'cliente' })
+        .firestore();
+      const unauthDb = testEnvironment.unauthenticatedContext().firestore();
+      await assertFails(clientDb.doc('fila_lembretes/ag-joao-1').set(lembrete));
+      await assertFails(clientDb.doc('fila_lembretes/ag-joao-1').get());
+      await assertFails(unauthDb.doc('fila_lembretes/ag-joao-1').set(lembrete));
+    });
+
+    it('nega payloads que não correspondem ao agendamento ou contêm dados extras', async () => {
+      const adminDb = testEnvironment
+        .authenticatedContext('admin-tais', { role: 'admin' })
+        .firestore();
+      await assertFails(
+        adminDb
+          .doc('fila_lembretes/ag-joao-1')
+          .set({ ...lembrete, dataHoraInicio: '2026-10-16T14:00:00Z' }),
+      );
+      await assertFails(
+        adminDb
+          .doc('fila_lembretes/ag-joao-1')
+          .set({ ...lembrete, clienteTelefone: '(11)99999-1111' }),
+      );
+      await assertFails(
+        adminDb
+          .doc('fila_lembretes/ag-inexistente')
+          .set({ ...lembrete, agendamentoId: 'ag-inexistente' }),
+      );
+    });
+  });
 });

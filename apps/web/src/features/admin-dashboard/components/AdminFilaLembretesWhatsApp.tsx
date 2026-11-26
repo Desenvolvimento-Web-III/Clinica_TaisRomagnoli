@@ -1,34 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
-  gerarMensagemLembreteWhatsapp,
   gerarLinkWhatsapp,
   filtrarLembretes,
-  carregarLembretesEnviadosStorage,
-  salvarLembretesEnviadosStorage,
   type LembreteFilaItem,
 } from '../utils/whatsapp-reminders';
-
-export interface AdminFilaAgendamentoInput {
-  id: string;
-  clienteId?: string;
-  horario: string;
-  clienteNome: string;
-  clienteTelefone: string;
-  servicoNome: string;
-  duracao: string;
-  status: string;
-  dataFormatada?: string;
-  dataHoraInicio?: string;
-}
+import {
+  gerarFilaLembretesAdmin,
+  salvarEstadoLembreteAdmin,
+} from '@/services/lembretes-admin-service';
 
 export interface AdminFilaLembretesWhatsAppProps {
-  agendamentos: AdminFilaAgendamentoInput[];
   onVoltarAgenda?: () => void;
+  onPendentesChange?: (total: number) => void;
 }
 
 export function AdminFilaLembretesWhatsApp({
-  agendamentos,
   onVoltarAgenda,
+  onPendentesChange,
 }: Readonly<AdminFilaLembretesWhatsAppProps>) {
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'pendentes' | 'enviados'>('todos');
   const [termoBusca, setTermoBusca] = useState('');
@@ -37,59 +25,34 @@ export function AdminFilaLembretesWhatsApp({
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [textoEdicao, setTextoEdicao] = useState('');
 
-  // Mapa com o estado de envio assistido e mensagens personalizadas por agendamento
-  const [statusEnvioMap, setStatusEnvioMap] = useState<
-    Record<string, { status: 'pendente' | 'enviado'; enviadoEm?: string; mensagem?: string }>
-  >(() => {
-    const salvos = carregarLembretesEnviadosStorage();
-    const inicial: Record<
-      string,
-      { status: 'pendente' | 'enviado'; enviadoEm?: string; mensagem?: string }
-    > = {};
-    for (const [id, enviadoEm] of Object.entries(salvos)) {
-      inicial[id] = { status: 'enviado', enviadoEm };
-    }
-    return inicial;
-  });
+  const [itensFila, setItensFila] = useState<LembreteFilaItem[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
-  // Converte agendamentos em itens da fila
-  const itensFila = useMemo<LembreteFilaItem[]>(() => {
-    return agendamentos
-      .filter((ag) => ag.status !== 'cancelado' && ag.status !== 'falta')
-      .map((ag) => {
-        const infoEnvio = statusEnvioMap[ag.id];
-        const statusLembrete = infoEnvio?.status || 'pendente';
-        const mensagemPronta =
-          infoEnvio?.mensagem ||
-          gerarMensagemLembreteWhatsapp({
-            clienteNome: ag.clienteNome,
-            servicoNome: ag.servicoNome,
-            horario: ag.horario,
-            dataFormatada: ag.dataFormatada,
-          });
-
-        return {
-          id: ag.id,
-          clienteId: ag.clienteId,
-          clienteNome: ag.clienteNome,
-          clienteTelefone: ag.clienteTelefone,
-          servicoNome: ag.servicoNome,
-          duracao: ag.duracao,
-          horario: ag.horario,
-          dataFormatada: ag.dataFormatada,
-          dataHoraInicio: ag.dataHoraInicio,
-          statusAgendamento: ag.status,
-          statusLembrete,
-          enviadoEm: infoEnvio?.enviadoEm,
-          mensagemPersonalizada: mensagemPronta,
-        };
+  useEffect(() => {
+    let ativo = true;
+    void gerarFilaLembretesAdmin()
+      .then((itens) => {
+        if (ativo) setItensFila(itens);
+      })
+      .catch((error: unknown) => {
+        if (ativo)
+          setErro(error instanceof Error ? error.message : 'Não foi possível carregar a fila.');
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
       });
-  }, [agendamentos, statusEnvioMap]);
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   // Contadores
   const totalGeral = itensFila.length;
   const totalPendentes = itensFila.filter((i) => i.statusLembrete === 'pendente').length;
   const totalEnviados = itensFila.filter((i) => i.statusLembrete === 'enviado').length;
+
+  useEffect(() => onPendentesChange?.(totalPendentes), [onPendentesChange, totalPendentes]);
 
   // Itens filtrados para exibição
   const itensExibidos = useMemo(() => {
@@ -97,7 +60,45 @@ export function AdminFilaLembretesWhatsApp({
   }, [itensFila, filtroStatus, termoBusca]);
 
   // Ação: Abrir no WhatsApp
-  const handleAbrirWhatsapp = (item: LembreteFilaItem) => {
+  const salvarItem = async (
+    item: LembreteFilaItem,
+    statusLembrete: 'pendente' | 'enviado',
+    mensagem = item.mensagemPersonalizada || '',
+  ) => {
+    if (!item.dataHoraInicio) {
+      setErro('Este agendamento não tem data e hora válidas para registrar o lembrete.');
+      return false;
+    }
+    try {
+      await salvarEstadoLembreteAdmin({
+        agendamentoId: item.id,
+        dataHoraInicio: item.dataHoraInicio,
+        status: statusLembrete,
+        mensagemPersonalizada: mensagem,
+      });
+      setItensFila((atuais) =>
+        atuais.map((atual) =>
+          atual.id === item.id
+            ? {
+                ...atual,
+                statusLembrete,
+                enviadoEm: statusLembrete === 'enviado' ? new Date().toISOString() : undefined,
+                mensagemPersonalizada: mensagem,
+              }
+            : atual,
+        ),
+      );
+      setErro(null);
+      return true;
+    } catch (error) {
+      setErro(
+        error instanceof Error ? error.message : 'Não foi possível salvar o status do lembrete.',
+      );
+      return false;
+    }
+  };
+
+  const handleAbrirWhatsapp = async (item: LembreteFilaItem) => {
     const mensagem = item.mensagemPersonalizada || '';
     const link = gerarLinkWhatsapp(item.clienteTelefone, mensagem);
 
@@ -105,30 +106,10 @@ export function AdminFilaLembretesWhatsApp({
       window.open(link, '_blank', 'noopener,noreferrer');
     }
 
-    // Marca como enviado
-    const agoraIso = new Date().toISOString();
-    const novoMapa = {
-      ...statusEnvioMap,
-      [item.id]: {
-        ...statusEnvioMap[item.id],
-        status: 'enviado' as const,
-        enviadoEm: agoraIso,
-        mensagem,
-      },
-    };
-    setStatusEnvioMap(novoMapa);
-
-    // Salva no storage local
-    const paraSalvar: Record<string, string> = {};
-    for (const [id, val] of Object.entries(novoMapa)) {
-      if (val.status === 'enviado' && val.enviadoEm) {
-        paraSalvar[id] = val.enviadoEm;
-      }
+    if (link && (await salvarItem(item, 'enviado', mensagem))) {
+      setAbertoId(item.id);
+      setTimeout(() => setAbertoId(null), 3000);
     }
-    salvarLembretesEnviadosStorage(paraSalvar);
-
-    setAbertoId(item.id);
-    setTimeout(() => setAbertoId(null), 3000);
   };
 
   // Ação: Copiar Mensagem
@@ -146,53 +127,28 @@ export function AdminFilaLembretesWhatsApp({
   };
 
   // Ação: Alternar Status Manualmente
-  const handleAlternarStatus = (item: LembreteFilaItem) => {
+  const handleAlternarStatus = async (item: LembreteFilaItem) => {
     const novoStatus: 'pendente' | 'enviado' =
       item.statusLembrete === 'enviado' ? 'pendente' : 'enviado';
-    const enviadoEm = novoStatus === 'enviado' ? new Date().toISOString() : undefined;
-
-    const novoMapa = {
-      ...statusEnvioMap,
-      [item.id]: {
-        ...statusEnvioMap[item.id],
-        status: novoStatus,
-        enviadoEm,
-      },
-    };
-    setStatusEnvioMap(novoMapa);
-
-    const paraSalvar: Record<string, string> = {};
-    for (const [id, val] of Object.entries(novoMapa)) {
-      if (val.status === 'enviado' && val.enviadoEm) {
-        paraSalvar[id] = val.enviadoEm;
-      }
-    }
-    salvarLembretesEnviadosStorage(paraSalvar);
+    await salvarItem(item, novoStatus);
   };
 
   // Ação: Marcar Todos Como Enviados
-  const handleMarcarTodos = () => {
-    const agoraIso = new Date().toISOString();
-    const novoMapa = { ...statusEnvioMap };
-    const paraSalvar: Record<string, string> = {};
-
-    itensFila.forEach((item) => {
-      novoMapa[item.id] = {
-        ...novoMapa[item.id],
-        status: 'enviado',
-        enviadoEm: novoMapa[item.id]?.enviadoEm || agoraIso,
-      };
-      paraSalvar[item.id] = novoMapa[item.id]?.enviadoEm || agoraIso;
-    });
-
-    setStatusEnvioMap(novoMapa);
-    salvarLembretesEnviadosStorage(paraSalvar);
+  const handleMarcarTodos = async () => {
+    await Promise.all(
+      itensFila
+        .filter((item) => item.statusLembrete === 'pendente')
+        .map((item) => salvarItem(item, 'enviado')),
+    );
   };
 
   // Ação: Redefinir Fila
-  const handleRedefinirFila = () => {
-    setStatusEnvioMap({});
-    salvarLembretesEnviadosStorage({});
+  const handleRedefinirFila = async () => {
+    await Promise.all(
+      itensFila
+        .filter((item) => item.statusLembrete === 'enviado')
+        .map((item) => salvarItem(item, 'pendente')),
+    );
   };
 
   // Ação: Iniciar Edição da Mensagem
@@ -202,16 +158,9 @@ export function AdminFilaLembretesWhatsApp({
   };
 
   // Ação: Salvar Edição
-  const handleSalvarEdicao = (id: string) => {
-    setStatusEnvioMap((prev) => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        status: prev[id]?.status || 'pendente',
-        mensagem: textoEdicao,
-      },
-    }));
-    setEditandoId(null);
+  const handleSalvarEdicao = async (id: string) => {
+    const item = itensFila.find((filaItem) => filaItem.id === id);
+    if (item && (await salvarItem(item, item.statusLembrete, textoEdicao))) setEditandoId(null);
   };
 
   return (
@@ -296,6 +245,23 @@ export function AdminFilaLembretesWhatsApp({
           )}
         </div>
       </div>
+
+      {erro && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {erro}
+        </div>
+      )}
+      {carregando && (
+        <div
+          role="status"
+          className="rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-6 text-sm text-[var(--color-text-secondary)]"
+        >
+          Carregando fila de lembretes…
+        </div>
+      )}
 
       {/* CARDS DE RESUMO DE INDICADORES */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -445,7 +411,7 @@ export function AdminFilaLembretesWhatsApp({
       )}
 
       {/* LISTA DE CONTATOS NA FILA */}
-      {itensExibidos.length === 0 ? (
+      {carregando ? null : itensExibidos.length === 0 ? (
         <div
           data-testid="fila-lembretes-vazia"
           className="rounded-2xl border border-dashed border-[var(--color-border-default)] bg-white p-10 text-center"
