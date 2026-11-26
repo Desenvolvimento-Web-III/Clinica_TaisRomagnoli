@@ -199,7 +199,10 @@ export function AdminClientProfilePage({
       })
     : null;
 
-  const profileLoadError = loadedProfileState?.clientId === clientId ? loadedProfileState.error : undefined;
+  const profileLoadError =
+    loadedProfileState && loadedProfileState.clientId === clientId
+      ? loadedProfileState.error
+      : undefined;
 
   const handleAtualizarLiberacao = async (aprovada: boolean, exigeLiberacaoMedica?: boolean) => {
     setLiberacaoFeedback(null);

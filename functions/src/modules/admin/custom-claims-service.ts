@@ -163,8 +163,8 @@ export async function atribuirFuncaoAdministrativa(
  */
 export async function definirAdministradoraInicial(
   auth: ClaimsAuthAdapter,
-  firestore?: ClaimsFirestoreAdapter,
   adminEmail: string,
+  firestore?: ClaimsFirestoreAdapter,
 ): Promise<AtribuirClaimsResult> {
   if (!adminEmail.trim()) {
     throw new CustomClaimsBusinessError('Informe o e-mail da administradora.', 400);

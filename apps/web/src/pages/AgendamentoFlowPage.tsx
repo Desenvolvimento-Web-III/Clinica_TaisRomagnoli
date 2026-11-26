@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { AppShell } from '@/components/ui/AppShell';
 import {
   avaliarBloqueioContraindicacao,
   type HorariosFuncionamento,

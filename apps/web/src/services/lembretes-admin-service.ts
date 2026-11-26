@@ -209,7 +209,7 @@ export async function gerarFilaLembretesAdmin(agora = new Date()): Promise<Lembr
   try {
     const configuracoes = await carregarConfiguracoes();
     const lembretes = configuracoes.lembretes;
-    if (!lembretes.lembreteAtivo || !lembretes.canais.whatsapp) return [];
+    if (!lembretes?.lembreteAtivo || !lembretes.canais.whatsapp) return [];
 
     const inicio = agora.toISOString();
     const fim = new Date(

@@ -1437,7 +1437,7 @@ export const inicializarContaAdministradora = onRequest(
 
       const auth = getAuth();
       const firestore = getFirestore();
-      const resultado = await definirAdministradoraInicial(auth, firestore, caller.email || '');
+      const resultado = await definirAdministradoraInicial(auth, caller.email || '', firestore);
 
       response.status(200).json({
         sucesso: true,
