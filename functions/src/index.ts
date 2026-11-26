@@ -1,12 +1,8 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { onRequest, type Request } from 'firebase-functions/v2/https';
-import {
-  marcarNotificacaoLidaInputSchema,
-  reportRequestSchema,
-  type Agendamento,
-} from '@clinica/shared';
+import { onRequest } from 'firebase-functions/v2/https';
+import { marcarNotificacaoLidaInputSchema, type Agendamento } from '@clinica/shared';
 import { getHealthStatus } from './core/health-status.js';
 import {
   obterHorarios,
@@ -59,11 +55,6 @@ import {
   ClienteBusinessError,
 } from './modules/clientes/clientes-service.js';
 import { calcularOitoIndicadoresPainel } from './modules/indicadores/indicadores-service.js';
-import { FirestoreRelatoriosRepository } from './modules/relatorios/relatorios-repository.js';
-import {
-  gerarArquivoCsvRelatorioAdmin,
-  gerarDadosRelatorioAdmin,
-} from './modules/relatorios/relatorios-service.js';
 import {
   FirestoreProfissionaisRepository,
   InMemoryProfissionaisRepository,
@@ -170,11 +161,6 @@ export {
   calcularOitoIndicadoresPainel,
   calcularCapacidadeSlotsMes,
 } from './modules/indicadores/indicadores-service.js';
-export { FirestoreRelatoriosRepository } from './modules/relatorios/relatorios-repository.js';
-export {
-  gerarArquivoCsvRelatorioAdmin,
-  gerarDadosRelatorioAdmin,
-} from './modules/relatorios/relatorios-service.js';
 export {
   FirestoreAnamneseRepository,
   InMemoryAnamneseRepository,
@@ -2569,79 +2555,6 @@ export const obterPainelIndicadoresAdmin = onRequest({ cors: true }, async (requ
     }
     console.error('Erro ao calcular indicadores administrativos:', error);
     response.status(500).json({ error: 'Erro interno ao calcular indicadores administrativos.' });
-  }
-});
-
-function parametrosRelatorioAdmin(request: Request) {
-  const valor = (chave: string): string | undefined => {
-    const item = request.query[chave];
-    return typeof item === 'string' ? item : undefined;
-  };
-  return {
-    categoria: valor('categoria'),
-    mesReferencia: valor('mesReferencia'),
-    busca: valor('busca'),
-    status: valor('status'),
-  };
-}
-
-/** Gera dados detalhados de um relatório mensal diretamente do Firestore. */
-export const obterRelatorioAdmin = onRequest({ cors: true }, async (request, response) => {
-  if (request.method !== 'GET') {
-    response.status(405).json({ error: 'Método não permitido. Use GET.' });
-    return;
-  }
-
-  try {
-    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
-    exigirAdministrador(caller);
-    const filtros = reportRequestSchema.safeParse(parametrosRelatorioAdmin(request));
-    if (!filtros.success) {
-      response.status(400).json({ error: 'Categoria ou mês de referência inválido.' });
-      return;
-    }
-
-    const dados = await gerarDadosRelatorioAdmin(
-      filtros.data,
-      new FirestoreRelatoriosRepository(getFirestore()),
-    );
-    response.setHeader('Cache-Control', 'no-store');
-    response.status(200).json({ sucesso: true, dados });
-  } catch (error: unknown) {
-    if (responderErroNegocio(response, error)) return;
-    console.error('Erro ao gerar relatório administrativo:', error);
-    response.status(500).json({ error: 'Não foi possível gerar o relatório.' });
-  }
-});
-
-/** Gera e entrega um CSV mensal filtrado, somente para a administradora autenticada. */
-export const exportarRelatorioAdmin = onRequest({ cors: true }, async (request, response) => {
-  if (request.method !== 'GET') {
-    response.status(405).json({ error: 'Método não permitido. Use GET.' });
-    return;
-  }
-
-  try {
-    const caller = await extrairUsuarioAutenticado(request.headers.authorization);
-    exigirAdministrador(caller);
-    const filtros = reportRequestSchema.safeParse(parametrosRelatorioAdmin(request));
-    if (!filtros.success) {
-      response.status(400).json({ error: 'Categoria ou mês de referência inválido.' });
-      return;
-    }
-
-    const arquivo = await gerarArquivoCsvRelatorioAdmin(
-      filtros.data,
-      new FirestoreRelatoriosRepository(getFirestore()),
-    );
-    response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    response.setHeader('Content-Disposition', `attachment; filename="${arquivo.nomeArquivo}"`);
-    response.status(200).send(arquivo.conteudo);
-  } catch (error: unknown) {
-    if (responderErroNegocio(response, error)) return;
-    console.error('Erro ao exportar relatório administrativo:', error);
-    response.status(500).json({ error: 'Não foi possível exportar o relatório.' });
   }
 });
 
