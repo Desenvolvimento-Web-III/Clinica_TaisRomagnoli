@@ -232,6 +232,7 @@ describe('ProfissionaisService - Gestão e Vínculo de Profissionais', () => {
     });
 
     it('remove um profissional de um procedimento mantendo a profissional padrão caso todos sejam removidos', async () => {
+      await profissionaisRepo.salvar(criarProfissionalPadrao());
       await vincularProfissionalAoServico(
         {
           servicoId: 'massagem-relaxante',
