@@ -8,11 +8,20 @@ import {
   ID_PROFISSIONAL_PADRAO,
 } from './professional.js';
 import { validateProfessional } from './clinic-settings.js';
-import { DEFAULT_INITIAL_PROFESSIONAL } from '../constants/default-seeds.js';
+
+const professionalFixture = {
+  id: 'prof-tais-romagnoli',
+  nome: 'Tais Romagnoli',
+  especialidade: 'Massoterapeuta',
+  ativo: true,
+  diasFolga: [0, 2] as (0 | 1 | 2 | 3 | 4 | 5 | 6)[],
+  intervaloMinutos: 30,
+  createdAt: '2026-11-25T00:00:00.000Z',
+};
 
 describe('professionalSchema e contratos de profissionais', () => {
   it('valida com sucesso a profissional padrão da clínica (Tais Romagnoli)', () => {
-    const parsed = professionalSchema.safeParse(DEFAULT_INITIAL_PROFESSIONAL);
+    const parsed = professionalSchema.safeParse(professionalFixture);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.id).toBe(ID_PROFISSIONAL_PADRAO);
@@ -79,7 +88,7 @@ describe('professionalSchema e contratos de profissionais', () => {
   });
 
   it('executa type guard validateProfessional corretamente', () => {
-    expect(validateProfessional(DEFAULT_INITIAL_PROFESSIONAL)).toBe(true);
+    expect(validateProfessional(professionalFixture)).toBe(true);
     expect(validateProfessional(null)).toBe(false);
     expect(validateProfessional({ id: 'sem-campos' })).toBe(false);
   });
