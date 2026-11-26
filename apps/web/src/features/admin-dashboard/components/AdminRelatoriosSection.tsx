@@ -1,18 +1,9 @@
-import { useMemo, useState } from 'react';
-import type { Agendamento } from '@clinica/shared';
-import type { AdminClientListItem } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import { filtrarLinhasRelatorio, type ReportCategory, type ReportData } from '@clinica/shared';
 import {
-  montarTabelaRelatorio,
-  serializarRelatorioCsv,
-  type ReportCategory,
-} from '../reports-data';
-
-interface AdminRelatoriosSectionProps {
-  clients: AdminClientListItem[];
-  appointments: Agendamento[];
-  isLoading?: boolean;
-  error?: string | null;
-}
+  consultarRelatorioAdmin,
+  exportarRelatorioAdmin,
+} from '@/services/relatorios-admin-service';
 
 const CATEGORIES: Array<{ id: ReportCategory; label: string }> = [
   { id: 'clientes', label: 'Clientes' },
@@ -35,29 +26,46 @@ function mesAtual(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-export function AdminRelatoriosSection({
-  clients,
-  appointments,
-  isLoading = false,
-  error,
-}: Readonly<AdminRelatoriosSectionProps>) {
+export function AdminRelatoriosSection() {
   const [category, setCategory] = useState<ReportCategory>('agenda');
   const [month, setMonth] = useState(mesAtual);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('todos');
-  const report = useMemo(
-    () => montarTabelaRelatorio(category, month, clients, appointments),
-    [category, month, clients, appointments],
-  );
+  const [loadedReport, setLoadedReport] = useState<{
+    key: string;
+    data: ReportData | null;
+    error: string | null;
+  } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const reportKey = `${category}:${month}`;
+  const report = loadedReport?.key === reportKey ? loadedReport.data : null;
+  const isLoading = loadedReport?.key !== reportKey;
+  const error = exportError ?? (loadedReport?.key === reportKey ? loadedReport.error : null);
+
+  useEffect(() => {
+    let ativo = true;
+    consultarRelatorioAdmin({ categoria: category, mesReferencia: month })
+      .then((data) => {
+        if (ativo) setLoadedReport({ key: reportKey, data, error: null });
+      })
+      .catch((cause: unknown) => {
+        if (ativo)
+          setLoadedReport({
+            key: reportKey,
+            data: null,
+            error:
+              cause instanceof Error ? cause.message : 'Não foi possível carregar este relatório.',
+          });
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [category, month, reportKey]);
 
   const filteredRows = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('pt-BR');
-    return report.rows.filter((row) => {
-      const matchesSearch = !query || row.searchText.includes(query);
-      const matchesStatus = status === 'todos' || row.status === status;
-      return matchesSearch && matchesStatus;
-    });
-  }, [report.rows, search, status]);
+    return filtrarLinhasRelatorio(report?.rows ?? [], search, status);
+  }, [report?.rows, search, status]);
 
   const statusOptions =
     category === 'clientes'
@@ -81,17 +89,31 @@ export function AdminRelatoriosSection({
   const valoresPrevistos = filteredRows.reduce((total, row) => total + (row.expectedCents ?? 0), 0);
   const sinaisRetidos = filteredRows.reduce((total, row) => total + (row.retainedCents ?? 0), 0);
 
-  const handleExportar = () => {
-    const csv = `\uFEFF${serializarRelatorioCsv(report.headers, filteredRows)}`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `relatorio-${category}-${month}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  const handleExportar = async () => {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const arquivo = await exportarRelatorioAdmin({
+        categoria: category,
+        mesReferencia: month,
+        busca: search,
+        status,
+      });
+      const url = URL.createObjectURL(arquivo.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = arquivo.nomeArquivo;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setExportError(
+        cause instanceof Error ? cause.message : 'Não foi possível exportar este relatório.',
+      );
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -141,8 +163,8 @@ export function AdminRelatoriosSection({
           </div>
           <button
             type="button"
-            onClick={handleExportar}
-            disabled={isLoading || filteredRows.length === 0}
+            onClick={() => void handleExportar()}
+            disabled={isLoading || isExporting || filteredRows.length === 0}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-deep)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-brand-dark)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg
@@ -159,7 +181,7 @@ export function AdminRelatoriosSection({
                 d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"
               />
             </svg>
-            Exportar CSV ({filteredRows.length})
+            {isExporting ? 'Gerando CSV...' : `Exportar CSV (${filteredRows.length})`}
           </button>
         </div>
 
@@ -239,7 +261,7 @@ export function AdminRelatoriosSection({
             <table className="min-w-full divide-y divide-[var(--color-border-default)] text-left text-sm">
               <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-[var(--color-text-secondary)]">
                 <tr>
-                  {report.headers.map((header) => (
+                  {(report?.headers ?? []).map((header) => (
                     <th
                       key={header}
                       scope="col"
