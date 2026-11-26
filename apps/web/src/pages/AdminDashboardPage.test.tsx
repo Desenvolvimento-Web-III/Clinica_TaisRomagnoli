@@ -14,6 +14,8 @@ import * as agendamentosService from '@/services/agendamentos-service';
 import * as settingsService from '@/services/clinic-settings-service';
 import * as clientesAdminService from '@/services/clientes-admin-service';
 import * as indicadoresAdminService from '@/services/indicadores-admin-service';
+import * as lembretesAdminService from '@/services/lembretes-admin-service';
+import type { LembreteFilaItem } from '@/features/admin-dashboard/utils/whatsapp-reminders';
 import { CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
 import { AdminDashboardPage } from './AdminDashboardPage';
 import { useAuth } from '@/features/auth/auth-context';
@@ -143,6 +145,23 @@ describe('AdminDashboardPage', () => {
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
       DEFAULT_CLINIC_SETTINGS,
     );
+    vi.spyOn(lembretesAdminService, 'gerarFilaLembretesAdmin').mockResolvedValue([
+      {
+        id: 'ag-1',
+        clienteId: 'demo-client-1',
+        clienteNome: 'Mariana Silva',
+        clienteTelefone: '(11) 98765-4321',
+        servicoNome: 'Massagem Relaxante',
+        duracao: '60 min',
+        horario: '09:00 - 10:00',
+        dataFormatada: '25/11/2026',
+        dataHoraInicio: '2026-11-25T12:00:00.000Z',
+        statusAgendamento: 'confirmado',
+        statusLembrete: 'pendente',
+        mensagemPersonalizada: 'Olá, Mariana Silva!',
+      } satisfies LembreteFilaItem,
+    ]);
+    vi.spyOn(lembretesAdminService, 'salvarEstadoLembreteAdmin').mockResolvedValue(undefined);
     vi.mocked(useAuth).mockReturnValue({
       currentUser: {
         uid: 'admin-1',
@@ -637,7 +656,7 @@ describe('AdminDashboardPage', () => {
 
     // O container da fila e os contatos pendentes são exibidos
     expect(
-      screen.getByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
+      await screen.findByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('fila-lembretes-whatsapp-container')).toBeInTheDocument();
     expect(screen.getByTestId('contador-pendentes')).toBeInTheDocument();
@@ -656,7 +675,7 @@ describe('AdminDashboardPage', () => {
     renderDashboard('/admin/lembretes');
 
     expect(
-      screen.getByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
+      await screen.findByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('fila-lembretes-whatsapp-container')).toBeInTheDocument();
     expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();

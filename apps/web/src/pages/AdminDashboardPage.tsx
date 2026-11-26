@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   avaliarBloqueioContraindicacao,
@@ -29,7 +29,6 @@ import { AdminIndicadoresOperacionais } from '@/features/admin-dashboard/compone
 import { AdminRelatoriosSection } from '@/features/admin-dashboard/components/AdminRelatoriosSection';
 import { AdminFilaLembretesWhatsApp } from '@/features/admin-dashboard/components/AdminFilaLembretesWhatsApp';
 import { AdminAgendaCalendario } from '@/features/admin-dashboard/components/AdminAgendaCalendario';
-import { carregarLembretesEnviadosStorage } from '@/features/admin-dashboard/utils/whatsapp-reminders';
 import {
   atualizarStatusAgendamentoBackend,
   buscarAgendamentosAdmin,
@@ -275,12 +274,7 @@ export function AdminDashboardPage() {
   const [painelIndicadores, setPainelIndicadores] =
     useState<PainelIndicadores>(PAINEL_INDICADORES_PADRAO);
 
-  const lembretesPendentesCount = useMemo(() => {
-    const salvos = carregarLembretesEnviadosStorage();
-    return agendaItems.filter(
-      (ag) => ag.status !== 'cancelado' && ag.status !== 'falta' && !salvos[ag.id],
-    ).length;
-  }, [agendaItems]);
+  const [lembretesPendentesCount, setLembretesPendentesCount] = useState(0);
 
   const carregarClientes = useCallback(async () => {
     setIsLoadingClientes(true);
@@ -830,8 +824,8 @@ export function AdminDashboardPage() {
 
             {agendaSubView === 'lembretes' ? (
               <AdminFilaLembretesWhatsApp
-                agendamentos={agendaItems}
                 onVoltarAgenda={() => setAgendaSubView('lista')}
+                onPendentesChange={setLembretesPendentesCount}
               />
             ) : agendaSubView === 'calendario' ? (
               <>

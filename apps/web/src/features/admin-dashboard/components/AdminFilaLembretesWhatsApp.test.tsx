@@ -1,11 +1,19 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  AdminFilaLembretesWhatsApp,
-  type AdminFilaAgendamentoInput,
-} from './AdminFilaLembretesWhatsApp';
+import { AdminFilaLembretesWhatsApp } from './AdminFilaLembretesWhatsApp';
+import type { LembreteFilaItem } from '../utils/whatsapp-reminders';
 
-const MOCK_AGENDAMENTOS: AdminFilaAgendamentoInput[] = [
+const { gerarFilaMock, salvarEstadoMock } = vi.hoisted(() => ({
+  gerarFilaMock: vi.fn(),
+  salvarEstadoMock: vi.fn(),
+}));
+
+vi.mock('@/services/lembretes-admin-service', () => ({
+  gerarFilaLembretesAdmin: gerarFilaMock,
+  salvarEstadoLembreteAdmin: salvarEstadoMock,
+}));
+
+const MOCK_FILA: LembreteFilaItem[] = [
   {
     id: 'ag-1',
     clienteId: 'cli-1',
@@ -14,8 +22,11 @@ const MOCK_AGENDAMENTOS: AdminFilaAgendamentoInput[] = [
     clienteTelefone: '(11) 98765-4321',
     servicoNome: 'Massagem Relaxante',
     duracao: '60 min',
-    status: 'confirmado',
+    statusAgendamento: 'confirmado',
     dataFormatada: '25/11/2026',
+    dataHoraInicio: '2026-11-25T12:00:00.000Z',
+    statusLembrete: 'pendente',
+    mensagemPersonalizada: 'Olá, Mariana Silva! Massagem Relaxante',
   },
   {
     id: 'ag-2',
@@ -25,202 +36,124 @@ const MOCK_AGENDAMENTOS: AdminFilaAgendamentoInput[] = [
     clienteTelefone: '(11) 95432-1098',
     servicoNome: 'Liberação Miofascial',
     duracao: '90 min',
-    status: 'pendente',
+    statusAgendamento: 'pendente',
     dataFormatada: '25/11/2026',
-  },
-  {
-    id: 'ag-3',
-    clienteId: 'cli-3',
-    horario: '14:00 - 15:00',
-    clienteNome: 'Ana Carolina Santos',
-    clienteTelefone: '(11) 97654-3210',
-    servicoNome: 'Massagem com Pedras Quentes',
-    duracao: '60 min',
-    status: 'cancelado', // deve ser ignorado da fila
-    dataFormatada: '25/11/2026',
+    dataHoraInicio: '2026-11-25T13:30:00.000Z',
+    statusLembrete: 'pendente',
+    mensagemPersonalizada: 'Olá, Carlos Eduardo! Liberação Miofascial',
   },
 ];
 
 describe('AdminFilaLembretesWhatsApp', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.clearAllMocks();
+    gerarFilaMock.mockResolvedValue(MOCK_FILA);
+    salvarEstadoMock.mockResolvedValue(undefined);
   });
 
-  it('renderiza o cabeçalho, indicadores e a lista de contatos pendentes ignorando cancelados', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    expect(
-      screen.getByRole('heading', { name: /fila de lembretes pelo whatsapp/i }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText(/envio assistido/i).length).toBeGreaterThan(0);
-
-    // Contadores
-    expect(screen.getByTestId('contador-pendentes')).toHaveTextContent('2');
-    expect(screen.getByTestId('contador-enviados')).toHaveTextContent('0');
-
-    // Clientes
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
+  it('carrega e exibe a fila obtida do repositório persistente', async () => {
+    render(<AdminFilaLembretesWhatsApp />);
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
     expect(screen.getByText('Carlos Eduardo')).toBeInTheDocument();
-    // Ana Carolina está cancelada, não deve aparecer
-    expect(screen.queryByText('Ana Carolina Santos')).not.toBeInTheDocument();
+    expect(screen.getByTestId('contador-pendentes')).toHaveTextContent('2');
+    expect(gerarFilaMock).toHaveBeenCalledOnce();
   });
 
-  it('exibe a mensagem pronta com dados acolhedores do atendimento', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    expect(
-      screen.getByText(
-        (content) =>
-          content.includes('Olá, Mariana Silva!') && content.includes('Massagem Relaxante'),
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByText((content) => content.includes('3 horas de antecedência')).length,
-    ).toBeGreaterThan(0);
+  it('mostra erros de carregamento retornados pelo serviço', async () => {
+    gerarFilaMock.mockRejectedValueOnce(new Error('Acesso negado'));
+    render(<AdminFilaLembretesWhatsApp />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Acesso negado');
   });
 
-  it('abre o WhatsApp com a URL correta e atualiza status para enviado', () => {
+  it('abre o WhatsApp e persiste o estado do lembrete no Firestore', async () => {
     const spyOpen = vi.spyOn(window, 'open').mockImplementation(() => null);
-
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    const botaoWhatsapp = screen.getByTestId('abrir-whatsapp-btn-ag-1');
-    fireEvent.click(botaoWhatsapp);
-
-    expect(spyOpen).toHaveBeenCalledTimes(1);
-    const urlChamada = spyOpen.mock.calls[0]?.[0] as string;
-    expect(urlChamada).toContain('https://wa.me/5511987654321?text=');
-    expect(urlChamada).toContain(encodeURIComponent('Mariana Silva'));
-
-    // Status atualizado
-    expect(screen.getByTestId('status-badge-ag-1')).toHaveTextContent('Lembrete Enviado');
-    expect(screen.getByTestId('contador-enviados')).toHaveTextContent('1');
-    expect(screen.getByTestId('whatsapp-aberto-toast')).toBeInTheDocument();
-
+    render(<AdminFilaLembretesWhatsApp />);
+    fireEvent.click(await screen.findByTestId('abrir-whatsapp-btn-ag-1'));
+    await waitFor(() =>
+      expect(salvarEstadoMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agendamentoId: 'ag-1',
+          status: 'enviado',
+          dataHoraInicio: MOCK_FILA[0]?.dataHoraInicio,
+        }),
+      ),
+    );
+    expect(spyOpen).toHaveBeenCalledWith(
+      expect.stringContaining('https://wa.me/5511987654321?text='),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(await screen.findByTestId('status-badge-ag-1')).toHaveTextContent('Lembrete Enviado');
     spyOpen.mockRestore();
   });
 
-  it('permite copiar a mensagem pronta para a área de transferência', async () => {
+  it('permite copiar mensagem e atualiza o feedback', async () => {
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: mockWriteText,
-      },
-    });
-
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    const botaoCopiar = screen.getByTestId('copiar-msg-btn-ag-1');
-    fireEvent.click(botaoCopiar);
-
-    await waitFor(() => {
-      expect(mockWriteText).toHaveBeenCalledWith(expect.stringContaining('Olá, Mariana Silva!'));
-      expect(screen.getByText('Copiado!')).toBeInTheDocument();
-    });
-  });
-
-  it('permite alternar manualmente entre pendente e enviado', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    expect(screen.getByTestId('status-badge-ag-1')).toHaveTextContent('Pendente');
-
-    // Clica em "Marcar como enviado"
-    const botaoAlternar = screen.getByTestId('alternar-status-btn-ag-1');
-    fireEvent.click(botaoAlternar);
-
-    expect(screen.getByTestId('status-badge-ag-1')).toHaveTextContent('Lembrete Enviado');
-    expect(botaoAlternar).toHaveTextContent('Marcar como pendente');
-
-    // Clica de volta
-    fireEvent.click(botaoAlternar);
-    expect(screen.getByTestId('status-badge-ag-1')).toHaveTextContent('Pendente');
-  });
-
-  it('permite filtrar por status através das abas', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    // Marca ag-1 como enviado
-    fireEvent.click(screen.getByTestId('alternar-status-btn-ag-1'));
-
-    // Alterna para aba Pendentes: só deve mostrar ag-2
-    fireEvent.click(screen.getByRole('tab', { name: /pendentes/i }));
-    expect(screen.getByText('Carlos Eduardo')).toBeInTheDocument();
-    expect(screen.queryByText('Mariana Silva')).not.toBeInTheDocument();
-
-    // Alterna para aba Enviados: só deve mostrar ag-1
-    fireEvent.click(screen.getByRole('tab', { name: /enviados/i }));
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
-    expect(screen.queryByText('Carlos Eduardo')).not.toBeInTheDocument();
-
-    // Alterna para aba Todos
-    fireEvent.click(screen.getByRole('tab', { name: /todos/i }));
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
-    expect(screen.getByText('Carlos Eduardo')).toBeInTheDocument();
-  });
-
-  it('filtra contatos por nome e telefone no campo de busca', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    const inputBusca = screen.getByPlaceholderText(/buscar por cliente/i);
-    fireEvent.change(inputBusca, { target: { value: 'Mariana' } });
-
-    expect(screen.getByText('Mariana Silva')).toBeInTheDocument();
-    expect(screen.queryByText('Carlos Eduardo')).not.toBeInTheDocument();
-
-    // Limpa busca e filtra por telefone
-    fireEvent.change(inputBusca, { target: { value: '95432' } });
-    expect(screen.getByText('Carlos Eduardo')).toBeInTheDocument();
-    expect(screen.queryByText('Mariana Silva')).not.toBeInTheDocument();
-  });
-
-  it('permite editar a mensagem antes do envio', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    // Inicia edição no primeiro item
-    const botoesEditar = screen.getAllByText(/editar mensagem/i);
-    fireEvent.click(botoesEditar[0]!);
-
-    const textarea = screen.getByLabelText(/editar mensagem de lembrete/i);
-    expect(textarea).toBeInTheDocument();
-    fireEvent.change(textarea, {
-      target: { value: 'Mensagem customizada: favor trazer toalha extra.' },
-    });
-
-    // Salva
-    fireEvent.click(screen.getByText('Salvar'));
-
-    expect(
-      screen.getByText('Mensagem customizada: favor trazer toalha extra.'),
-    ).toBeInTheDocument();
-  });
-
-  it('permite marcar todos como enviados e redefinir a fila', () => {
-    render(<AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} />);
-
-    const btnMarcarTodos = screen.getByTestId('marcar-todos-enviados-btn');
-    fireEvent.click(btnMarcarTodos);
-
-    expect(screen.getByTestId('contador-enviados')).toHaveTextContent('2');
-    expect(screen.getByTestId('contador-pendentes')).toHaveTextContent('0');
-
-    // Botão redefinir aparece
-    const btnRedefinir = screen.getByTestId('redefinir-fila-btn');
-    fireEvent.click(btnRedefinir);
-
-    expect(screen.getByTestId('contador-pendentes')).toHaveTextContent('2');
-    expect(screen.getByTestId('contador-enviados')).toHaveTextContent('0');
-  });
-
-  it('chama onVoltarAgenda quando o botão de voltar é clicado', () => {
-    const mockVoltar = vi.fn();
-    render(
-      <AdminFilaLembretesWhatsApp agendamentos={MOCK_AGENDAMENTOS} onVoltarAgenda={mockVoltar} />,
+    Object.assign(navigator, { clipboard: { writeText: mockWriteText } });
+    render(<AdminFilaLembretesWhatsApp />);
+    fireEvent.click(await screen.findByTestId('copiar-msg-btn-ag-1'));
+    await waitFor(() =>
+      expect(mockWriteText).toHaveBeenCalledWith(expect.stringContaining('Olá, Mariana Silva!')),
     );
+  });
 
-    const btnVoltar = screen.getByLabelText(/voltar para a agenda/i);
-    fireEvent.click(btnVoltar);
+  it('altera o status e persiste no repositório', async () => {
+    render(<AdminFilaLembretesWhatsApp />);
+    const button = await screen.findByTestId('alternar-status-btn-ag-1');
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(salvarEstadoMock).toHaveBeenCalledWith(
+        expect.objectContaining({ agendamentoId: 'ag-1', status: 'enviado' }),
+      ),
+    );
+    expect(await screen.findByTestId('status-badge-ag-1')).toHaveTextContent('Lembrete Enviado');
+  });
 
-    expect(mockVoltar).toHaveBeenCalledTimes(1);
+  it('filtra por status, nome e telefone', async () => {
+    render(<AdminFilaLembretesWhatsApp />);
+    expect(await screen.findByText('Mariana Silva')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/buscar por cliente/i), {
+      target: { value: 'Mariana' },
+    });
+    expect(screen.queryByText('Carlos Eduardo')).not.toBeInTheDocument();
+  });
+
+  it('persiste a edição da mensagem', async () => {
+    render(<AdminFilaLembretesWhatsApp />);
+    fireEvent.click((await screen.findAllByText(/editar mensagem/i))[0]!);
+    fireEvent.change(screen.getByLabelText(/editar mensagem de lembrete/i), {
+      target: { value: 'Mensagem personalizada' },
+    });
+    fireEvent.click(screen.getByText('Salvar'));
+    await waitFor(() =>
+      expect(salvarEstadoMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agendamentoId: 'ag-1',
+          mensagemPersonalizada: 'Mensagem personalizada',
+        }),
+      ),
+    );
+  });
+
+  it('marca todos e redefine estado persistindo as atualizações', async () => {
+    render(<AdminFilaLembretesWhatsApp />);
+    fireEvent.click(await screen.findByTestId('marcar-todos-enviados-btn'));
+    await waitFor(() => expect(salvarEstadoMock).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByTestId('redefinir-fila-btn'));
+    await waitFor(() => expect(salvarEstadoMock).toHaveBeenCalledTimes(4));
+    expect(salvarEstadoMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'pendente' }),
+    );
+  });
+
+  it('notifica o pai sobre pendências e permite voltar à agenda', async () => {
+    const mockVoltar = vi.fn();
+    const mockPendentes = vi.fn();
+    render(
+      <AdminFilaLembretesWhatsApp onVoltarAgenda={mockVoltar} onPendentesChange={mockPendentes} />,
+    );
+    fireEvent.click(await screen.findByLabelText(/voltar para a agenda/i));
+    expect(mockVoltar).toHaveBeenCalledOnce();
+    await waitFor(() => expect(mockPendentes).toHaveBeenLastCalledWith(2));
   });
 });

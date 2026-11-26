@@ -122,6 +122,28 @@ service cloud.firestore {
         && (!('atualizadoEm' in data) || data.atualizadoEm is string);
     }
 
+    function validReminderQueueItem(data, agendamentoId) {
+      let agendamentoPath = /databases/$(database)/documents/agendamentos/$(agendamentoId);
+      return exists(agendamentoPath)
+        && data.keys().hasAll([
+          'agendamentoId', 'dataHoraInicio', 'status', 'enviadoEm',
+          'mensagemPersonalizada', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'agendamentoId', 'dataHoraInicio', 'status', 'enviadoEm',
+          'mensagemPersonalizada', 'updatedAt'
+        ])
+        && data.agendamentoId == agendamentoId
+        && data.dataHoraInicio is string
+        && data.dataHoraInicio == get(agendamentoPath).data.dataHoraInicio
+        && data.status in ['pendente', 'enviado']
+        && ((data.status == 'enviado' && data.enviadoEm is string)
+          || (data.status == 'pendente' && data.enviadoEm == null))
+        && data.mensagemPersonalizada is string
+        && data.mensagemPersonalizada.size() <= 2000
+        && data.updatedAt is string;
+    }
+
     function profileMatchesBooking(data) {
       let profilePath = /databases/$(database)/documents/clientes/$(data.clienteId);
       return exists(profilePath)
@@ -382,6 +404,14 @@ service cloud.firestore {
         && request.resource.data.criadoEm == resource.data.criadoEm
         && validHorarioFixo(request.resource.data, horarioFixoId);
       allow delete: if isAdmin();
+    }
+
+    // Estado da fila de lembretes assistidos; não armazena dados pessoais do cliente.
+    match /fila_lembretes/{agendamentoId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && validReminderQueueItem(request.resource.data, agendamentoId);
+      allow delete: if false;
     }
 
     // Trilha de auditoria das operações do sistema
