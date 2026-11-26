@@ -42,7 +42,7 @@ export function ServiceDetailPage() {
     return () => unsubscribe();
   }, []);
 
-  const allServices = firestoreServices ?? [];
+  const allServices = useMemo(() => firestoreServices ?? [], [firestoreServices]);
   const service = useMemo(() => {
     return allServices.find((s) => s.id === serviceId);
   }, [allServices, serviceId]);

@@ -11,22 +11,30 @@ export const ANAMNESE_NOTIFICATION_ID = 'notif-ficha-anamnese';
 export const DEFAULT_NOTIFICATIONS: ReadonlyArray<ClientNotification> = [];
 
 export function createInitialProfileNotifications(_displayName?: string | null): ClientNotification[] {
+  void _displayName;
   return [];
 }
 export function getNotificationsStorageKey(_userUid?: string | null): string | null {
+  void _userUid;
   return null;
 }
 export function saveClientNotifications(
   _userUid: string | null | undefined,
   _notifications: ClientNotification[],
-): void {}
+): void {
+  void _userUid;
+  void _notifications;
+}
 export function initializeProfileNotifications(
   _userUid?: string | null,
   _displayName?: string | null,
 ): ClientNotification[] {
+  void _userUid;
+  void _displayName;
   return [];
 }
 export function loadClientNotifications(_userUid?: string | null): ClientNotification[] {
+  void _userUid;
   return [];
 }
 
@@ -43,6 +51,8 @@ export function addClientNotification(
   _userUid: string | null | undefined,
   _input: CreateClientNotificationInput,
 ): ClientNotification | null {
+  void _userUid;
+  void _input;
   return null;
 }
 export function markClientNotificationAsRead(
