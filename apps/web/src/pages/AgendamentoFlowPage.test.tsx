@@ -65,13 +65,15 @@ describe('AgendamentoFlowPage', () => {
       dias: CONFIGURACAO_HORARIOS_PADRAO.dias.map((dia) => ({
         ...dia,
         ativo: true,
-        turnos: [{ inicio: '09:00', fim: '18:00' }],
+        turnos: [{ inicio: '09:00', fim: '12:00' }, { inicio: '14:00', fim: '18:00' }],
       })),
     });
     vi.spyOn(horariosService, 'consultarHorariosDisponiveis').mockImplementation(async ({ duracaoMinutos = 30 }) => {
       const horarios: string[] = [];
-      for (let minutos = 9 * 60; minutos + duracaoMinutos <= 18 * 60; minutos += 30) {
-        horarios.push(`${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`);
+      for (const [inicio, fim] of [[9 * 60, 12 * 60], [14 * 60, 18 * 60]]) {
+        for (let minutos = inicio; minutos + duracaoMinutos <= fim; minutos += 30) {
+          horarios.push(`${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`);
+        }
       }
       return horarios;
     });
@@ -94,6 +96,9 @@ describe('AgendamentoFlowPage', () => {
       </MemoryRouter>,
     );
     await screen.findByText('Calendário');
+    fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
+    const slots = await screen.findAllByTestId(/^slot-hora-/);
+    fireEvent.click(slots[0]!);
     return result;
   };
 
