@@ -115,6 +115,42 @@ describe('Proteção das rotas do painel administrativo', () => {
       expect(screen.getByTestId('from-path')).toHaveTextContent('/admin/horarios');
     });
 
+    it('impede acesso direto por URL à gestão de bloqueios e clientes fixos', async () => {
+      const authValue = createMockAuthContext({ currentUser: null, isAuthReady: true });
+
+      render(
+        <AuthContext.Provider value={authValue}>
+          <MemoryRouter initialEntries={['/admin/bloqueios']}>
+            <Routes>
+              <Route
+                path="/admin/bloqueios"
+                element={
+                  <ProtectedRoute>
+                    <AdminRoute resolveAccess={() => Promise.resolve('unauthenticated')}>
+                      <p>Gestão de Agenda Restrita</p>
+                    </AdminRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/login"
+                element={
+                  <div>
+                    <h1>Tela de Login</h1>
+                    <LocationTracker />
+                  </div>
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>,
+      );
+
+      expect(await screen.findByRole('heading', { name: 'Tela de Login' })).toBeInTheDocument();
+      expect(screen.queryByText('Gestão de Agenda Restrita')).not.toBeInTheDocument();
+      expect(screen.getByTestId('from-path')).toHaveTextContent('/admin/bloqueios');
+    });
+
     it('impede acesso direto por URL a /admin/clientes/:clientId', async () => {
       const authValue = createMockAuthContext({
         currentUser: null,

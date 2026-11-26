@@ -32,6 +32,96 @@ service cloud.firestore {
       );
     }
 
+    function isValidAgendaTime(value) {
+      return value is string && value.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    function isValidAgendaDate(value) {
+      return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function validBloqueio(data, documentId) {
+      let camposPermitidos = [
+        'id', 'tipo', 'data', 'diaSemana', 'horaInicio', 'horaFim', 'diaInteiro',
+        'frequencia', 'dataInicio', 'dataFim', 'motivo', 'profissionalId', 'ativo',
+        'criadoPor', 'criadoEm', 'atualizadoEm'
+      ];
+      let baseValida = data.keys().hasAll([
+          'id', 'tipo', 'horaInicio', 'horaFim', 'motivo', 'profissionalId',
+          'ativo', 'criadoPor', 'criadoEm'
+        ])
+        && data.keys().hasOnly(camposPermitidos)
+        && data.id == documentId
+        && data.profissionalId is string
+        && data.ativo == true
+        && data.criadoPor is string
+        && data.criadoEm is string
+        && data.motivo is string
+        && data.motivo.size() > 0
+        && data.motivo.size() <= 200
+        && isValidAgendaTime(data.horaInicio)
+        && isValidAgendaTime(data.horaFim);
+
+      return baseValida && (
+        (data.tipo == 'unico'
+          && data.keys().hasAll(['data', 'diaInteiro'])
+          && isValidAgendaDate(data.data)
+          && data.diaInteiro is bool
+          && (data.diaInteiro == true || data.horaInicio < data.horaFim))
+        ||
+        (data.tipo == 'recorrente'
+          && data.keys().hasAll(['diaSemana', 'frequencia'])
+          && data.diaSemana is int
+          && data.diaSemana >= 0
+          && data.diaSemana <= 6
+          && data.horaInicio < data.horaFim
+          && data.frequencia in ['semanal', 'quinzenal']
+          && (!('dataInicio' in data) || isValidAgendaDate(data.dataInicio))
+          && (!('dataFim' in data) || isValidAgendaDate(data.dataFim))
+          && (!('dataInicio' in data) || !('dataFim' in data) || data.dataInicio <= data.dataFim))
+      );
+    }
+
+    function validHorarioFixo(data, documentId) {
+      let perfilCliente = /databases/$(database)/documents/clientes/$(data.clienteId);
+      let camposPermitidos = [
+        'id', 'clienteId', 'clienteNome', 'clienteTelefone', 'clienteEmail', 'servicoId',
+        'servicoNome', 'profissionalId', 'diaSemana', 'horaInicio', 'horaFim', 'frequencia',
+        'dataInicio', 'dataFim', 'observacoes', 'ativo', 'criadoPor', 'criadoEm', 'atualizadoEm'
+      ];
+      return data.keys().hasAll([
+          'id', 'clienteId', 'clienteNome', 'profissionalId', 'diaSemana', 'horaInicio',
+          'horaFim', 'frequencia', 'dataInicio', 'ativo', 'criadoPor', 'criadoEm'
+        ])
+        && data.keys().hasOnly(camposPermitidos)
+        && data.id == documentId
+        && data.clienteId is string
+        && data.clienteNome is string
+        && data.clienteNome.size() > 0
+        && exists(perfilCliente)
+        && get(perfilCliente).data.nome == data.clienteNome
+        && (!('clienteEmail' in data)
+          || ('email' in get(perfilCliente).data && get(perfilCliente).data.email == data.clienteEmail))
+        && (!('clienteTelefone' in data)
+          || ('telefone' in get(perfilCliente).data && get(perfilCliente).data.telefone == data.clienteTelefone))
+        && data.profissionalId is string
+        && data.diaSemana is int
+        && data.diaSemana >= 0
+        && data.diaSemana <= 6
+        && isValidAgendaTime(data.horaInicio)
+        && isValidAgendaTime(data.horaFim)
+        && data.horaInicio < data.horaFim
+        && data.frequencia in ['semanal', 'quinzenal']
+        && isValidAgendaDate(data.dataInicio)
+        && (!('dataFim' in data) || isValidAgendaDate(data.dataFim))
+        && (!('dataFim' in data) || data.dataInicio <= data.dataFim)
+        && (!('observacoes' in data) || (data.observacoes is string && data.observacoes.size() <= 300))
+        && data.ativo is bool
+        && data.criadoPor is string
+        && data.criadoEm is string
+        && (!('atualizadoEm' in data) || data.atualizadoEm is string);
+    }
+
     function profileMatchesBooking(data) {
       let profilePath = /databases/$(database)/documents/clientes/$(data.clienteId);
       return exists(profilePath)
@@ -261,19 +351,37 @@ service cloud.firestore {
     }
 
     // Bloqueios de agenda da clínica (únicos e recorrentes)
-    // Leitura pública/autenticada liberada para consulta de horários disponíveis
-    // Escrita bloqueada no client-side: gerenciamento exclusivo via Cloud Functions pela administradora
+    // A leitura é pública para cálculo de disponibilidade; gravações são validadas e restritas a admins.
     match /bloqueios_agenda/{bloqueioId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if isAdmin()
+        && request.resource.data.criadoPor == request.auth.uid
+        && validBloqueio(request.resource.data, bloqueioId);
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ativo', 'atualizadoEm'])
+        && request.resource.data.ativo is bool
+        && (!('atualizadoEm' in request.resource.data) || request.resource.data.atualizadoEm is string);
+      allow delete: if isAdmin();
     }
 
     // Horários fixos de clientes da clínica (reservas semanais e quinzenais)
-    // Leitura restrita à administradora ou ao cliente titular do horário fixo
-    // Escrita bloqueada no client-side: gerenciamento exclusivo via Cloud Functions pela administradora
+    // Leitura pelo cliente titular ou admin; gravações e gestão são restritas a admins e validadas.
     match /horarios_fixos/{horarioFixoId} {
       allow read: if isAdmin() || isDocOwner(resource.data);
-      allow write: if false;
+      allow create: if isAdmin()
+        && request.resource.data.criadoPor == request.auth.uid
+        && validHorarioFixo(request.resource.data, horarioFixoId);
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'diaSemana', 'horaInicio', 'horaFim', 'frequencia', 'servicoId', 'servicoNome',
+          'dataInicio', 'dataFim', 'observacoes', 'ativo', 'atualizadoEm'
+        ])
+        && request.resource.data.clienteId == resource.data.clienteId
+        && request.resource.data.clienteNome == resource.data.clienteNome
+        && request.resource.data.criadoPor == resource.data.criadoPor
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && validHorarioFixo(request.resource.data, horarioFixoId);
+      allow delete: if isAdmin();
     }
 
     // Trilha de auditoria das operações do sistema

@@ -13,6 +13,7 @@ import { NotificationsPage } from '@/pages/NotificationsPage';
 import { FichaAnamnesePage } from '@/pages/FichaAnamnesePage';
 import { AdminClientProfilePage } from '@/pages/AdminClientProfilePage';
 import { AdminHorariosPage } from '@/pages/AdminHorariosPage';
+import { AdminAgendaBloqueiosPage } from '@/pages/AdminAgendaBloqueiosPage';
 import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
 import { AdminRoute } from './AdminRoute';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -116,6 +117,16 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <AdminRoute>
           <AdminHorariosPage />
+        </AdminRoute>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/bloqueios',
+    element: (
+      <ProtectedRoute>
+        <AdminRoute>
+          <AdminAgendaBloqueiosPage />
         </AdminRoute>
       </ProtectedRoute>
     ),

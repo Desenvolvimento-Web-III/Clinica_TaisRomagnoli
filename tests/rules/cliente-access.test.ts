@@ -28,6 +28,7 @@ describe('Isolamento de dados, agendamento e ficha do cliente', () => {
 
   describe('Dados cadastrais (/clientes/{uid} e /usuarios/{uid})', () => {
     it('permite que o cliente consulte e crie seus próprios dados cadastrais', async () => {
+      await testEnvironment.clearFirestore();
       const clientDb = testEnvironment
         .authenticatedContext('cliente-1', { role: 'cliente' })
         .firestore();
