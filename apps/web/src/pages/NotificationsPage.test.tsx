@@ -2,7 +2,8 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NotificationsPage } from './NotificationsPage';
-import { initializeProfileNotifications } from '@/features/notifications/notifications-store';
+
+const remoteNotificationState = vi.hoisted(() => ({ items: [] as Array<Record<string, unknown>> }));
 
 const mockUseOptionalAuth = vi.fn();
 
@@ -12,16 +13,28 @@ vi.mock('@/features/auth/auth-context', () => ({
 }));
 
 vi.mock('@/services/notificacoes-service', () => ({
-  buscarNotificacoesRemotas: vi.fn().mockResolvedValue([]),
-  marcarNotificacaoLidaBackend: vi.fn().mockResolvedValue({ sucesso: true }),
+  buscarNotificacoesRemotas: vi.fn(async () => remoteNotificationState.items.map((item) => ({ ...item }))),
+  marcarNotificacaoLidaBackend: vi.fn(async (id: string) => {
+    remoteNotificationState.items = remoteNotificationState.items.map((item) =>
+      item.id === id ? { ...item, lida: true } : item,
+    );
+    return { sucesso: true };
+  }),
   mesclarNotificacoes: (locais: unknown[], remotas: unknown[]) => [...remotas, ...locais],
-  ouvirNotificacoesClienteEmTempoReal: vi.fn().mockReturnValue(() => {}),
+  ouvirNotificacoesClienteEmTempoReal: vi.fn((_uid: string, callback: (items: Array<Record<string, unknown>>) => void) => {
+    callback(remoteNotificationState.items);
+    return () => {};
+  }),
 }));
 
 describe('NotificationsPage', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    remoteNotificationState.items = [
+      { id: 'welcome', tipo: 'sistema', titulo: 'Bem-vindo(a) à Clínica!', mensagem: 'Sua conta está pronta.', lida: false, createdAt: '2026-11-25T10:00:00.000Z' },
+      { id: 'anamnesis', tipo: 'sistema', titulo: 'Preencha sua Ficha de Anamnese', mensagem: 'Complete sua ficha antes do atendimento.', lida: false, createdAt: '2026-11-25T09:00:00.000Z', link: '/anamnese' },
+    ];
   });
 
   it('redireciona para /login se o usuario nao estiver autenticado', async () => {
@@ -43,14 +56,12 @@ describe('NotificationsPage', () => {
     expect(await screen.findByText('Página de Login')).toBeInTheDocument();
   });
 
-  it('exibe para um novo perfil apenas as notificacoes iniciais de boas-vindas e ficha de anamnese', async () => {
+  it('exibe as notificações recebidas do serviço remoto', async () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'user-123', displayName: 'Lucas Lima', email: 'lucas@exemplo.com' },
       isAuthReady: true,
       logout: vi.fn(),
     });
-
-    initializeProfileNotifications('user-123', 'Lucas Lima');
 
     render(
       <MemoryRouter initialEntries={['/notificacoes']}>

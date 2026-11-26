@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
+import { INITIAL_ANAMNESE_DATA, avaliarBloqueioContraindicacao, calcularPontosAtencao } from '@clinica/shared';
 import * as anamneseService from '@/services/anamnese-service';
 import { FichaAnamnesePage } from './FichaAnamnesePage';
 
@@ -35,6 +35,26 @@ describe('FichaAnamnesePage', () => {
       },
       isAuthReady: true,
       logout: vi.fn(),
+    });
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({ sucesso: true });
+    vi.spyOn(anamneseService, 'salvarFichaAnamneseApi').mockImplementation(async (dados, clienteId) => {
+      const record = {
+        ...dados,
+        clienteId: clienteId ?? 'client-123',
+        submittedAt: '2026-11-25T10:00:00.000Z',
+        updatedAt: '2026-11-25T10:00:00.000Z',
+        pontosAtencao: calcularPontosAtencao(dados),
+      };
+      const avaliacao = avaliarBloqueioContraindicacao(record);
+      return {
+        sucesso: true,
+        dados: {
+          ...record,
+          exigeLiberacaoMedica: avaliacao.exigeLiberacaoMedica,
+          contraindicacoes: avaliacao.contraindicacoes,
+          liberacaoMedicaAprovada: avaliacao.liberacaoMedicaAprovada,
+        },
+      };
     });
   });
 

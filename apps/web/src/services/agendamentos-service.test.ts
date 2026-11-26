@@ -89,11 +89,13 @@ describe('agendamentos-service', () => {
 
   it('getFunctionsBaseUrl respeita a configuração Firebase e só usa emuladores quando configurados', () => {
     const projectId = environment.firebase?.projectId || 'demo-clinica-local';
-    const expectedUrl =
-      environment.useFirebaseEmulators || !environment.firebase
-        ? `http://127.0.0.1:5001/${projectId}/us-central1`
-        : `https://us-central1-${projectId}.cloudfunctions.net`;
-
+    if (!environment.firebase?.projectId) {
+      expect(() => getFunctionsBaseUrl()).toThrow('Firebase não está configurado.');
+      return;
+    }
+    const expectedUrl = environment.useFirebaseEmulators
+      ? `http://127.0.0.1:5001/${projectId}/us-central1`
+      : `https://us-central1-${projectId}.cloudfunctions.net`;
     expect(getFunctionsBaseUrl()).toBe(expectedUrl);
   });
 
