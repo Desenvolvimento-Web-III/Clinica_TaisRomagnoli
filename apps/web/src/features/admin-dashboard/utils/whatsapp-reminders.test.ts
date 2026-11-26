@@ -1,20 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   formatarTelefoneWhatsapp,
   gerarMensagemLembreteWhatsapp,
   gerarLinkWhatsapp,
   filtrarLembretes,
-  carregarLembretesEnviadosStorage,
-  salvarLembretesEnviadosStorage,
-  STORAGE_KEY_LEMBRETES_ENVIADOS,
   type LembreteFilaItem,
 } from './whatsapp-reminders';
 
 describe('whatsapp-reminders utils', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
   describe('formatarTelefoneWhatsapp', () => {
     it('formata número brasileiro de 11 dígitos adicionando DDI 55', () => {
       expect(formatarTelefoneWhatsapp('(11) 98765-4321')).toBe('5511987654321');
@@ -141,21 +134,6 @@ describe('whatsapp-reminders utils', () => {
       const resultado = filtrarLembretes(itens, 'todos', 'Pedras Quentes');
       expect(resultado).toHaveLength(1);
       expect(resultado[0]?.servicoNome).toBe('Massagem com Pedras Quentes');
-    });
-  });
-
-  describe('armazenamento local de status', () => {
-    it('salva e recupera mapa de lembretes enviados no localStorage', () => {
-      expect(carregarLembretesEnviadosStorage()).toEqual({});
-
-      salvarLembretesEnviadosStorage({
-        'ag-1': '2026-11-25T10:00:00.000Z',
-      });
-
-      expect(carregarLembretesEnviadosStorage()).toEqual({
-        'ag-1': '2026-11-25T10:00:00.000Z',
-      });
-      expect(localStorage.getItem(STORAGE_KEY_LEMBRETES_ENVIADOS)).toBeDefined();
     });
   });
 });

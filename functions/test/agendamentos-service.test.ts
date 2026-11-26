@@ -30,6 +30,43 @@ import {
   type ServicoModel,
 } from '@clinica/shared';
 
+const CONFIGURACAO_HORARIOS_TESTE = {
+  ...CONFIGURACAO_HORARIOS_PADRAO,
+  dias: CONFIGURACAO_HORARIOS_PADRAO.dias.map((dia) =>
+    dia.dia === 4
+      ? {
+          ...dia,
+          turnos: [{ inicio: '08:00', fim: '13:00' }, { inicio: '14:00', fim: '18:00' }],
+          intervalosManutencao: [],
+        }
+      : dia,
+  ),
+};
+
+function solicitarAgendamentoComConfigTeste(
+  ...args: Parameters<typeof solicitarNovoAgendamento>
+): ReturnType<typeof solicitarNovoAgendamento> {
+  const parametros = [...args];
+  parametros[7] ??= CONFIGURACAO_HORARIOS_TESTE;
+  return solicitarNovoAgendamento(...parametros);
+}
+
+function criarReservaComConfigTeste(
+  ...args: Parameters<typeof criarReservaTemporariaService>
+): ReturnType<typeof criarReservaTemporariaService> {
+  const parametros = [...args];
+  parametros[7] ??= CONFIGURACAO_HORARIOS_TESTE;
+  return criarReservaTemporariaService(...parametros);
+}
+
+function alterarAgendamentoComConfigTeste(
+  ...args: Parameters<typeof alterarAgendamentoExistente>
+): ReturnType<typeof alterarAgendamentoExistente> {
+  const parametros = [...args];
+  parametros[7] ??= CONFIGURACAO_HORARIOS_TESTE;
+  return alterarAgendamentoExistente(...parametros);
+}
+
 describe('Agendamentos Service (Functions Backend)', () => {
   let repo: InMemoryAgendamentosRepository;
   let notifRepo: InMemoryNotificacoesRepository;
@@ -66,7 +103,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'pix' as const,
       };
 
-      const agendamento = await solicitarNovoAgendamento(input, clienteUser, repo);
+      const agendamento = await solicitarAgendamentoComConfigTeste(input, clienteUser, repo);
 
       expect(agendamento.id).toBeDefined();
       expect(agendamento.clienteId).toBe('user-cliente-1');
@@ -92,7 +129,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         isencaoSinalAdmin: true,
       };
 
-      const agendamento = await solicitarNovoAgendamento(input, adminUser, repo);
+      const agendamento = await solicitarAgendamentoComConfigTeste(input, adminUser, repo);
 
       expect(agendamento.valorSinalEmCentavos).toBe(0);
       expect(agendamento.saldoRestanteEmCentavos).toBe(18000);
@@ -123,7 +160,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'pix' as const,
       };
 
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         input,
         adminUser,
         repo,
@@ -164,7 +201,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'pix' as const,
       };
 
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         input,
         clienteUser,
         repo,
@@ -198,7 +235,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           adminUser,
           repo,
@@ -227,7 +264,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'pix' as const,
       };
 
-      await expect(solicitarNovoAgendamento(inputDomingo, clienteUser, repo)).rejects.toThrow(
+      await expect(solicitarAgendamentoComConfigTeste(inputDomingo, clienteUser, repo)).rejects.toThrow(
         /folga cadastrada/i,
       );
     });
@@ -242,7 +279,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         dataHoraInicio: '2026-10-22T10:00:00.000Z',
         metodoPagamento: 'pix' as const,
       };
-      await solicitarNovoAgendamento(input1, clienteUser, repo);
+      await solicitarAgendamentoComConfigTeste(input1, clienteUser, repo);
 
       // Tenta agendar às 11:15 (conflita com intervalo de 30 min pós-sessão)
       const input2 = {
@@ -254,14 +291,14 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'cartao' as const,
       };
 
-      await expect(solicitarNovoAgendamento(input2, clienteUser, repo)).rejects.toThrow(
+      await expect(solicitarAgendamentoComConfigTeste(input2, clienteUser, repo)).rejects.toThrow(
         /não está disponível devido a outro agendamento ou intervalo de manutenção/i,
       );
     });
 
     it('permite novo agendamento após o término do anterior + 30 min de intervalo', async () => {
       // Primeiro agendamento: 10:00 às 11:00 (intervalo até 11:30)
-      await solicitarNovoAgendamento(
+      await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -275,7 +312,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       // Segundo agendamento às 11:30 (exatamente após os 30 min de intervalo)
-      const agendamento2 = await solicitarNovoAgendamento(
+      const agendamento2 = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-terapeutica',
           servicoNome: 'Massagem Terapêutica',
@@ -322,7 +359,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(input, clienteUser, repo, notifRepo, servicosRepo),
+        solicitarAgendamentoComConfigTeste(input, clienteUser, repo, notifRepo, servicosRepo),
       ).rejects.toThrow(/não corresponde à duração cadastrada para o serviço/i);
     });
 
@@ -338,7 +375,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -363,7 +400,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -388,7 +425,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -410,7 +447,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
   describe('cancelarAgendamentoExistente', () => {
     it('cancela agendamento com mais de 3 horas de antecedência, liberando o sinal e classificando como no_prazo', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -443,7 +480,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('cancela agendamento com menos de 3 horas de antecedência, retendo o sinal e classificando como tardio', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -475,7 +512,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('cancela agendamento no limite exato de 3 horas classificando como no_prazo', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -505,7 +542,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('impede cancelamento de agendamento já concluído ou já cancelado', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -531,7 +568,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('impede que outro cliente cancele agendamento alheio', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -558,7 +595,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
   describe('listarAgendamentos', () => {
     it('retorna apenas os agendamentos do cliente solicitante', async () => {
-      await solicitarNovoAgendamento(
+      await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -579,7 +616,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
   describe('Integração com Notificações Internas', () => {
     it('gera notificação interna de confirmação ao solicitar novo agendamento', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -601,7 +638,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('gera notificação interna de cancelamento ao cancelar agendamento', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -637,7 +674,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('gera notificação interna de cancelamento tardio com metadados e mensagem do Brandbook', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -673,7 +710,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
   describe('alterarAgendamentoExistente', () => {
     it('altera data/horário do agendamento com sucesso e dispara notificação de alteração', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'shiatsu',
           servicoNome: 'Shiatsu Express',
@@ -688,7 +725,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
       // Reagenda 24h antes do horário original
       const dataRef = new Date('2026-10-21T09:00:00.000Z');
-      const alterado = await alterarAgendamentoExistente(
+      const alterado = await alterarAgendamentoComConfigTeste(
         {
           agendamentoId: agendamento.id,
           novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
@@ -711,7 +748,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('recusa novo horário em dia fechado pela configuração da clínica', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'shiatsu',
           servicoNome: 'Shiatsu Express',
@@ -732,7 +769,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       }));
 
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento.id,
             novaDataHoraInicio: '2026-10-23T14:00:00.000Z',
@@ -749,7 +786,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('bloqueia tentativa de alteração com menos de 3 horas de antecedência pelo cliente', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'shiatsu',
           servicoNome: 'Shiatsu Express',
@@ -766,7 +803,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       const dataRef = new Date('2026-10-22T08:00:00.000Z');
 
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento.id,
             novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
@@ -782,7 +819,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('permite que a administradora altere o agendamento mesmo com menos de 3 horas', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'shiatsu',
           servicoNome: 'Shiatsu Express',
@@ -796,7 +833,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       const dataRef = new Date('2026-10-22T08:30:00.000Z'); // 30 minutos antes
-      const alterado = await alterarAgendamentoExistente(
+      const alterado = await alterarAgendamentoComConfigTeste(
         {
           agendamentoId: agendamento.id,
           novaDataHoraInicio: '2026-10-22T16:00:00.000Z',
@@ -812,7 +849,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('impede alteração para horário conflitante com outro agendamento existente', async () => {
       // Agendamento 1: 10:00 às 11:00 (mais intervalo até 11:30)
-      await solicitarNovoAgendamento(
+      await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'drenagem',
           servicoNome: 'Drenagem',
@@ -826,7 +863,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       // Agendamento 2: 14:00 às 15:00
-      const agendamento2 = await solicitarNovoAgendamento(
+      const agendamento2 = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'shiatsu',
           servicoNome: 'Shiatsu',
@@ -842,7 +879,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       // Tenta reagendar Agendamento 2 para 10:45 (colidindo com o Agendamento 1 + intervalo)
       const dataRef = new Date('2026-10-21T10:00:00.000Z');
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento2.id,
             novaDataHoraInicio: '2026-10-22T10:45:00.000Z',
@@ -877,7 +914,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
       const dataRef = new Date('2026-10-24T12:00:00.000Z');
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento.id,
             novaDataHoraInicio: '2026-10-23T15:00:00.000Z',
@@ -921,7 +958,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -963,7 +1000,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -1003,7 +1040,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'pix' as const,
       };
 
-      const ag = await solicitarNovoAgendamento(
+      const ag = await solicitarAgendamentoComConfigTeste(
         input,
         clienteUser,
         repo,
@@ -1038,7 +1075,16 @@ describe('Agendamentos Service (Functions Backend)', () => {
     };
 
     beforeEach(async () => {
-      profissionaisRepo = new InMemoryProfissionaisRepository(true);
+      profissionaisRepo = new InMemoryProfissionaisRepository();
+      await profissionaisRepo.salvar({
+        id: ID_PROFISSIONAL_PADRAO,
+        nome: 'Tais Romagnoli',
+        especialidade: 'Massoterapeuta',
+        ativo: true,
+        diasFolga: [0, 2],
+        intervaloMinutos: 30,
+        createdAt: '2026-10-01T00:00:00.000Z',
+      });
       servicosRepo = new InMemoryServicosRepository();
       await servicosRepo.salvar(servicoMassagem);
     });
@@ -1055,7 +1101,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
         profissionalNome: 'Nome Qualquer Submetido',
       };
 
-      const ag = await solicitarNovoAgendamento(
+      const ag = await solicitarAgendamentoComConfigTeste(
         input,
         clienteUser,
         repo,
@@ -1083,7 +1129,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -1119,7 +1165,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -1147,7 +1193,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           inputTerca,
           clienteUser,
           repo,
@@ -1183,7 +1229,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           input,
           clienteUser,
           repo,
@@ -1214,7 +1260,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       });
 
       // Cria agendamento inicial com Tais
-      const agOriginal = await solicitarNovoAgendamento(
+      const agOriginal = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -1235,7 +1281,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       // Reagenda para quinta-feira trocando profissional para Camila
-      const reagendado = await alterarAgendamentoExistente(
+      const reagendado = await alterarAgendamentoComConfigTeste(
         {
           agendamentoId: agOriginal.id,
           novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
@@ -1777,7 +1823,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           inputPresencial,
           adminUser,
           repo,
@@ -1795,7 +1841,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       });
 
       // Cliente comum solicitando pelo app continua podendo criar solicitação com status pendente
-      const pendenteCliente = await solicitarNovoAgendamento(
+      const pendenteCliente = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -1820,7 +1866,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('bloqueia cliente comum que tentar agendar informando clienteId de terceiro (HTTP 403)', async () => {
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           {
             clienteId: 'outro-cliente-uid',
             servicoId: 'massagem-relaxante',
@@ -1853,7 +1899,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('cria reserva temporária com tempo de expiração padrão de 15 minutos para agendamento de cliente', async () => {
       const dataRef = new Date('2026-11-25T10:00:00.000Z');
-      const agendamento = await criarReservaTemporariaService(
+      const agendamento = await criarReservaComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -1885,7 +1931,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('permite customizar o tempo de retenção da reserva temporária', async () => {
       const dataRef = new Date('2026-11-25T10:00:00.000Z');
-      const agendamento = await criarReservaTemporariaService(
+      const agendamento = await criarReservaComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -1912,7 +1958,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('bloqueia outro cliente de agendar no mesmo horário enquanto a reserva temporária estiver ativa', async () => {
       const dataRef = new Date('2026-11-25T10:00:00.000Z');
-      await solicitarNovoAgendamento(
+      await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -1944,7 +1990,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       const dataTentativa = new Date('2026-11-25T10:05:00.000Z');
 
       await expect(
-        solicitarNovoAgendamento(
+        solicitarAgendamentoComConfigTeste(
           {
             servicoId: 'drenagem-linfatica',
             servicoNome: 'Drenagem Linfática',
@@ -1971,7 +2017,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('libera o horário para novo agendamento após a expiração da reserva temporária', async () => {
       const dataCriacao = new Date('2026-11-25T10:00:00.000Z');
-      await solicitarNovoAgendamento(
+      await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -2003,7 +2049,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       // Tentativa 16 minutos depois (reserva temporária já expirou)
       const dataTentativa = new Date('2026-11-25T10:16:00.000Z');
 
-      const novoAgendamento = await solicitarNovoAgendamento(
+      const novoAgendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'drenagem-linfatica',
           servicoNome: 'Drenagem Linfática',
@@ -2031,7 +2077,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
     it('expirarReservasTemporariasService cancela agendamentos com reserva pendente expirada', async () => {
       const dataCriacao = new Date('2026-11-25T10:00:00.000Z');
-      const ag1 = await solicitarNovoAgendamento(
+      const ag1 = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
@@ -2054,7 +2100,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       // Agendamento presencial confirmado (não deve ser cancelado)
-      const agConfirmado = await solicitarNovoAgendamento(
+      const agConfirmado = await solicitarAgendamentoComConfigTeste(
         {
           clienteId: 'cliente-presencial',
           clienteNome: 'Cliente Presencial',

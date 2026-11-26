@@ -18,7 +18,6 @@ import { AdminServicesList } from '@/features/services/components/AdminServicesL
 import {
   saveServiceToFirestore,
   subscribeToServicesFromFirestore,
-  syncMissingDefaultServicesToFirestore,
   toggleServiceStatus,
   type UpsertServiceInput,
 } from '@/features/services/service-firestore-repository';
@@ -38,10 +37,7 @@ import {
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { buscarClientesAdmin } from '@/services/clientes-admin-service';
-import {
-  consultarPainelIndicadoresAdmin,
-  PAINEL_INDICADORES_PADRAO,
-} from '@/services/indicadores-admin-service';
+import { consultarPainelIndicadoresAdmin } from '@/services/indicadores-admin-service';
 import type { PainelIndicadores } from '@clinica/shared';
 import type { AdminClientListItem } from '@/features/admin-dashboard/types';
 
@@ -84,113 +80,6 @@ function mapSharedAgendamentoToAgendaItem(item: SharedAgendamento): AgendamentoA
     sinalPago: !item.sinalIsento && item.valorSinalEmCentavos > 0,
   };
 }
-
-const SERVICOS_INICIAIS: Service[] = [
-  {
-    id: 'srv-1',
-    name: 'Massagem Relaxante',
-    description: 'Massagem suave com movimentos fluidos para alívio de estresse.',
-    durationMinutes: 60,
-    priceInCents: 15000,
-    sinalPercentual: 30,
-    sinalInCents: 4500,
-    category: 'Corporal',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Massagem Relaxante',
-  },
-  {
-    id: 'srv-2',
-    name: 'Massagem com Pedras Quentes',
-    description: 'Termoterapia com pedras vulcânicas aquecidas para relaxamento profundo.',
-    durationMinutes: 90,
-    priceInCents: 20000,
-    sinalPercentual: 30,
-    sinalInCents: 6000,
-    category: 'Termoterapia',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Massagem com Pedras Quentes',
-  },
-  {
-    id: 'srv-3',
-    name: 'Drenagem Linfática',
-    description: 'Massagem manual suave para diminuir edemas e retenção de líquidos.',
-    durationMinutes: 60,
-    priceInCents: 16000,
-    sinalPercentual: 30,
-    sinalInCents: 4800,
-    category: 'Estética/Saúde',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Drenagem Linfática',
-  },
-  {
-    id: 'srv-4',
-    name: 'Liberação Miofascial',
-    description: 'Terapia manual profunda para alívio de pontos-gatilho e tensões.',
-    durationMinutes: 60,
-    priceInCents: 17000,
-    sinalPercentual: 30,
-    sinalInCents: 5100,
-    category: 'Terapêutica',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Liberação Miofascial',
-  },
-  {
-    id: 'srv-5',
-    name: 'Aromaterapia',
-    description: 'Aplicação de óleos essenciais terapêuticos com massagem suave.',
-    durationMinutes: 60,
-    priceInCents: 14000,
-    sinalPercentual: 30,
-    sinalInCents: 4200,
-    category: 'Holística',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Aromaterapia',
-  },
-  {
-    id: 'srv-6',
-    name: 'Reflexologia Podal',
-    description: 'Pressão em zonas reflexas dos pés para equilíbrio do organismo.',
-    durationMinutes: 45,
-    priceInCents: 12000,
-    sinalPercentual: 30,
-    sinalInCents: 3600,
-    category: 'Podal',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Reflexologia Podal',
-  },
-  {
-    id: 'srv-7',
-    name: 'Shiatsu Tradicional',
-    description: 'Terapia oriental de pressão digital ao longo dos meridianos corporais.',
-    durationMinutes: 60,
-    priceInCents: 18000,
-    sinalPercentual: 30,
-    sinalInCents: 5400,
-    category: 'Oriental',
-    active: true,
-    imageSrc: '',
-    imageAlt: 'Shiatsu Tradicional',
-  },
-  {
-    id: 'srv-8',
-    name: 'Reiki & Terapia Energética',
-    description: 'Harmonização bioenergética suave para equilíbrio e serenidade.',
-    durationMinutes: 50,
-    priceInCents: 13000,
-    sinalPercentual: 30,
-    sinalInCents: 3900,
-    category: 'Energética',
-    active: false,
-    imageSrc: '',
-    imageAlt: 'Reiki & Terapia Energética',
-  },
-];
 
 const VALID_SECTIONS: AdminSection[] = [
   'agenda',
@@ -256,7 +145,7 @@ export function AdminDashboardPage() {
   } | null>(null);
   const [presencialClienteId, setPresencialClienteId] = useState('');
   const [presencialServicoId, setPresencialServicoId] = useState(
-    SERVICOS_INICIAIS[0]?.id ?? 'srv-1',
+    '',
   );
   const [presencialDataHora, setPresencialDataHora] = useState(obterDataHoraPresencialInicial);
   const [presencialIsencaoSinal, setPresencialIsencaoSinal] = useState(true);
@@ -271,8 +160,7 @@ export function AdminDashboardPage() {
   const [erroClientes, setErroClientes] = useState<string | null>(null);
 
   // Estados dos 8 Indicadores do Painel Administrativo
-  const [painelIndicadores, setPainelIndicadores] =
-    useState<PainelIndicadores>(PAINEL_INDICADORES_PADRAO);
+  const [painelIndicadores, setPainelIndicadores] = useState<PainelIndicadores | null>(null);
 
   const [lembretesPendentesCount, setLembretesPendentesCount] = useState(0);
 
@@ -386,7 +274,7 @@ export function AdminDashboardPage() {
   }, [activeSection]);
 
   // Estados de Gerenciamento de Serviços
-  const [servicos, setServicos] = useState<Service[]>(SERVICOS_INICIAIS);
+  const [servicos, setServicos] = useState<Service[]>([]);
   const [modalServicoAberto, setModalServicoAberto] = useState(false);
   const [servicoParaEdicao, setServicoParaEdicao] = useState<Service | null>(null);
   const [feedbackServico, setFeedbackServico] = useState<{
@@ -395,13 +283,9 @@ export function AdminDashboardPage() {
   } | null>(null);
 
   useEffect(() => {
-    void syncMissingDefaultServicesToFirestore();
-
     const unsubscribe = subscribeToServicesFromFirestore(
       (novosServicos) => {
-        if (novosServicos && novosServicos.length > 0) {
-          setServicos(novosServicos);
-        }
+        setServicos(novosServicos);
       },
       undefined,
       false,
@@ -579,8 +463,11 @@ export function AdminDashboardPage() {
       return;
     }
 
-    const servicoSelecionado =
-      servicos.find((s) => s.id === presencialServicoId) ?? servicos[0] ?? SERVICOS_INICIAIS[0]!;
+    const servicoSelecionado = servicos.find((s) => s.id === presencialServicoId) ?? servicos[0];
+    if (!servicoSelecionado) {
+      setPresencialErro('Nenhum serviço está cadastrado no catálogo.');
+      return;
+    }
     const dataSelecionada = new Date(presencialDataHora);
     const dataHoraNormalizada = Number.isNaN(dataSelecionada.getTime())
       ? ''
@@ -866,7 +753,9 @@ export function AdminDashboardPage() {
             ) : (
               <>
                 {/* Indicadores Operacionais */}
-                <AdminIndicadoresOperacionais indicadores={painelIndicadores.indicadores} />
+                {painelIndicadores && (
+                  <AdminIndicadoresOperacionais indicadores={painelIndicadores.indicadores} />
+                )}
 
                 {/* Aviso de Regra de Negócio: Presencial sem sinal */}
                 <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-brand-soft)]/50 p-4 text-xs text-[var(--color-brand-deep)] sm:text-sm">
@@ -1131,7 +1020,8 @@ export function AdminDashboardPage() {
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {painelIndicadores ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {/* Indicador 1 */}
               <div
                 className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 shadow-sm"
@@ -1273,7 +1163,12 @@ export function AdminDashboardPage() {
                     : painelIndicadores.indicadores.servicoMaisAgendado.detalhe}
                 </p>
               </div>
-            </div>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-[var(--color-border-default)] p-4 text-sm text-[var(--color-text-secondary)]">
+                Indicadores indisponíveis. Verifique a conexão e a configuração da clínica.
+              </p>
+            )}
 
             <AdminRelatoriosSection />
           </section>

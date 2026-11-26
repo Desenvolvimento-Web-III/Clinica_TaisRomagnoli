@@ -1,5 +1,4 @@
 import {
-  DEFAULT_CLINIC_SETTINGS,
   clinicSettingsSchema,
   type Agendamento,
   type ClinicSettings,
@@ -71,9 +70,10 @@ async function carregarConfiguracoes(): Promise<ClinicSettings> {
   if (!db) throw new Error('Firebase não está configurado.');
   const snapshot = await getDoc(doc(db, SETTINGS_COLLECTION, SETTINGS_DOCUMENT));
   const dados = snapshot.exists() ? snapshot.data() : undefined;
-  if (!dados) return DEFAULT_CLINIC_SETTINGS;
+  if (!dados) throw new Error('As configurações da clínica ainda não foram cadastradas.');
   const resultado = clinicSettingsSchema.safeParse(dados);
-  return resultado.success ? resultado.data : DEFAULT_CLINIC_SETTINGS;
+  if (!resultado.success) throw new Error('As configurações da clínica estão inválidas.');
+  return resultado.data;
 }
 
 function mapearPerfil(snapshot: QueryDocumentSnapshot): PerfilLembrete {
@@ -208,8 +208,8 @@ export async function gerarFilaLembretesAdmin(agora = new Date()): Promise<Lembr
 
   try {
     const configuracoes = await carregarConfiguracoes();
-    const lembretes = configuracoes.lembretes ?? DEFAULT_CLINIC_SETTINGS.lembretes!;
-    if (!lembretes.lembreteAtivo || !lembretes.canais.whatsapp) return [];
+    const lembretes = configuracoes.lembretes;
+    if (!lembretes?.lembreteAtivo || !lembretes.canais.whatsapp) return [];
 
     const inicio = agora.toISOString();
     const fim = new Date(

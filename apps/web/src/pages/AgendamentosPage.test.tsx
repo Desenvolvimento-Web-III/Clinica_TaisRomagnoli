@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { MOCK_AGENDAMENTOS } from '@/features/agendamentos/data/mockAgendamentos';
-import { saveAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import { vi } from 'vitest';
+import type { Agendamento } from '@/features/agendamentos/types/agendamento';
+import * as agendamentosService from '@/services/agendamentos-service';
 import { AgendamentosPage } from './AgendamentosPage';
 
 const mockUseOptionalAuth = vi.fn();
@@ -11,114 +12,147 @@ vi.mock('@/features/auth/auth-context', () => ({
   useOptionalAuth: () => mockUseOptionalAuth(),
 }));
 
+const agendamentosTeste: Agendamento[] = [
+  {
+    id: 'ag-101',
+    clienteId: 'user-1',
+    servicoId: 'serv-1',
+    servicoNome: 'Massagem Relaxante com Óleos',
+    servicoCategoria: 'Relaxamento',
+    duracaoMinutos: 60,
+    profissionalId: 'prof-1',
+    profissionalNome: 'Tais Romagnoli',
+    dataHoraIso: '2026-10-15T14:00:00.000Z',
+    dataFormatada: 'Qui, 15 de Outubro',
+    horarioFormatado: '14:00 - 15:00',
+    valorTotal: 150,
+    sinalPago: 45,
+    status: 'confirmado',
+  },
+  {
+    id: 'ag-102',
+    clienteId: 'user-1',
+    servicoId: 'serv-2',
+    servicoNome: 'Drenagem Linfática Corporal',
+    servicoCategoria: 'Corporal',
+    duracaoMinutos: 60,
+    profissionalId: 'prof-1',
+    profissionalNome: 'Tais Romagnoli',
+    dataHoraIso: '2026-10-16T10:00:00.000Z',
+    dataFormatada: 'Sex, 16 de Outubro',
+    horarioFormatado: '10:00 - 11:00',
+    valorTotal: 160,
+    sinalPago: 48,
+    status: 'pendente',
+  },
+];
+
 describe('AgendamentosPage', () => {
   beforeEach(() => {
-    localStorage.clear();
+    vi.restoreAllMocks();
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'user-1', displayName: 'Maria Silva' },
       isAuthReady: true,
       logout: vi.fn(),
     });
+    vi.spyOn(agendamentosService, 'carregarAgendamentos').mockResolvedValue({
+      agendamentos: [],
+      sincronizadoComBackend: true,
+    });
+    vi.spyOn(agendamentosService, 'cancelarAgendamentoBackend').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        id: 'ag-101',
+        clienteId: 'user-1',
+        clienteNome: 'Maria Silva',
+        servicoId: 'serv-1',
+        servicoNome: 'Massagem Relaxante com Óleos',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 15000,
+        valorSinalEmCentavos: 4500,
+        saldoRestanteEmCentavos: 10500,
+        dataHoraInicio: '2026-10-15T14:00:00.000Z',
+        dataHoraFim: '2026-10-15T15:00:00.000Z',
+        intervaloAposMinutos: 30,
+        profissionalId: 'prof-1',
+        profissionalNome: 'Tais Romagnoli',
+        status: 'cancelado',
+        metodoPagamento: 'pix',
+        origem: 'app_cliente',
+        sinalIsento: false,
+        createdAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-01T10:00:00.000Z',
+      },
+    });
   });
 
-  const renderPage = () => render(<AgendamentosPage />, { wrapper: MemoryRouter });
+  const renderPage = async () => {
+    render(<AgendamentosPage />, { wrapper: MemoryRouter });
+    await screen.findByRole('heading', { name: 'Meus Agendamentos' });
+  };
 
-  it('exibe lista vazia e botão de login quando não há usuário autenticado', () => {
-    // Mesmo que existam agendamentos salvos de um usuário no navegador
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
+  it('exibe estado vazio e botão de login quando não há usuário autenticado', async () => {
+    mockUseOptionalAuth.mockReturnValue({ currentUser: null, isAuthReady: true, logout: vi.fn() });
+    await renderPage();
 
-    mockUseOptionalAuth.mockReturnValue({
-      currentUser: null,
-      isAuthReady: true,
-      logout: vi.fn(),
-    });
-
-    renderPage();
-
-    expect(screen.getByRole('heading', { name: 'Meus Agendamentos' })).toBeInTheDocument();
     expect(screen.getByTestId('empty-agendamentos-state')).toBeInTheDocument();
     expect(screen.queryByTestId('agendamentos-list')).not.toBeInTheDocument();
-    expect(screen.queryByText('Massagem Relaxante com Óleos')).not.toBeInTheDocument();
     expect(
       screen.getByText('Entre na sua conta para visualizar e acompanhar os seus agendamentos.'),
     ).toBeInTheDocument();
     expect(screen.getByTestId('empty-login-cta')).toBeInTheDocument();
+    expect(agendamentosService.carregarAgendamentos).toHaveBeenCalledWith(null);
   });
 
-  it('exibe lista vazia para usuário autenticado que ainda não possui agendamentos', () => {
-    renderPage();
+  it('exibe estado vazio para usuário sem agendamentos retornados pelo backend', async () => {
+    await renderPage();
 
     expect(screen.getByTestId('empty-agendamentos-state')).toBeInTheDocument();
     expect(screen.queryByTestId('agendamentos-list')).not.toBeInTheDocument();
     expect(
       screen.getByText('Não existem atendimentos nesta categoria no momento.'),
     ).toBeInTheDocument();
+    expect(agendamentosService.carregarAgendamentos).toHaveBeenCalledWith('user-1');
   });
 
-  it('não exibe agendamentos pertencentes a outro usuário', () => {
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'outro-usuario');
+  it('renderiza e filtra os agendamentos recebidos do backend', async () => {
+    vi.mocked(agendamentosService.carregarAgendamentos).mockResolvedValue({
+      agendamentos: agendamentosTeste,
+      sincronizadoComBackend: true,
+    });
+    await renderPage();
 
-    renderPage();
-
-    expect(screen.getByTestId('empty-agendamentos-state')).toBeInTheDocument();
-    expect(screen.queryByText('Massagem Relaxante com Óleos')).not.toBeInTheDocument();
-  });
-
-  it('renderiza o título da página e a lista de agendamentos do cliente autenticado', () => {
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    renderPage();
-
-    expect(screen.getByRole('heading', { name: 'Meus Agendamentos' })).toBeInTheDocument();
     expect(screen.getByTestId('agendamentos-list')).toBeInTheDocument();
     expect(screen.getByText('Massagem Relaxante com Óleos')).toBeInTheDocument();
     expect(screen.getByText('Drenagem Linfática Corporal')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument();
     expect(screen.getAllByText('Maria Silva')).not.toHaveLength(0);
-  });
 
-  it('filtra agendamentos ao selecionar a aba de status', () => {
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    renderPage();
-
-    // Clica na aba 'Confirmados'
-    const tabConfirmados = screen.getByTestId('tab-confirmado');
-    fireEvent.click(tabConfirmados);
-
+    fireEvent.click(screen.getByTestId('tab-confirmado'));
     expect(screen.getByText('Massagem Relaxante com Óleos')).toBeInTheDocument();
     expect(screen.queryByText('Drenagem Linfática Corporal')).not.toBeInTheDocument();
 
-    // Clica na aba 'Pendentes'
-    const tabPendentes = screen.getByTestId('tab-pendente');
-    fireEvent.click(tabPendentes);
-
+    fireEvent.click(screen.getByTestId('tab-pendente'));
     expect(screen.getByText('Drenagem Linfática Corporal')).toBeInTheDocument();
     expect(screen.queryByText('Massagem Relaxante com Óleos')).not.toBeInTheDocument();
   });
 
-  it('abre o modal de cancelamento e altera o status após confirmação', () => {
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    renderPage();
+  it('abre cancelamento e envia a solicitação ao backend', async () => {
+    vi.mocked(agendamentosService.carregarAgendamentos).mockResolvedValue({
+      agendamentos: agendamentosTeste,
+      sincronizadoComBackend: true,
+    });
+    await renderPage();
 
-    // Clica no primeiro botão de Cancelar (Massagem Relaxante com Óleos)
-    const botoesCancelar = screen.getAllByRole('button', { name: 'Cancelar' });
-    const primeiroBotao = botoesCancelar[0];
-    expect(primeiroBotao).toBeDefined();
-    if (primeiroBotao) {
-      fireEvent.click(primeiroBotao);
-    }
-
-    // Modal deve estar visível
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancelar' })[0]!);
     expect(screen.getByTestId('cancel-modal')).toBeInTheDocument();
     expect(screen.getByText('Atenção às regras de cancelamento:')).toBeInTheDocument();
 
-    // Confirma cancelamento
-    const botaoConfirmarModal = screen.getByTestId('confirm-cancel-button');
-    fireEvent.click(botaoConfirmarModal);
-
-    // Modal deve fechar e feedback deve ser mostrado
-    expect(screen.queryByTestId('cancel-modal')).not.toBeInTheDocument();
-    expect(screen.getByTestId('toast-feedback')).toHaveTextContent(
+    fireEvent.click(screen.getByTestId('confirm-cancel-button'));
+    expect(await screen.findByTestId('toast-feedback')).toHaveTextContent(
       'Agendamento cancelado com sucesso.',
+    );
+    expect(agendamentosService.cancelarAgendamentoBackend).toHaveBeenCalledWith(
+      expect.objectContaining({ agendamentoId: 'ag-101' }),
     );
   });
 
@@ -131,52 +165,30 @@ describe('AgendamentosPage', () => {
         </Routes>
       </MemoryRouter>,
     );
-
-    const fab = screen.getByTestId('novo-agendamento-fab');
-    fireEvent.click(fab);
-
+    await screen.findByRole('heading', { name: 'Meus Agendamentos' });
+    fireEvent.click(screen.getByTestId('novo-agendamento-fab'));
     expect(await screen.findByText('Catálogo de serviços')).toBeInTheDocument();
   });
 
-  it('abre o modal de detalhes e exibe serviço, data, horário, pagamento, saldo e situação atual', () => {
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    renderPage();
+  it('exibe detalhes do agendamento selecionado', async () => {
+    vi.mocked(agendamentosService.carregarAgendamentos).mockResolvedValue({
+      agendamentos: agendamentosTeste,
+      sincronizadoComBackend: true,
+    });
+    await renderPage();
 
-    // Clica no botão "Ver detalhes" do primeiro agendamento (Massagem Relaxante com Óleos)
-    const botaoDetalhes = screen.getByTestId('detalhes-button-ag-101');
-    fireEvent.click(botaoDetalhes);
-
-    // Modal deve estar visível
+    fireEvent.click(screen.getByTestId('detalhes-button-ag-101'));
     const modal = screen.getByTestId('detalhes-agendamento-modal');
-    expect(modal).toBeInTheDocument();
-
     const modalScope = within(modal);
-
-    // 1. Serviço
-    expect(
-      modalScope.getByRole('heading', { name: 'Massagem Relaxante com Óleos' }),
-    ).toBeInTheDocument();
+    expect(modalScope.getByRole('heading', { name: 'Massagem Relaxante com Óleos' })).toBeInTheDocument();
     expect(modalScope.getByText('Tais Romagnoli')).toBeInTheDocument();
-
-    // 2. Data
     expect(modalScope.getByText('Qui, 15 de Outubro')).toBeInTheDocument();
-
-    // 3. Horário
     expect(modalScope.getByText('14:00 - 15:00')).toBeInTheDocument();
-
-    // 4. Pagamento (Sinal)
     expect(modalScope.getByText(/R\$ 45,00/)).toBeInTheDocument();
-
-    // 5. Saldo Restante (R$ 150 - R$ 45 = R$ 105,00)
     expect(modalScope.getByText(/R\$ 105,00/)).toBeInTheDocument();
-
-    // 6. Situação atual
     expect(modalScope.getByTestId('modal-status-badge-ag-101')).toHaveTextContent('Confirmado');
 
-    // Fecha o modal pelo botão Fechar
-    const botaoFechar = modalScope.getByRole('button', { name: 'Fechar' });
-    fireEvent.click(botaoFechar);
-
+    fireEvent.click(modalScope.getByRole('button', { name: 'Fechar' }));
     expect(screen.queryByTestId('detalhes-agendamento-modal')).not.toBeInTheDocument();
   });
 });

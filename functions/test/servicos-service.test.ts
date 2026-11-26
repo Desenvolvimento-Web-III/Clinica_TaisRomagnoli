@@ -15,7 +15,7 @@ import {
   solicitarNovoAgendamento,
   type UserContext,
 } from '../src/modules/agendamentos/agendamentos-service.js';
-import type { Agendamento, ServicoModel } from '@clinica/shared';
+import { CONFIGURACAO_HORARIOS_PADRAO, type Agendamento, type ServicoModel } from '@clinica/shared';
 
 describe('Serviços Service (Backend Functions)', () => {
   let servicosRepo: InMemoryServicosRepository;
@@ -369,7 +369,16 @@ describe('Serviços Service (Backend Functions)', () => {
       };
 
       await expect(
-        solicitarNovoAgendamento(novoInput, clienteUser, agendamentosRepo, undefined, servicosRepo),
+        solicitarNovoAgendamento(
+          novoInput,
+          clienteUser,
+          agendamentosRepo,
+          undefined,
+          servicosRepo,
+          undefined,
+          undefined,
+          CONFIGURACAO_HORARIOS_PADRAO,
+        ),
       ).rejects.toThrow('desativado');
 
       // 5. Administradora reativa o serviço
@@ -387,6 +396,9 @@ describe('Serviços Service (Backend Functions)', () => {
         agendamentosRepo,
         undefined,
         servicosRepo,
+        undefined,
+        undefined,
+        CONFIGURACAO_HORARIOS_PADRAO,
       );
       expect(agendamentoNovo.id).toBeDefined();
     });

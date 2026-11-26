@@ -2,37 +2,8 @@ import type { FiltroAuditoria, RegistroAuditoria } from '@clinica/shared';
 import { registroAuditoriaSchema } from '@clinica/shared';
 import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
 
-export const LOGS_AUDITORIA_PADRAO: RegistroAuditoria[] = [
-  {
-    id: 'audit-demo-1',
-    usuarioId: 'admin-tais',
-    usuarioEmail: 'admin@clinicataisromagnoli.com.br',
-    usuarioRole: 'admin',
-    acao: 'horarios_funcionamento.atualizados',
-    recurso: 'configuracoes',
-    recursoId: 'horarios_funcionamento',
-    dataHora: new Date().toISOString(),
-    dadosAfetados: { totalDiasConfigurados: 7 },
-    ip: '127.0.0.1',
-    userAgent: 'ClinicaWeb/1.0',
-  },
-  {
-    id: 'audit-demo-2',
-    usuarioId: 'admin-tais',
-    usuarioEmail: 'admin@clinicataisromagnoli.com.br',
-    usuarioRole: 'admin',
-    acao: 'servico.cadastrado',
-    recurso: 'servicos',
-    recursoId: 'serv-relaxante',
-    dataHora: new Date(Date.now() - 3600000).toISOString(),
-    dadosAfetados: {
-      nome: 'Massagem Relaxante',
-      precoTotalEmCentavos: 15000,
-    },
-    ip: '127.0.0.1',
-    userAgent: 'ClinicaWeb/1.0',
-  },
-];
+/** Resultado vazio usado quando ainda não existem eventos reais de auditoria. */
+export const LOGS_AUDITORIA_PADRAO: RegistroAuditoria[] = [];
 
 /**
  * Consulta a trilha de auditoria administrativa a partir da Cloud Function.
@@ -79,6 +50,5 @@ export async function obterLogsAuditoriaAdmin(
     console.warn('Não foi possível obter logs de auditoria da Cloud Function:', error);
   }
 
-  // Fallback para logs de demonstração em modo desenvolvimento/offline
-  return LOGS_AUDITORIA_PADRAO;
+  return [];
 }

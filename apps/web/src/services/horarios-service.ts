@@ -1,29 +1,25 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
-  CONFIGURACAO_HORARIOS_PADRAO,
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
-  gerarHorariosDisponiveis,
-  calcularDataHoraFim,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
 } from '@clinica/shared';
-import { getTodosAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import { getFunctionsBaseUrl } from './agendamentos-service';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
 export const HORARIOS_DOCUMENT = 'horarios_funcionamento';
 
 /**
  * Consulta os horários de funcionamento cadastrados na clínica.
- * Caso ainda não haja registro no banco ou o Firebase não esteja configurado (modo demo/smoke test),
- * retorna a configuração padrão da clínica.
+ * Lê somente a configuração persistida da clínica.
  */
 export async function buscarHorariosFuncionamento(
   professionalId?: string,
 ): Promise<HorariosFuncionamento> {
   if (!db) {
-    return CONFIGURACAO_HORARIOS_PADRAO;
+    throw new Error('Firebase não está configurado para consultar os horários.');
   }
 
   try {
@@ -43,7 +39,7 @@ export async function buscarHorariosFuncionamento(
     const snapshot = await getDoc(docRef);
 
     if (!snapshot.exists()) {
-      return CONFIGURACAO_HORARIOS_PADRAO;
+      throw new Error('A clínica ainda não cadastrou os horários de funcionamento.');
     }
 
     const data = snapshot.data();
@@ -51,13 +47,13 @@ export async function buscarHorariosFuncionamento(
 
     if (!parsed.success) {
       console.warn('Dados de horários no banco inconsistentes com o schema:', parsed.error);
-      return CONFIGURACAO_HORARIOS_PADRAO;
+      throw new Error('A configuração de horários da clínica está inválida.');
     }
 
     return parsed.data;
   } catch (error) {
     console.error('Erro ao buscar horários de funcionamento:', error);
-    return CONFIGURACAO_HORARIOS_PADRAO;
+    throw error;
   }
 }
 
@@ -78,8 +74,7 @@ export async function salvarHorariosFuncionamento(
   };
 
   if (!db) {
-    // Modo demo ou sem Firebase conectado: simula salvamento local
-    return dadosCompletos;
+    throw new Error('Firebase não está configurado para salvar os horários.');
   }
 
   const docId = dadosValidados.professionalId
@@ -93,8 +88,7 @@ export async function salvarHorariosFuncionamento(
 }
 
 /**
- * Calcula os horários a partir das configurações da clínica e dos agendamentos locais.
- * Os documentos de agendamento não são consultados por clientes porque contêm dados pessoais.
+ * Consulta a disponibilidade calculada no backend com agendamentos, bloqueios e horários fixos.
  */
 export async function consultarHorariosDisponiveis(params: {
   data: string;
@@ -102,26 +96,16 @@ export async function consultarHorariosDisponiveis(params: {
   servicoId?: string;
   profissionalId?: string;
 }): Promise<string[]> {
-  // Sem Functions, usa a configuração Firestore e o cache local do navegador.
-  const config = await buscarHorariosFuncionamento(params.profissionalId);
-  const todosAgendamentos = getTodosAgendamentosStorage();
-  const slots = gerarHorariosDisponiveis({
+  const query = new URLSearchParams({
     data: params.data,
-    duracaoMinutos: params.duracaoMinutos ?? 60,
-    intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
-    configuracaoHorarios: config,
-    agendamentosExistentes: todosAgendamentos.map((a) => {
-      const dataYmd = a.dataHoraIso.slice(0, 10);
-      const hora = a.horarioFormatado?.match(/^\d{2}:\d{2}/)?.[0] || a.dataHoraIso.slice(11, 16);
-      const inicioIso = `${dataYmd}T${hora}:00.000Z`;
-      return {
-        id: a.id,
-        dataHoraInicio: inicioIso,
-        dataHoraFim: calcularDataHoraFim(inicioIso, a.duracaoMinutos),
-        intervaloAposMinutos: 30,
-        status: a.status,
-      };
-    }),
+    profissionalId: params.profissionalId ?? 'prof-tais-romagnoli',
+    ...(params.servicoId ? { servicoId: params.servicoId } : {}),
+    ...(params.duracaoMinutos ? { duracaoMinutos: String(params.duracaoMinutos) } : {}),
   });
-  return slots.map((s) => s.horaInicio);
+  const response = await fetch(`${getFunctionsBaseUrl()}/obterHorariosDisponiveis?${query}`);
+  const body = await response.json();
+  if (!response.ok || !body?.sucesso || !Array.isArray(body.dados?.horarios)) {
+    throw new Error(body?.error || 'Não foi possível consultar a disponibilidade da agenda.');
+  }
+  return body.dados.horarios.filter((hora: unknown): hora is string => typeof hora === 'string');
 }

@@ -1,6 +1,5 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import {
-  CONFIGURACAO_HORARIOS_PADRAO,
   ID_PROFISSIONAL_PADRAO,
   validarEncaixeHorariosFuncionamento,
   verificarConflitoHorarios,
@@ -189,7 +188,7 @@ export async function calcularDisponibilidadeSlotAgenda(
     if (context.firestore) {
       config = await obterHorarios(context.firestore, profissionalId);
     } else {
-      config = CONFIGURACAO_HORARIOS_PADRAO;
+      throw new HorariosBusinessError('A configuração de horários da clínica não está disponível.', 409);
     }
   }
 

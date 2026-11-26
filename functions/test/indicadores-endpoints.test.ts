@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 
 vi.mock('firebase-admin/app', () => ({
   initializeApp: vi.fn(),
@@ -12,7 +13,14 @@ vi.mock('firebase-admin/auth', () => ({
 }));
 
 const mockFirestore = {
-  collection: vi.fn(),
+  collection: vi.fn((colName: string) => ({
+    doc: vi.fn(() => ({
+      get: vi.fn().mockResolvedValue({
+        exists: colName === 'configuracoes',
+        data: () => CONFIGURACAO_HORARIOS_PADRAO,
+      }),
+    })),
+  })),
 };
 vi.mock('firebase-admin/firestore', () => ({
   getFirestore: () => mockFirestore,
@@ -150,6 +158,16 @@ describe('obterPainelIndicadoresAdmin endpoint', () => {
 
     // Mocks do Firestore retornando coleções vazias para simulação
     mockFirestore.collection.mockImplementation((colName: string) => {
+      if (colName === 'configuracoes') {
+        return {
+          doc: () => ({
+            get: vi.fn().mockResolvedValue({
+              exists: true,
+              data: () => CONFIGURACAO_HORARIOS_PADRAO,
+            }),
+          }),
+        };
+      }
       if (colName === 'agendamentos') {
         return {
           orderBy: () => ({

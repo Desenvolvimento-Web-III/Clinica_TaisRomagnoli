@@ -8,7 +8,6 @@ import {
   saveServiceToFirestore,
   localServiceImages,
 } from './service-firestore-repository';
-import { serviceCatalog } from './catalog';
 
 // Mocks do Firestore
 const mockGetDocs = vi.fn();
@@ -73,9 +72,9 @@ describe('service-firestore-repository', () => {
       expect(imgSpa).toBe(localServiceImages['4rnoliy2iv9mlg0x9qau']);
     });
 
-    it('retorna a imagem padrão relaxante caso não encontre correspondência exata', () => {
+    it('retorna vazio quando não encontra uma imagem correspondente', () => {
       const fallback = resolveLocalServiceImage('servico-desconhecido', 'Nova Terapia Especial');
-      expect(fallback).toBe(localServiceImages['massagem-relaxante']);
+      expect(fallback).toBe('');
     });
   });
 
@@ -144,7 +143,7 @@ describe('service-firestore-repository', () => {
   });
 
   describe('mergeServicesWithDefaultCatalog', () => {
-    it('mescla serviço editado com catálogo padrão sem perder os demais serviços', () => {
+    it('mantém somente os serviços recebidos quando não há catálogo base', () => {
       const editedService = {
         id: 'massagem-desportiva',
         name: 'Massagem Desportiva Pro',
@@ -161,16 +160,15 @@ describe('service-firestore-repository', () => {
 
       const merged = mergeServicesWithDefaultCatalog([editedService]);
 
-      expect(merged.length).toBe(serviceCatalog.length);
+      expect(merged).toHaveLength(1);
       const desp = merged.find((s) => s.id === 'massagem-desportiva');
       expect(desp?.name).toBe('Massagem Desportiva Pro');
       expect(desp?.durationMinutes).toBe(75);
       expect(desp?.priceInCents).toBe(22000);
 
-      // Garante que outros serviços padrão não foram perdidos
+      // Não injeta serviços estáticos ausentes do Firestore.
       const relax = merged.find((s) => s.id === 'massagem-relaxante');
-      expect(relax).toBeDefined();
-      expect(relax?.name).toBe('Massagem Relaxante');
+      expect(relax).toBeUndefined();
     });
 
     it('adiciona novos serviços personalizados cadastrados no Firestore', () => {
@@ -190,13 +188,13 @@ describe('service-firestore-repository', () => {
 
       const merged = mergeServicesWithDefaultCatalog([customService]);
 
-      expect(merged.length).toBe(serviceCatalog.length + 1);
+      expect(merged).toHaveLength(1);
       expect(merged.some((s) => s.id === 'terapia-especial-zen')).toBe(true);
     });
   });
 
   describe('fetchServicesFromFirestore', () => {
-    it('retorna os serviços do Firestore com imagens locais e preserva os demais do catálogo padrão', async () => {
+    it('retorna somente os serviços existentes no Firestore com imagens locais', async () => {
       const fakeDb = {} as unknown as Parameters<typeof fetchServicesFromFirestore>[0];
       mockGetDocs.mockResolvedValueOnce({
         empty: false,
@@ -216,21 +214,21 @@ describe('service-firestore-repository', () => {
 
       const services = await fetchServicesFromFirestore(fakeDb);
 
-      expect(services.length).toBeGreaterThanOrEqual(serviceCatalog.length);
+      expect(services).toHaveLength(1);
       const relaxante = services.find((s) => s.id === 'massagem-relaxante');
       expect(relaxante?.name).toBe('Massagem Relaxante VIP');
       expect(relaxante?.description).toBe('Descrição personalizada do banco.');
       expect(relaxante?.durationMinutes).toBe(75);
       expect(relaxante?.imageSrc).toBe(localServiceImages['massagem-relaxante']);
 
-      // Verifica se outro serviço padrão continua existindo na lista
+      // Serviços ausentes do Firestore não são simulados pelo catálogo.
       const terapeutica = services.find((s) => s.id === 'massagem-terapeutica');
-      expect(terapeutica).toBeDefined();
+      expect(terapeutica).toBeUndefined();
     });
 
-    it('usa catálogo padrão local caso Firestore não esteja inicializado ou falhe', async () => {
+    it('retorna lista vazia caso Firestore não esteja inicializado', async () => {
       const services = await fetchServicesFromFirestore(null);
-      expect(services).toEqual(serviceCatalog);
+      expect(services).toEqual([]);
     });
   });
 

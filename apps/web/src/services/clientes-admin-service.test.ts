@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const { mockCollection, mockGetDocs, mockDb } = vi.hoisted(() => ({
+const { mockCollection, mockGetDocs, mockDoc, mockGetDoc, mockDb } = vi.hoisted(() => ({
   mockCollection: vi.fn(),
   mockGetDocs: vi.fn(),
+  mockDoc: vi.fn(),
+  mockGetDoc: vi.fn(),
   mockDb: {} as object,
 }));
 vi.mock('firebase/firestore', async (importOriginal) => {
@@ -9,6 +11,8 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   return {
     ...actual,
     collection: (...args: unknown[]) => mockCollection(...args),
+    doc: (...args: unknown[]) => mockDoc(...args),
+    getDoc: (...args: unknown[]) => mockGetDoc(...args),
     getDocs: (...args: unknown[]) => mockGetDocs(...args),
   };
 });
@@ -29,6 +33,16 @@ describe('clientes-admin-service', () => {
     vi.restoreAllMocks();
     mockCollection.mockReset().mockReturnValue('clientes-collection');
     mockGetDocs.mockReset();
+    mockDoc.mockReset().mockReturnValue('cliente-document');
+    mockGetDoc.mockReset().mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        nome: 'Mariana Silva',
+        email: 'mariana@example.com',
+        telefone: '(11) 98765-4321',
+        status: 'ativo',
+      }),
+    });
   });
 
   it('buscarClientesAdmin lê diretamente os documentos da coleção clientes', async () => {

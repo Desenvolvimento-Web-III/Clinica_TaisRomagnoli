@@ -3,7 +3,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { User } from 'firebase/auth';
 import {
-  DEFAULT_CLINIC_SETTINGS,
   INITIAL_ANAMNESE_DATA,
   MENSAGEM_BLOQUEIO_CONTRAINDICACAO,
   MENSAGEM_ERRO_DATA_PASSADA,
@@ -15,8 +14,9 @@ import * as settingsService from '@/services/clinic-settings-service';
 import * as clientesAdminService from '@/services/clientes-admin-service';
 import * as indicadoresAdminService from '@/services/indicadores-admin-service';
 import * as lembretesAdminService from '@/services/lembretes-admin-service';
+import * as serviceRepository from '@/features/services/service-firestore-repository';
+import { adminClientsFixture, clinicSettingsFixture, indicatorsFixture, servicesFixture } from '@/test/fixtures';
 import type { LembreteFilaItem } from '@/features/admin-dashboard/utils/whatsapp-reminders';
-import { CLIENTES_DEMO_INICIAIS } from '@/services/clientes-admin-service';
 import { AdminDashboardPage } from './AdminDashboardPage';
 import { useAuth } from '@/features/auth/auth-context';
 
@@ -141,10 +141,15 @@ describe('AdminDashboardPage', () => {
       agendamentosDoDiaDeTeste(),
     );
     vi.spyOn(agendamentosService, 'alterarAgendamentoBackend');
-    vi.spyOn(clientesAdminService, 'buscarClientesAdmin').mockResolvedValue(CLIENTES_DEMO_INICIAIS);
+    vi.spyOn(clientesAdminService, 'buscarClientesAdmin').mockResolvedValue(adminClientsFixture);
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
-      DEFAULT_CLINIC_SETTINGS,
+      clinicSettingsFixture,
     );
+    vi.spyOn(indicadoresAdminService, 'consultarPainelIndicadoresAdmin').mockResolvedValue(indicatorsFixture);
+    vi.spyOn(serviceRepository, 'subscribeToServicesFromFirestore').mockImplementation((onUpdate) => {
+      onUpdate(servicesFixture);
+      return () => {};
+    });
     vi.spyOn(lembretesAdminService, 'gerarFilaLembretesAdmin').mockResolvedValue([
       {
         id: 'ag-1',
@@ -371,7 +376,7 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeInTheDocument();
   });
 
-  it('permite alternar para a aba Relatórios e exibe os 8 indicadores previstos', () => {
+  it('permite alternar para a aba Relatórios e exibe os 8 indicadores previstos', async () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole('tab', { name: /relatórios/i }));
@@ -379,7 +384,7 @@ describe('AdminDashboardPage', () => {
     expect(
       screen.getByRole('heading', { name: /relatórios e indicadores administrativos/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/1\. Agendamentos do Dia/i)).toBeInTheDocument();
+    expect(await screen.findByText(/1\. Agendamentos do Dia/i)).toBeInTheDocument();
     expect(screen.getByText(/2\. Clientes Cadastrados/i)).toBeInTheDocument();
     expect(screen.getByText(/3\. Clientes Recorrentes/i)).toBeInTheDocument();
     expect(screen.getByText(/4\. Atendimentos no Mês/i)).toBeInTheDocument();
@@ -399,7 +404,7 @@ describe('AdminDashboardPage', () => {
   });
 
   it('mantém os cards financeiros e de serviços visíveis quando os indicadores são zero', async () => {
-    const painelZerado = structuredClone(indicadoresAdminService.PAINEL_INDICADORES_PADRAO);
+    const painelZerado = structuredClone(indicatorsFixture);
     painelZerado.indicadores.valoresRecebidosEPrevistos = {
       valorTotalRecebidoCentavos: 0,
       valorTotalPrevistoCentavos: 0,
@@ -421,6 +426,8 @@ describe('AdminDashboardPage', () => {
 
     renderDashboard();
     fireEvent.click(screen.getByRole('tab', { name: /relatórios/i }));
+
+    await screen.findByTestId('indicador-valores-recebidos');
 
     const cardPagamentos = screen.getByTestId('indicador-valores-recebidos');
     const cardServicos = screen.getByTestId('indicador-servico-mais-agendado');

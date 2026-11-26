@@ -1,18 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { DEFAULT_CLINIC_SETTINGS, type ClinicSettings } from '@clinica/shared';
+import type { ClinicSettings } from '@clinica/shared';
 import {
   buscarConfiguracoesGerais,
   salvarConfiguracoesGerais,
-  restaurarConfiguracoesPadrao,
 } from '@/services/clinic-settings-service';
 
 export function AdminConfiguracoesGerais() {
-  const [settings, setSettings] = useState<ClinicSettings>(DEFAULT_CLINIC_SETTINGS);
+  const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tipo: 'sucesso' | 'erro'; mensagem: string } | null>(
     null,
   );
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let montado = true;
@@ -24,6 +24,7 @@ export function AdminConfiguracoesGerais() {
         }
       } catch (err) {
         console.error('Erro ao carregar configurações gerais:', err);
+        if (montado) setLoadError(err instanceof Error ? err.message : 'Não foi possível carregar as configurações.');
       } finally {
         if (montado) setLoading(false);
       }
@@ -36,6 +37,7 @@ export function AdminConfiguracoesGerais() {
 
   const handleSalvar = async (e: FormEvent) => {
     e.preventDefault();
+    if (!settings) return;
     setSaving(true);
     setFeedback(null);
 
@@ -51,35 +53,6 @@ export function AdminConfiguracoesGerais() {
       setFeedback({
         tipo: 'erro',
         mensagem: 'Não foi possível salvar as alterações. Verifique os campos informados.',
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRestaurar = async () => {
-    if (
-      !window.confirm(
-        'Tem certeza que deseja restaurar as configurações gerais para os valores padrão oficiais da clínica?',
-      )
-    ) {
-      return;
-    }
-
-    setSaving(true);
-    setFeedback(null);
-    try {
-      const padrao = await restaurarConfiguracoesPadrao();
-      setSettings(padrao);
-      setFeedback({
-        tipo: 'sucesso',
-        mensagem: 'Configurações restauradas com sucesso para os padrões oficiais!',
-      });
-    } catch (err) {
-      console.error('Erro ao restaurar configurações padrão:', err);
-      setFeedback({
-        tipo: 'erro',
-        mensagem: 'Falha ao restaurar valores padrão.',
       });
     } finally {
       setSaving(false);
@@ -114,6 +87,10 @@ export function AdminConfiguracoesGerais() {
         </div>
       </div>
     );
+  }
+
+  if (!settings) {
+    return <p role="alert" className="rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-4 text-sm text-[var(--color-error-text)]">{loadError || 'As configurações da clínica não foram encontradas no Firebase.'}</p>;
   }
 
   return (
@@ -881,15 +858,6 @@ export function AdminConfiguracoesGerais() {
 
       {/* BARRA DE BOTÕES DE AÇÃO */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-[var(--color-border-default)]">
-        <button
-          type="button"
-          onClick={handleRestaurar}
-          disabled={saving}
-          className="w-full sm:w-auto rounded-xl border border-[var(--color-border-default)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
-        >
-          Restaurar Padrões Oficiais
-        </button>
-
         <button
           type="submit"
           disabled={saving}

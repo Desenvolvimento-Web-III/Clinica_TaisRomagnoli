@@ -686,7 +686,11 @@ describe('[Backend] Calcular disponibilidade da agenda', () => {
       const mockFirestore = {
         collection: () => ({
           doc: () => ({
-            get: () => Promise.resolve({ exists: false }),
+            get: () =>
+              Promise.resolve({
+                exists: true,
+                data: () => CONFIGURACAO_HORARIOS_PADRAO,
+              }),
           }),
         }),
       } as unknown as import('firebase-admin/firestore').Firestore;
@@ -895,6 +899,15 @@ describe('[Backend] Calcular disponibilidade da agenda', () => {
         id: 'prof-camila',
         nome: 'Camila',
         especialidade: 'Massoterapia',
+        ativo: true,
+        diasFolga: [0, 2],
+        intervaloMinutos: 30,
+        createdAt: '2026-09-01T00:00:00.000Z',
+      });
+      await profissionaisRepo.salvar({
+        id: 'prof-tais-romagnoli',
+        nome: 'Tais Romagnoli',
+        especialidade: 'Massoterapeuta',
         ativo: true,
         diasFolga: [0, 2],
         intervaloMinutos: 30,

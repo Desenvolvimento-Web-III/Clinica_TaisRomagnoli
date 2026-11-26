@@ -21,8 +21,6 @@ export interface LembreteFilaItem {
   mensagemPersonalizada?: string;
 }
 
-export const STORAGE_KEY_LEMBRETES_ENVIADOS = 'clinica_admin_lembretes_enviados_v1';
-
 /**
  * Normaliza número de telefone para formato internacional aceito pelo WhatsApp (wa.me)
  * Adiciona o DDI 55 do Brasil caso não esteja presente.
@@ -110,30 +108,4 @@ export function filtrarLembretes(
 
     return true;
   });
-}
-
-/**
- * Carrega mapa de lembretes enviados salvos localmente
- */
-export function carregarLembretesEnviadosStorage(): Record<string, string> {
-  try {
-    if (typeof window === 'undefined') return {};
-    const raw = localStorage.getItem(STORAGE_KEY_LEMBRETES_ENVIADOS);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Salva mapa de lembretes enviados no localStorage
- */
-export function salvarLembretesEnviadosStorage(mapa: Record<string, string>): void {
-  try {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY_LEMBRETES_ENVIADOS, JSON.stringify(mapa));
-  } catch {
-    // Ignora se storage estiver indisponível
-  }
 }

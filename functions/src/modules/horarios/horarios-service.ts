@@ -1,6 +1,5 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import {
-  CONFIGURACAO_HORARIOS_PADRAO,
   ID_PROFISSIONAL_PADRAO,
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
@@ -59,14 +58,14 @@ export async function obterHorarios(
   const snapshot = await docRef.get();
 
   if (!snapshot.exists) {
-    return CONFIGURACAO_HORARIOS_PADRAO;
+    throw new HorariosBusinessError('A clínica ainda não cadastrou os horários de funcionamento.', 409);
   }
 
   const data = snapshot.data();
   const parsed = horariosFuncionamentoSchema.safeParse(data);
 
   if (!parsed.success) {
-    return CONFIGURACAO_HORARIOS_PADRAO;
+    throw new HorariosBusinessError('A configuração de horários da clínica está inválida.', 409);
   }
 
   return parsed.data;

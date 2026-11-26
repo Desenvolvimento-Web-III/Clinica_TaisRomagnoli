@@ -41,6 +41,12 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 vi.mock('@/lib/firebase', () => ({ auth: mockAuth, db: { app: {} } }));
+vi.mock('@/config/env', () => ({
+  environment: {
+    firebase: { projectId: 'demo-clinica-tests' },
+    useFirebaseEmulators: true,
+  },
+}));
 
 describe('agendamentos-service', () => {
   beforeEach(() => {
@@ -89,11 +95,13 @@ describe('agendamentos-service', () => {
 
   it('getFunctionsBaseUrl respeita a configuração Firebase e só usa emuladores quando configurados', () => {
     const projectId = environment.firebase?.projectId || 'demo-clinica-local';
-    const expectedUrl =
-      environment.useFirebaseEmulators || !environment.firebase
-        ? `http://127.0.0.1:5001/${projectId}/us-central1`
-        : `https://us-central1-${projectId}.cloudfunctions.net`;
-
+    if (!environment.firebase?.projectId) {
+      expect(() => getFunctionsBaseUrl()).toThrow('Firebase não está configurado.');
+      return;
+    }
+    const expectedUrl = environment.useFirebaseEmulators
+      ? `http://127.0.0.1:5001/${projectId}/us-central1`
+      : `https://us-central1-${projectId}.cloudfunctions.net`;
     expect(getFunctionsBaseUrl()).toBe(expectedUrl);
   });
 
@@ -200,7 +208,7 @@ describe('agendamentos-service', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('criarAgendamento cria localmente em modo fallback caso não haja token', async () => {
+  it('não cria agendamento local quando falta autenticação', async () => {
     const resultado = await criarAgendamento(
       {
         servicoId: 'massagem-relaxante',
@@ -213,9 +221,9 @@ describe('agendamentos-service', () => {
       null,
     );
 
-    expect(resultado.sucesso).toBe(true);
-    expect(resultado.agendamento?.servicoNome).toBe('Massagem Relaxante');
-    expect(resultado.agendamento?.valorTotal).toBe(170);
+    expect(resultado.sucesso).toBe(false);
+    expect(resultado.erro).toMatch(/entre na sua conta/i);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('carregarAgendamentos busca do localStorage se offline ou sem usuário', async () => {
