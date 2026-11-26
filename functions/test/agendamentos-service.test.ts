@@ -30,11 +30,24 @@ import {
   type ServicoModel,
 } from '@clinica/shared';
 
+const CONFIGURACAO_HORARIOS_TESTE = {
+  ...CONFIGURACAO_HORARIOS_PADRAO,
+  dias: CONFIGURACAO_HORARIOS_PADRAO.dias.map((dia) =>
+    dia.dia === 4
+      ? {
+          ...dia,
+          turnos: [{ inicio: '08:00', fim: '13:00' }, { inicio: '14:00', fim: '18:00' }],
+          intervalosManutencao: [],
+        }
+      : dia,
+  ),
+};
+
 function solicitarAgendamentoComConfigTeste(
   ...args: Parameters<typeof solicitarNovoAgendamento>
 ): ReturnType<typeof solicitarNovoAgendamento> {
   const parametros = [...args];
-  parametros[7] ??= CONFIGURACAO_HORARIOS_PADRAO;
+  parametros[7] ??= CONFIGURACAO_HORARIOS_TESTE;
   return solicitarNovoAgendamento(...parametros);
 }
 
@@ -42,8 +55,16 @@ function criarReservaComConfigTeste(
   ...args: Parameters<typeof criarReservaTemporariaService>
 ): ReturnType<typeof criarReservaTemporariaService> {
   const parametros = [...args];
-  parametros[7] ??= CONFIGURACAO_HORARIOS_PADRAO;
+  parametros[7] ??= CONFIGURACAO_HORARIOS_TESTE;
   return criarReservaTemporariaService(...parametros);
+}
+
+function alterarAgendamentoComConfigTeste(
+  ...args: Parameters<typeof alterarAgendamentoExistente>
+): ReturnType<typeof alterarAgendamentoExistente> {
+  const parametros = [...args];
+  parametros[7] ??= CONFIGURACAO_HORARIOS_TESTE;
+  return alterarAgendamentoExistente(...parametros);
 }
 
 describe('Agendamentos Service (Functions Backend)', () => {
@@ -704,7 +725,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
       // Reagenda 24h antes do horário original
       const dataRef = new Date('2026-10-21T09:00:00.000Z');
-      const alterado = await alterarAgendamentoExistente(
+      const alterado = await alterarAgendamentoComConfigTeste(
         {
           agendamentoId: agendamento.id,
           novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
@@ -748,7 +769,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       }));
 
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento.id,
             novaDataHoraInicio: '2026-10-23T14:00:00.000Z',
@@ -782,7 +803,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       const dataRef = new Date('2026-10-22T08:00:00.000Z');
 
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento.id,
             novaDataHoraInicio: '2026-10-22T15:00:00.000Z',
@@ -812,7 +833,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       const dataRef = new Date('2026-10-22T08:30:00.000Z'); // 30 minutos antes
-      const alterado = await alterarAgendamentoExistente(
+      const alterado = await alterarAgendamentoComConfigTeste(
         {
           agendamentoId: agendamento.id,
           novaDataHoraInicio: '2026-10-22T16:00:00.000Z',
@@ -858,7 +879,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       // Tenta reagendar Agendamento 2 para 10:45 (colidindo com o Agendamento 1 + intervalo)
       const dataRef = new Date('2026-10-21T10:00:00.000Z');
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento2.id,
             novaDataHoraInicio: '2026-10-22T10:45:00.000Z',
@@ -893,7 +914,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
 
       const dataRef = new Date('2026-10-24T12:00:00.000Z');
       await expect(
-        alterarAgendamentoExistente(
+        alterarAgendamentoComConfigTeste(
           {
             agendamentoId: agendamento.id,
             novaDataHoraInicio: '2026-10-23T15:00:00.000Z',
@@ -1054,7 +1075,16 @@ describe('Agendamentos Service (Functions Backend)', () => {
     };
 
     beforeEach(async () => {
-      profissionaisRepo = new InMemoryProfissionaisRepository(true);
+      profissionaisRepo = new InMemoryProfissionaisRepository();
+      await profissionaisRepo.salvar({
+        id: ID_PROFISSIONAL_PADRAO,
+        nome: 'Tais Romagnoli',
+        especialidade: 'Massoterapeuta',
+        ativo: true,
+        diasFolga: [0, 2],
+        intervaloMinutos: 30,
+        createdAt: '2026-10-01T00:00:00.000Z',
+      });
       servicosRepo = new InMemoryServicosRepository();
       await servicosRepo.salvar(servicoMassagem);
     });
@@ -1251,7 +1281,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       );
 
       // Reagenda para quinta-feira trocando profissional para Camila
-      const reagendado = await alterarAgendamentoExistente(
+      const reagendado = await alterarAgendamentoComConfigTeste(
         {
           agendamentoId: agOriginal.id,
           novaDataHoraInicio: '2026-10-22T15:00:00.000Z',

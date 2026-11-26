@@ -686,7 +686,11 @@ describe('[Backend] Calcular disponibilidade da agenda', () => {
       const mockFirestore = {
         collection: () => ({
           doc: () => ({
-            get: () => Promise.resolve({ exists: false }),
+            get: () =>
+              Promise.resolve({
+                exists: true,
+                data: () => CONFIGURACAO_HORARIOS_PADRAO,
+              }),
           }),
         }),
       } as unknown as import('firebase-admin/firestore').Firestore;

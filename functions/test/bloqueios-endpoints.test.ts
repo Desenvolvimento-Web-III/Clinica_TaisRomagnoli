@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 
 vi.mock('firebase-admin/app', () => ({
   initializeApp: vi.fn(),
@@ -58,6 +59,12 @@ const mockFirestore = {
   collection: vi.fn((colName?: string) => ({
     doc: vi.fn((docId?: string) => ({
       get: () => {
+        if (colName === 'configuracoes') {
+          return Promise.resolve({
+            exists: true,
+            data: () => CONFIGURACAO_HORARIOS_PADRAO,
+          });
+        }
         if (colName === 'horarios_fixos') {
           return Promise.resolve({
             exists: true,
