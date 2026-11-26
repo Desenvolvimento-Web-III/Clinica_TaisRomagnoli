@@ -324,3 +324,5 @@ export async function verificarDisponibilidadeAgenda(
     disponivel: !checagem.conflito,
   };
 }
+
+export * from './calcular-disponibilidade-service.js';

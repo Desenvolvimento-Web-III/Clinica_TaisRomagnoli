@@ -26,10 +26,20 @@ export async function buscarHorariosFuncionamento(
     return CONFIGURACAO_HORARIOS_PADRAO;
   }
 
-  const docId = professionalId ? `${HORARIOS_DOCUMENT}_${professionalId}` : HORARIOS_DOCUMENT;
-  const docRef = doc(db, CONFIGURACOES_COLLECTION, docId);
-
   try {
+    if (professionalId) {
+      const profSnap = await getDoc(
+        doc(db, CONFIGURACOES_COLLECTION, `${HORARIOS_DOCUMENT}_${professionalId}`),
+      );
+      if (profSnap.exists()) {
+        const parsedProf = horariosFuncionamentoSchema.safeParse(profSnap.data());
+        if (parsedProf.success) {
+          return parsedProf.data;
+        }
+      }
+    }
+
+    const docRef = doc(db, CONFIGURACOES_COLLECTION, HORARIOS_DOCUMENT);
     const snapshot = await getDoc(docRef);
 
     if (!snapshot.exists()) {
@@ -98,12 +108,14 @@ export async function consultarHorariosDisponiveis(params: {
   const slots = gerarHorariosDisponiveis({
     data: params.data,
     duracaoMinutos: params.duracaoMinutos ?? 60,
+    intervaloMinutos: config.intervaloPadraoMinutos ?? 30,
     configuracaoHorarios: config,
     agendamentosExistentes: todosAgendamentos.map((a) => {
-      const inicioIso = a.dataHoraIso.endsWith('Z')
-        ? a.dataHoraIso
-        : `${a.dataHoraIso.slice(0, 19)}.000Z`;
+      const dataYmd = a.dataHoraIso.slice(0, 10);
+      const hora = a.horarioFormatado?.match(/^\d{2}:\d{2}/)?.[0] || a.dataHoraIso.slice(11, 16);
+      const inicioIso = `${dataYmd}T${hora}:00.000Z`;
       return {
+        id: a.id,
         dataHoraInicio: inicioIso,
         dataHoraFim: calcularDataHoraFim(inicioIso, a.duracaoMinutos),
         intervaloAposMinutos: 30,

@@ -544,5 +544,36 @@ describe('Bloqueios e Horários Fixos - Endpoints HTTP Cloud Functions', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body?.dados).toBeDefined();
     });
+
+    it('aceita consulta informando dataHoraInicioIso e duracaoMinutos sem dataHoraFimIso', async () => {
+      const req = {
+        method: 'POST',
+        headers: {},
+        body: {
+          dataHoraInicioIso: '2026-11-16T08:00:00.000Z',
+          duracaoMinutos: 60,
+        },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res);
+      expect(res.statusCode).toBe(200);
+      expect(res.body?.dados).toBeDefined();
+    });
+
+    it('retorna 400 para dataHoraInicioIso inválida', async () => {
+      const req = {
+        method: 'POST',
+        headers: {},
+        body: {
+          dataHoraInicioIso: 'invalida',
+          duracaoMinutos: 60,
+        },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res);
+      expect(res.statusCode).toBe(400);
+    });
   });
 });

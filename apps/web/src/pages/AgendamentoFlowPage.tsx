@@ -2,17 +2,24 @@ import { useState, useMemo, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   avaliarBloqueioContraindicacao,
+  calcularDataHoraFim,
   CONFIGURACAO_HORARIOS_PADRAO,
+  gerarHorariosDisponiveis,
   type HorariosFuncionamento,
   type ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';
 import { serviceCatalog } from '@/features/services/catalog';
+import { subscribeToServicesFromFirestore } from '@/features/services/service-firestore-repository';
+import type { Service } from '@/features/services/types';
 import { formatServiceDuration, formatServicePrice } from '@/features/services/formatters';
 import { useOptionalAuth } from '@/features/auth/auth-context';
 import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
-import { addAgendamentoStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import {
+  addAgendamentoStorage,
+  getTodosAgendamentosStorage,
+} from '@/features/agendamentos/data/agendamentos-storage';
 import {
   mapBackendAgendamentoToUi,
   criarAgendamentoFirestore,
@@ -81,18 +88,37 @@ function hojeIsoLocal(): string {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 }
 
+function normalizarSlotIso(dataHoraIso: string, horarioFormatado?: string): string {
+  const dataYmd = dataHoraIso.slice(0, 10);
+  const horaMatch = horarioFormatado?.match(/^\d{2}:\d{2}/)?.[0];
+  const hora = horaMatch || dataHoraIso.slice(11, 16) || '08:00';
+  return `${dataYmd}T${hora}:00.000Z`;
+}
+
 export function AgendamentoFlowPage() {
   const { serviceId } = useParams<{ serviceId?: string }>();
   const navigate = useNavigate();
   const auth = useOptionalAuth();
   const currentUser = auth?.currentUser ?? null;
 
-  // Serviço selecionado
+  // Serviço selecionado (sincronizado com o Firestore e fallback para o catálogo local)
+  const [firestoreServices, setFirestoreServices] = useState<readonly Service[] | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToServicesFromFirestore((updatedServices) => {
+      setFirestoreServices(updatedServices);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const selectedServiceId = serviceId || serviceCatalog[0]?.id || 'massagem-relaxante';
 
   const servicoAtual = useMemo(() => {
+    const listaServicos = firestoreServices ?? serviceCatalog;
     return (
+      listaServicos.find((s) => s.id === selectedServiceId) ||
       serviceCatalog.find((s) => s.id === selectedServiceId) ||
+      listaServicos[0] ||
       serviceCatalog[0] || {
         id: 'massagem-relaxante',
         name: 'Massagem Relaxante',
@@ -104,7 +130,7 @@ export function AgendamentoFlowPage() {
         active: true,
       }
     );
-  }, [selectedServiceId]);
+  }, [firestoreServices, selectedServiceId]);
 
   // Estados do fluxo
   const [step, setStep] = useState<FlowStep>('calendario');
@@ -131,7 +157,10 @@ export function AgendamentoFlowPage() {
     return `${y}-${m}-${dia}`;
   });
   const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
-  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[] | null>(null);
+  const [horariosBackendState, setHorariosBackendState] = useState<{
+    key: string;
+    slots: string[];
+  } | null>(null);
   const [metodoPagamento, setMetodoPagamento] = useState<MetodoPagamento>('pix');
   const [novoAgendamentoCriado, setNovoAgendamentoCriado] = useState<Agendamento | null>(null);
   const [remoteAvaliacaoState, setRemoteAvaliacaoState] = useState<{
@@ -203,25 +232,51 @@ export function AgendamentoFlowPage() {
     return loadLocalAnamneseEvaluation(uid);
   }, [currentUser?.uid, remoteAvaliacaoState]);
 
+  const duracaoAtual = servicoAtual?.durationMinutes || 60;
+  const horariosQueryKey = `${dataSelecionada}|${selectedServiceId}|${duracaoAtual}|${novoAgendamentoCriado?.id ?? ''}`;
+
+  const horariosLocaisIniciais = dataSelecionada
+    ? gerarHorariosDisponiveis({
+        data: dataSelecionada,
+        duracaoMinutos: duracaoAtual,
+        intervaloMinutos: configuracaoHorarios.intervaloPadraoMinutos ?? 30,
+        configuracaoHorarios,
+        agendamentosExistentes: getTodosAgendamentosStorage().map((a) => {
+          const inicioIso = normalizarSlotIso(a.dataHoraIso, a.horarioFormatado);
+          return {
+            id: a.id,
+            dataHoraInicio: inicioIso,
+            dataHoraFim: calcularDataHoraFim(inicioIso, a.duracaoMinutos),
+            intervaloAposMinutos: 30,
+            status: a.status,
+          };
+        }),
+      }).map((s) => s.horaInicio)
+    : [];
+
   useEffect(() => {
     let ativo = true;
     async function carregarHorarios() {
       if (!dataSelecionada) return;
-      const duracao = servicoAtual?.durationMinutes || 60;
       const slots = await consultarHorariosDisponiveis({
         data: dataSelecionada,
-        duracaoMinutos: duracao,
+        duracaoMinutos: duracaoAtual,
         servicoId: selectedServiceId,
       });
       if (ativo) {
-        setHorariosDisponiveis(slots);
+        setHorariosBackendState({ key: horariosQueryKey, slots });
       }
     }
     void carregarHorarios();
     return () => {
       ativo = false;
     };
-  }, [dataSelecionada, selectedServiceId, servicoAtual]);
+  }, [dataSelecionada, selectedServiceId, duracaoAtual, horariosQueryKey]);
+
+  const horariosDisponiveis =
+    horariosBackendState?.key === horariosQueryKey
+      ? horariosBackendState.slots
+      : horariosLocaisIniciais;
 
   // Cartão de crédito state, máscaras e erros
   const [cartaoNumero, setCartaoNumero] = useState('');
@@ -245,7 +300,7 @@ export function AgendamentoFlowPage() {
   const cardBrand = useMemo(() => detectCardBrand(cartaoNumero), [cartaoNumero]);
 
   const concluirSolicitacaoLocal = (agendamentoFinal: Agendamento) => {
-    addAgendamentoStorage(agendamentoFinal, currentUser?.uid);
+    addAgendamentoStorage(agendamentoFinal, currentUser?.uid || 'visitante-local');
     addClientNotification(currentUser?.uid, {
       tipo: 'agendamento',
       titulo: 'Agendamento Solicitado',
@@ -278,8 +333,8 @@ export function AgendamentoFlowPage() {
       setCardErrors({});
     }
 
-    const dataHoraInicioIso = new Date(`${dataSelecionada}T${horarioSelecionado}:00`).toISOString();
-    if (new Date(dataHoraInicioIso).getTime() < Date.now()) {
+    const dataHoraLocalMs = new Date(`${dataSelecionada}T${horarioSelecionado}:00`).getTime();
+    if (dataHoraLocalMs < Date.now()) {
       setErroAgendamento(
         'Não é permitido realizar agendamento para uma data ou horário que já passou.',
       );
@@ -290,6 +345,9 @@ export function AgendamentoFlowPage() {
       setErroAgendamento('Entre na sua conta para salvar e confirmar o agendamento.');
       return;
     }
+
+    const fimHora = calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes);
+    const dataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
 
     setSubmittingAgendamento(true);
     try {
@@ -311,7 +369,11 @@ export function AgendamentoFlowPage() {
         return;
       }
 
-      const agendamentoFinal = mapBackendAgendamentoToUi(resposta.dados);
+      const agendamentoFinal = {
+        ...mapBackendAgendamentoToUi(resposta.dados),
+        dataHoraIso: dataHoraInicioIso,
+        horarioFormatado: `${horarioSelecionado} - ${fimHora}`,
+      };
       concluirSolicitacaoLocal(agendamentoFinal);
     } finally {
       setSubmittingAgendamento(false);

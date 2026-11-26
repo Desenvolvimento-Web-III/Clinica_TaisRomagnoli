@@ -9,6 +9,7 @@ import {
 import * as anamneseService from '@/services/anamnese-service';
 import * as agendamentosService from '@/services/agendamentos-service';
 import * as horariosService from '@/services/horarios-service';
+import * as serviceRepo from '@/features/services/service-firestore-repository';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
 
 const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
@@ -372,5 +373,82 @@ describe('AgendamentoFlowPage', () => {
 
     expect(screen.getByText('Confirmação do Agendamento')).toBeInTheDocument();
     expect(screen.getByText(/17:00 às 18:00/i)).toBeInTheDocument();
+  });
+
+  it('ajusta os últimos horários disponíveis de cada turno conforme a duração do serviço (30 min vs 60 min)', () => {
+    const { unmount } = renderFlow('/agendar/massagem-relaxante'); // 60 min
+    expect(screen.getByTestId('slot-hora-11:00')).toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-11:30')).not.toBeInTheDocument();
+    expect(screen.getByTestId('slot-hora-17:00')).toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-17:30')).not.toBeInTheDocument();
+    unmount();
+
+    renderFlow('/agendar/reflexologia-podal'); // 30 min
+    expect(screen.getByTestId('slot-hora-11:30')).toBeInTheDocument();
+    expect(screen.getByTestId('slot-hora-17:30')).toBeInTheDocument();
+  });
+
+  it('usa a duração real de serviço carregado do Firestore (90 min) limitando os turnos em 10:30 e 16:30', async () => {
+    vi.spyOn(serviceRepo, 'subscribeToServicesFromFirestore').mockImplementation((cb) => {
+      cb([
+        {
+          id: 'serv-firestore-90',
+          name: 'Ritual Completo 90 min',
+          description: 'Sessão estendida de 90 minutos.',
+          durationMinutes: 90,
+          priceInCents: 26000,
+          imageSrc: '',
+          imageAlt: 'Ritual Completo',
+          active: true,
+        },
+      ]);
+      return () => {};
+    });
+
+    renderFlow('/agendar/serv-firestore-90');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('slot-hora-10:30')).toBeInTheDocument();
+      expect(screen.queryByTestId('slot-hora-11:00')).not.toBeInTheDocument();
+      expect(screen.getByTestId('slot-hora-16:30')).toBeInTheDocument();
+      expect(screen.queryByTestId('slot-hora-17:00')).not.toBeInTheDocument();
+    });
+  });
+
+  it('bloqueia os horários ocupados pelo agendamento concluído respeitando duração + 30 min de intervalo', async () => {
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
+    });
+    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...agendamentoSalvoMock,
+        dataHoraInicio: '2026-10-23T09:00:00.000Z',
+        dataHoraFim: '2026-10-23T10:00:00.000Z',
+      },
+    });
+
+    const { unmount } = renderFlow('/agendar/massagem-relaxante'); // 60 min
+
+    fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
+    fireEvent.click(screen.getByTestId('slot-hora-09:00'));
+    fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
+    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
+    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
+
+    expect(await screen.findByText('Solicitação registrada!')).toBeInTheDocument();
+    unmount();
+
+    renderFlow('/agendar/massagem-relaxante');
+    fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
+
+    expect(screen.queryByTestId('slot-hora-08:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-08:30')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-09:00')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-09:30')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('slot-hora-10:00')).not.toBeInTheDocument();
+
+    expect(screen.getByTestId('slot-hora-10:30')).toBeInTheDocument();
+    expect(screen.getByTestId('slot-hora-11:00')).toBeInTheDocument();
   });
 });

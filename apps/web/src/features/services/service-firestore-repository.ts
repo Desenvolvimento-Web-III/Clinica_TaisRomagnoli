@@ -157,6 +157,7 @@ export interface FirestoreServiceData {
   description?: string;
   descricao?: string;
   durationMinutes?: number | string;
+  duracaoMinutos?: number | string;
   duracao?: number | string;
   priceInCents?: number | string;
   preco?: number | string;
@@ -183,7 +184,15 @@ export function mapFirestoreDocToService(id: string, data: FirestoreServiceData)
     data.descricao ||
     data.description ||
     'Atendimento especializado de massoterapia e cuidados terapêuticos.';
-  const durationMinutes = Number(data.durationMinutes ?? data.duracao ?? 60);
+  const rawDuration = data.duracaoMinutos ?? data.durationMinutes ?? data.duracao;
+  const parsedDuration = Number(rawDuration);
+  const durationMinutes =
+    rawDuration !== undefined &&
+    rawDuration !== null &&
+    Number.isFinite(parsedDuration) &&
+    parsedDuration > 0
+      ? parsedDuration
+      : 60;
 
   let priceInCents = 12000;
   if (data.priceInCents !== undefined && data.priceInCents !== null) {
@@ -409,6 +418,7 @@ export async function syncMissingDefaultServicesToFirestore(
           descricao: service.description,
           description: service.description,
           duracao: service.durationMinutes,
+          duracaoMinutos: service.durationMinutes,
           durationMinutes: service.durationMinutes,
           preco: precoCentavos / 100,
           precoCentavos,
@@ -465,6 +475,7 @@ export async function saveServiceToFirestore(
     descricao: input.descricao,
     description: input.descricao,
     duracao: input.duracaoMinutos,
+    duracaoMinutos: input.duracaoMinutos,
     durationMinutes: input.duracaoMinutos,
     preco: input.preco,
     precoCentavos,
