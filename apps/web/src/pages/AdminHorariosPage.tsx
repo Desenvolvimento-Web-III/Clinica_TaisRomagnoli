@@ -297,7 +297,7 @@ export function AdminHorariosPage() {
     <main className="min-h-dvh bg-[#EDE9FE] px-4 py-8 text-[#000000] sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Navegação de Retorno */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             to="/admin?tab=configuracoes"
             data-testid="voltar-painel-link"
@@ -332,6 +332,12 @@ export function AdminHorariosPage() {
               </p>
             </div>
           </div>
+          <Link
+            to="/admin/bloqueios"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#7A60B8]/30 bg-[#7A60B8]/5 px-4 text-sm font-bold text-[#6C53A6] hover:bg-[#7A60B8]/10"
+          >
+            Gerenciar bloqueios e clientes fixos
+          </Link>
         </header>
 
         {/* Notificações de Sucesso ou Erro */}
