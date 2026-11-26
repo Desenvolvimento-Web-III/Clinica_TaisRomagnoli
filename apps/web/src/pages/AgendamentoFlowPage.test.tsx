@@ -13,6 +13,7 @@ import * as serviceRepo from '@/features/services/service-firestore-repository';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
 
 const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
+const mockUseAuth = vi.fn(() => ({ currentUser: null, logout: vi.fn(), isAdmin: false }));
 
 const agendamentoSalvoMock: SharedAgendamento = {
   id: 'ag-salvo-no-firestore',
@@ -41,6 +42,7 @@ const agendamentoSalvoMock: SharedAgendamento = {
 
 vi.mock('@/features/auth/auth-context', () => ({
   useOptionalAuth: () => mockUseOptionalAuth(),
+  useAuth: () => mockUseAuth(),
 }));
 
 describe('AgendamentoFlowPage', () => {
@@ -50,6 +52,29 @@ describe('AgendamentoFlowPage', () => {
     vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
     localStorage.clear();
     mockUseOptionalAuth.mockReturnValue(null);
+    mockUseAuth.mockReturnValue({ currentUser: null, logout: vi.fn(), isAdmin: false });
+    vi.spyOn(serviceRepo, 'subscribeToServicesFromFirestore').mockImplementation((cb) => {
+      cb([
+        { id: 'massagem-relaxante', name: 'Massagem Relaxante', description: 'Sessão de teste', durationMinutes: 60, priceInCents: 17000, imageSrc: '', imageAlt: 'Massagem Relaxante', active: true },
+        { id: 'reflexologia-podal', name: 'Reflexologia Podal', description: 'Sessão de teste', durationMinutes: 30, priceInCents: 10000, imageSrc: '', imageAlt: 'Reflexologia Podal', active: true },
+      ]);
+      return () => {};
+    });
+    vi.spyOn(horariosService, 'buscarHorariosFuncionamento').mockResolvedValue({
+      ...CONFIGURACAO_HORARIOS_PADRAO,
+      dias: CONFIGURACAO_HORARIOS_PADRAO.dias.map((dia) => ({
+        ...dia,
+        ativo: true,
+        turnos: [{ inicio: '09:00', fim: '18:00' }],
+      })),
+    });
+    vi.spyOn(horariosService, 'consultarHorariosDisponiveis').mockImplementation(async ({ duracaoMinutos = 30 }) => {
+      const horarios: string[] = [];
+      for (let minutos = 9 * 60; minutos + duracaoMinutos <= 18 * 60; minutos += 30) {
+        horarios.push(`${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`);
+      }
+      return horarios;
+    });
   });
 
   afterEach(() => {

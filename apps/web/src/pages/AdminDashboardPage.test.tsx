@@ -376,7 +376,7 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('button', { name: /salvar alterações/i })).toBeInTheDocument();
   });
 
-  it('permite alternar para a aba Relatórios e exibe os 8 indicadores previstos', () => {
+  it('permite alternar para a aba Relatórios e exibe os 8 indicadores previstos', async () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole('tab', { name: /relatórios/i }));
@@ -384,7 +384,7 @@ describe('AdminDashboardPage', () => {
     expect(
       screen.getByRole('heading', { name: /relatórios e indicadores administrativos/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/1\. Agendamentos do Dia/i)).toBeInTheDocument();
+    expect(await screen.findByText(/1\. Agendamentos do Dia/i)).toBeInTheDocument();
     expect(screen.getByText(/2\. Clientes Cadastrados/i)).toBeInTheDocument();
     expect(screen.getByText(/3\. Clientes Recorrentes/i)).toBeInTheDocument();
     expect(screen.getByText(/4\. Atendimentos no Mês/i)).toBeInTheDocument();
@@ -426,6 +426,8 @@ describe('AdminDashboardPage', () => {
 
     renderDashboard();
     fireEvent.click(screen.getByRole('tab', { name: /relatórios/i }));
+
+    await screen.findByTestId('indicador-valores-recebidos');
 
     const cardPagamentos = screen.getByTestId('indicador-valores-recebidos');
     const cardServicos = screen.getByTestId('indicador-servico-mais-agendado');
