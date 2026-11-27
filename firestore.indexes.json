@@ -59,6 +59,22 @@
       ]
     },
     {
+      "collectionGroup": "bloqueios_agenda",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ativo", "order": "ASCENDING" },
+        { "fieldPath": "profissionalId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "horarios_fixos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ativo", "order": "ASCENDING" },
+        { "fieldPath": "profissionalId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "pagamentos",
       "queryScope": "COLLECTION",
       "fields": [
