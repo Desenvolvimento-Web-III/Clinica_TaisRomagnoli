@@ -187,10 +187,14 @@ export function AgendamentoFlowPage() {
           servicoId: selectedServiceId,
         });
         if (ativo) setHorariosBackendState({ key: horariosQueryKey, slots });
-      } catch {
+      } catch (error) {
         if (ativo) {
           setHorariosBackendState({ key: horariosQueryKey, slots: [] });
-          setErroDisponibilidade('Não foi possível consultar a disponibilidade da agenda.');
+          setErroDisponibilidade(
+            error instanceof Error && error.message !== 'Failed to fetch'
+              ? error.message
+              : 'Não foi possível consultar a disponibilidade da agenda.',
+          );
         }
       }
     }
@@ -204,6 +208,9 @@ export function AgendamentoFlowPage() {
     horariosBackendState?.key === horariosQueryKey
       ? horariosBackendState.slots
       : [];
+  const horariosCarregando = Boolean(
+    dataSelecionada && servicoAtual && horariosBackendState?.key !== horariosQueryKey,
+  );
 
   // Cartão de crédito state, máscaras e erros
   const [cartaoNumero, setCartaoNumero] = useState('');
@@ -322,6 +329,7 @@ export function AgendamentoFlowPage() {
         dataSelecionada={dataSelecionada}
         horarioSelecionado={horarioSelecionado}
         horariosDisponiveis={horariosDisponiveis}
+        horariosCarregando={horariosCarregando}
         diasAtivosClinica={configuracaoHorarios.dias
           .filter((dia) => dia.ativo && dia.turnos.length > 0)
           .map((dia) => dia.dia)}

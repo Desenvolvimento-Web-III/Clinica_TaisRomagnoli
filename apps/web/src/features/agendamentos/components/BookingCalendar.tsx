@@ -4,6 +4,7 @@ interface BookingCalendarProps {
   dataSelecionada: string; // ISO 'YYYY-MM-DD'
   horarioSelecionado: string; // 'HH:mm'
   horariosDisponiveis?: string[] | null;
+  horariosCarregando?: boolean;
   diasLotados?: string[];
   diasAtivosClinica?: number[];
   onSelectData: (isoDate: string) => void;
@@ -31,6 +32,7 @@ export function BookingCalendar({
   dataSelecionada,
   horarioSelecionado,
   horariosDisponiveis,
+  horariosCarregando = false,
   diasLotados,
   diasAtivosClinica,
   onSelectData,
@@ -194,7 +196,6 @@ export function BookingCalendar({
     const dayOfWeek = new Date(ano, mes, dia).getDay();
     if (diasInativosClinica.has(dayOfWeek)) return false;
     if (diasLotados?.includes(dataSelecionada)) return false;
-    if (horariosDisponiveisFiltrados.length === 0) return false;
     if (dataSelecionada === hojeIso && horarioSelecionado) {
       if (horarioSelecionado <= horaMinutoAtual) return false;
     }
@@ -205,7 +206,6 @@ export function BookingCalendar({
     isDataPassada,
     diasInativosClinica,
     diasLotados,
-    horariosDisponiveisFiltrados.length,
     hojeIso,
     horaMinutoAtual,
     agora,
@@ -492,7 +492,11 @@ export function BookingCalendar({
               {horariosAbertos && (
                 <div className="mt-4 border-t border-[var(--color-border-default)] pt-4">
                   {diaSelecionadoValido ? (
-                    horariosDisponiveisFiltrados.length > 0 ? (
+                    horariosCarregando ? (
+                      <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] p-3 text-center text-xs font-medium text-[var(--color-text-secondary)]">
+                        Consultando horários disponíveis...
+                      </div>
+                    ) : horariosDisponiveisFiltrados.length > 0 ? (
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                         {horariosDisponiveisFiltrados.map((hora) => {
                           const isSelected = hora === horarioSelecionado;
@@ -514,7 +518,7 @@ export function BookingCalendar({
                         })}
                       </div>
                     ) : (
-                      <div className="rounded-xl bg-[var(--color-canvas-neutral)] p-3 text-center text-xs font-medium text-[var(--color-text-secondary)] border border-[var(--color-border-default)]">
+                      <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas-neutral)] p-3 text-center text-xs font-medium text-[var(--color-text-secondary)]">
                         {dataSelecionada === hojeIso
                           ? 'Todos os horários de hoje já passaram. Escolha uma data futura.'
                           : 'Nenhum horário disponível para a data selecionada.'}

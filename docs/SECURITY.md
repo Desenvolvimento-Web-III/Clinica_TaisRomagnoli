@@ -7,10 +7,14 @@
   permanece sem escrita client-side (deny all); sua manutenção deve ocorrer pelo Console Firebase
   ou por backend confiável.
 - A rota administrativa será protegida na interface e no roteamento, sem depender apenas disso.
-- Operações privilegiadas validarão autenticação e autorização nas Functions.
+- Operações privilegiadas validarão autenticação e autorização no backend confiável.
 - Firestore e Storage terão autorização independente nas Security Rules.
 - A ficha de avaliação terá acesso restrito ao cliente proprietário e à administradora.
 - Service accounts, chaves privadas, tokens administrativos e segredos de pagamento são proibidos no frontend.
+- A API de disponibilidade no Coolify usa uma service account dedicada e somente de leitura. Sua chave
+  fica em variável secreta de runtime no Coolify e nunca é incluída no repositório nem nas variáveis
+  `VITE_*` do frontend. O Admin SDK ignora Firestore Security Rules; a conta e as rotas do serviço
+  devem permanecer limitadas ao cálculo público de horários.
 - O cadastro básico é legível pelo cliente proprietário e pela administradora; listagens são
   administrativas.
 - Histórico e pagamentos do perfil administrativo são legíveis somente pela administradora.

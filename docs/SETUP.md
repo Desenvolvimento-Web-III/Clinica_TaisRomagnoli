@@ -50,6 +50,39 @@ npm run dev:full
 A função técnica fica no emulador em
 `http://127.0.0.1:5001/demo-clinica-local/us-central1/healthCheck`.
 
+## API de disponibilidade no Coolify
+
+A API substitui a Cloud Function para consultar slots e lê no servidor os agendamentos, bloqueios,
+horários fixos e configuração da clínica. Para publicar no Coolify:
+
+1. Crie uma service account dedicada e conceda somente o papel de leitura do Firestore
+   (`roles/datastore.viewer`). Esse papel permite leitura dos documentos do projeto; a API retorna
+   somente horários livres. Configure o JSON da chave como variável secreta de runtime
+   `FIREBASE_SERVICE_ACCOUNT_JSON` no Coolify. Não salve a chave no repositório, em
+   `apps/web/.env.local` nem em variáveis `VITE_*`.
+2. Configure `CORS_ALLOWED_ORIGINS` como lista separada por vírgula das origens autorizadas, por exemplo
+   `https://clinica.kndevs.tech,http://localhost:5173`.
+3. Configure o build do serviço no Coolify para instalar dependências e compilar os pacotes:
+
+   ```bash
+   npm ci
+   npm run build -w @clinica/shared
+   npm run build -w @clinica/functions
+   ```
+
+4. No Coolify, crie um serviço Node a partir deste repositório, use a raiz do monorepo, exponha a porta
+   `8080` (ou a porta definida por `PORT`) e associe o domínio da API. Configure
+   `npm run start:coolify -w @clinica/functions` como comando de inicialização.
+5. Configure `VITE_AVAILABILITY_API_BASE_URL` no build do frontend com a URL base da API, sem barra ao
+   final. Exemplo: `https://api.example.com`.
+
+Rotas: `GET /health` verifica a aplicação e
+`GET /obterHorariosDisponiveis?data=AAAA-MM-DD&servicoId=...` consulta a disponibilidade. Para dados
+reais, não use a credencial de uma conta pessoal nem uma chave com permissão de escrita.
+
+Para execução local com Firestore Emulator, defina `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` e
+`GCLOUD_PROJECT=demo-clinica-local`; nesse modo a API não exige uma chave de service account.
+
 ## Verificações
 
 ```bash

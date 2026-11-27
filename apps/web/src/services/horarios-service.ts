@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { environment } from '@/config/env';
 import {
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
@@ -102,7 +103,8 @@ export async function consultarHorariosDisponiveis(params: {
     ...(params.servicoId ? { servicoId: params.servicoId } : {}),
     ...(params.duracaoMinutos ? { duracaoMinutos: String(params.duracaoMinutos) } : {}),
   });
-  const response = await fetch(`${getFunctionsBaseUrl()}/obterHorariosDisponiveis?${query}`);
+  const baseUrl = environment.availabilityApiBaseUrl ?? getFunctionsBaseUrl();
+  const response = await fetch(`${baseUrl}/obterHorariosDisponiveis?${query}`);
   const body = await response.json();
   if (!response.ok || !body?.sucesso || !Array.isArray(body.dados?.horarios)) {
     throw new Error(body?.error || 'Não foi possível consultar a disponibilidade da agenda.');
