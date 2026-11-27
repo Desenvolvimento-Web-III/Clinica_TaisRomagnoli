@@ -75,15 +75,11 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
 
-  const finishLogin = async (credential: UserCredential) => {
-    const user = credential.user;
-    if (!user) {
-      navigate('/agendamentos', { replace: true });
-      return;
-    }
-    const email = user.email?.trim() ?? '';
+  const finishLogin = async (credential: UserCredential, fallbackEmail?: string) => {
+    const user = credential?.user;
+    const email = user?.email?.trim() || fallbackEmail?.trim() || '';
 
-    if (typeof user.getIdToken === 'function') {
+    if (user && typeof user.getIdToken === 'function') {
       try {
         const token = await user.getIdToken();
         await iniciarSessaoUnicaNoBackend(token);
@@ -93,16 +89,19 @@ export function LoginPage() {
     }
 
     let isAdmin = isAdministratorEmail(email);
-    try {
-      const tokenResult = await getIdTokenResult(user);
-      isAdmin = tokenResult.claims.role === 'admin' || tokenResult.claims.admin === true || isAdmin;
-    } catch {
-      // Mantém a verificação existente baseada no e-mail quando não for possível ler as claims.
+    if (user) {
+      try {
+        const tokenResult = await getIdTokenResult(user);
+        isAdmin =
+          tokenResult.claims.role === 'admin' || tokenResult.claims.admin === true || isAdmin;
+      } catch {
+        // Mantém a verificação existente baseada no e-mail quando não for possível ler as claims.
+      }
     }
 
     // O perfil é necessário para que as regras permitam criar agendamentos. Contas admin
     // não são adicionadas à coleção de clientes.
-    if (!isAdmin && db) {
+    if (user && !isAdmin && db) {
       const clientRef = doc(db, 'clientes', user.uid);
       const clientSnapshot = await getDoc(clientRef);
       if (!clientSnapshot.exists()) {
@@ -161,7 +160,7 @@ export function LoginPage() {
     try {
       const cleanEmail = formData.email.trim();
       const credential = await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
-      await finishLogin(credential);
+      await finishLogin(credential, cleanEmail);
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
       if (
