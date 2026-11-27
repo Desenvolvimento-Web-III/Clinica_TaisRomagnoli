@@ -146,7 +146,6 @@ export function AgendamentoFlowPage() {
   useEffect(() => {
     const uid = currentUser?.uid;
     if (!uid) {
-      setAnamneseCompleta(false);
       return;
     }
 
