@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
-import { gerarDiasReagendamento, gerarHorariosParaData } from './reagendamento-utils';
-import type { Agendamento } from '../types/agendamento';
+import { gerarDiasReagendamento } from './reagendamento-utils';
 
 describe('reagendamento-utils', () => {
   describe('gerarDiasReagendamento', () => {
@@ -10,7 +9,7 @@ describe('reagendamento-utils', () => {
       const dataQuarta = '2026-11-18T10:00:00';
       const dataHoje = new Date('2026-11-18T08:00:00');
 
-      const dias = gerarDiasReagendamento(dataQuarta, dataHoje, 6);
+      const dias = gerarDiasReagendamento(dataQuarta, dataHoje, 6, CONFIGURACAO_HORARIOS_PADRAO);
 
       expect(dias).toHaveLength(6);
 
@@ -55,7 +54,7 @@ describe('reagendamento-utils', () => {
       // Hoje é 2026-11-13 (sexta-feira)
       const dataHoje = new Date('2026-11-13T10:00:00');
 
-      const dias = gerarDiasReagendamento(agendamentoAntigo, dataHoje, 4);
+      const dias = gerarDiasReagendamento(agendamentoAntigo, dataHoje, 4, CONFIGURACAO_HORARIOS_PADRAO);
 
       expect(dias).toHaveLength(4);
       // Amanhã é sábado 2026-11-14
@@ -93,35 +92,6 @@ describe('reagendamento-utils', () => {
       );
 
       expect(dias.map((dia) => dia.isoDate)).toEqual(['2026-11-21', '2026-11-24', '2026-11-28']);
-    });
-  });
-
-  describe('gerarHorariosParaData', () => {
-    it('marca horários conflitantes com agendamentos existentes como indisponíveis', () => {
-      const agendamentoExistente: Agendamento = {
-        id: 'ag-existente-1',
-        clienteId: 'cliente-outro',
-        servicoNome: 'Massagem Relaxante',
-        servicoCategoria: 'Relaxamento',
-        duracaoMinutos: 60,
-        profissionalNome: 'Tais Romagnoli',
-        dataHoraIso: '2026-11-19T10:00:00',
-        dataFormatada: 'Qui, 19 Nov',
-        horarioFormatado: '10:00 - 11:00',
-        valorTotal: 150,
-        sinalPago: 45,
-        status: 'confirmado',
-      };
-
-      const horarios = gerarHorariosParaData('2026-11-19', 60, [agendamentoExistente]);
-
-      // Horário das 10:00 colide com a sessão existente
-      const slot10 = horarios.find((h) => h.hora === '10:00');
-      expect(slot10?.isDisponivel).toBe(false);
-
-      // Horário das 14:00 não colide e deve estar disponível
-      const slot14 = horarios.find((h) => h.hora === '14:00');
-      expect(slot14?.isDisponivel).toBe(true);
     });
   });
 });

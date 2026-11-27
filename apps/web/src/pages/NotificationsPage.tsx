@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/ui/AppShell';
 import { useOptionalAuth } from '@/features/auth/auth-context';
-import { useClientNotifications } from '@/features/notifications/notifications-store';
+import {
+  ANAMNESE_NOTIFICATION_ID,
+  useClientNotifications,
+} from '@/features/notifications/notifications-store';
 import type { ClientNotificationType } from '@clinica/shared';
 
 type FilterTab = 'todas' | 'nao-lidas';
@@ -288,6 +291,9 @@ export function NotificationsPage() {
                     <p className="mt-1 text-sm/6 text-[var(--color-text-secondary)]">
                       {item.mensagem}
                     </p>
+                    {item.id === ANAMNESE_NOTIFICATION_ID ? (
+                      <p className="mt-2 text-xs font-semibold text-amber-800">Aviso fixo até o preenchimento e salvamento da ficha.</p>
+                    ) : null}
 
                     {/* Ações da Notificação */}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -303,7 +309,7 @@ export function NotificationsPage() {
                         </Link>
                       )}
 
-                      {!item.lida && (
+                      {!item.lida && item.id !== ANAMNESE_NOTIFICATION_ID && (
                         <button
                           type="button"
                           onClick={() => markAsRead(item.id)}
@@ -313,14 +319,16 @@ export function NotificationsPage() {
                         </button>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => clearNotification(item.id)}
-                        aria-label={`Remover notificação: ${item.titulo}`}
-                        className="text-xs font-medium text-[var(--color-text-secondary)] hover:text-rose-600 sm:ml-auto"
-                      >
-                        Remover
-                      </button>
+                      {item.id !== ANAMNESE_NOTIFICATION_ID ? (
+                        <button
+                          type="button"
+                          onClick={() => clearNotification(item.id)}
+                          aria-label={`Remover notificação: ${item.titulo}`}
+                          className="text-xs font-medium text-[var(--color-text-secondary)] hover:text-rose-600 sm:ml-auto"
+                        >
+                          Remover
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </article>

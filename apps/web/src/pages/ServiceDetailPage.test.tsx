@@ -1,10 +1,29 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as serviceRepository from '@/features/services/service-firestore-repository';
 import { ServiceDetailPage } from './ServiceDetailPage';
 
+const serviceFixture = {
+  id: 'massagem-relaxante',
+  name: 'Massagem Relaxante',
+  description: 'Massagem realizada com movimentos suaves para promover relaxamento.',
+  durationMinutes: 60,
+  priceInCents: 17000,
+  sinalInCents: 5100,
+  sinalPercentual: 30,
+  imageSrc: '',
+  imageAlt: 'Massagem Relaxante',
+  active: true,
+  category: 'Corporal',
+};
+
 describe('ServiceDetailPage', () => {
-  it('exibe mensagem amigável quando o serviço não é encontrado', () => {
+  it('exibe mensagem amigável quando o serviço não é encontrado', async () => {
+    vi.spyOn(serviceRepository, 'subscribeToServicesFromFirestore').mockImplementation((update) => {
+      update([]);
+      return () => {};
+    });
     render(
       <MemoryRouter initialEntries={['/servicos/servico-inexistente']}>
         <Routes>
@@ -13,14 +32,18 @@ describe('ServiceDetailPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Serviço não encontrado' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Serviço não encontrado' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /voltar ao catálogo de serviços/i })).toHaveAttribute(
       'href',
       '/servicos',
     );
   });
 
-  it('exibe descrição, duração, valor, sinal e botão para agendar do serviço existente', () => {
+  it('exibe descrição, duração, valor, sinal e botão para agendar do serviço existente', async () => {
+    vi.spyOn(serviceRepository, 'subscribeToServicesFromFirestore').mockImplementation((update) => {
+      update([serviceFixture]);
+      return () => {};
+    });
     render(
       <MemoryRouter initialEntries={['/servicos/massagem-relaxante']}>
         <Routes>
@@ -31,7 +54,7 @@ describe('ServiceDetailPage', () => {
 
     // Título
     expect(
-      screen.getByRole('heading', { name: 'Massagem Relaxante', level: 1 }),
+      await screen.findByRole('heading', { name: 'Massagem Relaxante', level: 1 }),
     ).toBeInTheDocument();
 
     // Duração (60 min)

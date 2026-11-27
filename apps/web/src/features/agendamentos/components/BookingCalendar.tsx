@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from 'react';
-import { CONFIGURACAO_HORARIOS_PADRAO } from '@clinica/shared';
 
 interface BookingCalendarProps {
   dataSelecionada: string; // ISO 'YYYY-MM-DD'
@@ -26,27 +25,6 @@ const MESES_NOMES = [
   { valor: 9, label: 'Out', extenso: 'Outubro' },
   { valor: 10, label: 'Nov', extenso: 'Novembro' },
   { valor: 11, label: 'Dez', extenso: 'Dezembro' },
-];
-
-const ANOS_OPCOES = [2025, 2026, 2027];
-
-const HORARIOS_DISPONIVEIS_PADRAO = [
-  '08:00',
-  '08:30',
-  '09:00',
-  '09:30',
-  '10:00',
-  '10:30',
-  '11:00',
-  '11:30',
-  '14:00',
-  '14:30',
-  '15:00',
-  '15:30',
-  '16:00',
-  '16:30',
-  '17:00',
-  '17:30',
 ];
 
 export function BookingCalendar({
@@ -110,11 +88,7 @@ export function BookingCalendar({
   // Dias inativos na clínica (folgas padrão: 0 = Domingo, 2 = Terça)
   const diasInativosClinica = useMemo(() => {
     const inativos = new Set<number>();
-    const diasAtivos =
-      diasAtivosClinica ??
-      CONFIGURACAO_HORARIOS_PADRAO.dias
-        .filter((dia) => dia.ativo && dia.turnos.length > 0)
-        .map((dia) => dia.dia);
+    const diasAtivos = diasAtivosClinica ?? [];
     for (let dia = 0; dia <= 6; dia += 1) {
       if (!diasAtivos.includes(dia)) inativos.add(dia);
     }
@@ -194,7 +168,7 @@ export function BookingCalendar({
     const lista =
       horariosDisponiveis !== undefined && horariosDisponiveis !== null
         ? horariosDisponiveis
-        : HORARIOS_DISPONIVEIS_PADRAO;
+        : [];
     if (dataSelecionada === hojeIso) {
       return lista.filter((h) => h > horaMinutoAtual);
     }
@@ -240,9 +214,10 @@ export function BookingCalendar({
   // Data formatada para visualização
   const dataFormatadaAmigavel = useMemo(() => {
     const parts = dataSelecionada.split('-').map(Number);
-    const ano = parts[0] || 2026;
-    const mes = (parts[1] || 10) - 1;
-    const dia = parts[2] || 1;
+    const hoje = new Date();
+    const ano = parts[0] || hoje.getFullYear();
+    const mes = (parts[1] || hoje.getMonth() + 1) - 1;
+    const dia = parts[2] || hoje.getDate();
     const dateObj = new Date(ano, mes, dia);
     const nomesSemana = [
       'Domingo',
@@ -378,7 +353,7 @@ export function BookingCalendar({
                     onChange={(e) => setAnoAtual(Number(e.target.value))}
                     className="rounded-xl border border-[var(--color-border-default)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--color-text-primary)] shadow-sm focus:border-[var(--color-brand-primary)] focus:outline-none"
                   >
-                    {ANOS_OPCOES.map((ano) => (
+                    {Array.from({ length: 7 }, (_, index) => new Date().getFullYear() + index).map((ano) => (
                       <option key={ano} value={ano}>
                         {ano}
                       </option>

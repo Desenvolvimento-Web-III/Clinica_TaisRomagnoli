@@ -2,19 +2,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { AdminConfiguracoesGerais } from './AdminConfiguracoesGerais';
 import * as settingsService from '@/services/clinic-settings-service';
-import { DEFAULT_CLINIC_SETTINGS } from '@clinica/shared';
+import { clinicSettingsFixture } from '@/test/fixtures';
 
 describe('AdminConfiguracoesGerais', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(settingsService, 'buscarConfiguracoesGerais').mockResolvedValue(
-      DEFAULT_CLINIC_SETTINGS,
+      clinicSettingsFixture,
     );
     vi.spyOn(settingsService, 'salvarConfiguracoesGerais').mockImplementation(
       async (settings) => settings,
-    );
-    vi.spyOn(settingsService, 'restaurarConfiguracoesPadrao').mockResolvedValue(
-      DEFAULT_CLINIC_SETTINGS,
     );
   });
 
@@ -28,46 +25,46 @@ describe('AdminConfiguracoesGerais', () => {
 
     // Contatos
     expect(screen.getByLabelText(/Telefone Comercial/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.contatos?.telefone,
+      clinicSettingsFixture.contatos?.telefone,
     );
     expect(screen.getByLabelText(/WhatsApp Comercial/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.contatos?.whatsapp,
+      clinicSettingsFixture.contatos?.whatsapp,
     );
     expect(screen.getByLabelText(/E-mail de Contato/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.contatos?.email,
+      clinicSettingsFixture.contatos?.email,
     );
     expect(screen.getByLabelText(/Endereço Físico/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.contatos?.endereco,
+      clinicSettingsFixture.contatos?.endereco,
     );
 
     // Políticas
     expect(screen.getByLabelText(/Política de Cancelamento Oficial/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.politicas?.politicaCancelamento,
+      clinicSettingsFixture.politicas?.politicaCancelamento,
     );
     expect(screen.getByLabelText(/Tolerância de Atraso/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.politicas?.toleranciaAtrasoMinutos,
+      clinicSettingsFixture.politicas?.toleranciaAtrasoMinutos,
     );
 
     // Sinal
     expect(screen.getByLabelText(/Percentual do Sinal/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.percentualSinal,
+      clinicSettingsFixture.percentualSinal,
     );
 
     // Lembretes
     expect(screen.getByLabelText(/Habilitar envio automático de lembretes prévios/i)).toBeChecked();
     expect(screen.getByLabelText(/Antecedência do Disparo/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.lembretes?.antecedenciaHoras,
+      clinicSettingsFixture.lembretes?.antecedenciaHoras,
     );
 
     // Prazos
     expect(screen.getByLabelText(/Antecedência Mínima para Agendar/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.prazos?.antecedenciaMinimaAgendamentoHoras,
+      clinicSettingsFixture.prazos?.antecedenciaMinimaAgendamentoHoras,
     );
     expect(screen.getByLabelText(/Antecedência Mínima Cancelamento/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.antecedenciaMinimaCancelamentoHoras,
+      clinicSettingsFixture.antecedenciaMinimaCancelamentoHoras,
     );
     expect(screen.getByLabelText(/Intervalo entre Sessões/i)).toHaveValue(
-      DEFAULT_CLINIC_SETTINGS.intervaloMinutos,
+      clinicSettingsFixture.intervaloMinutos,
     );
   });
 
@@ -95,26 +92,4 @@ describe('AdminConfiguracoesGerais', () => {
     });
   });
 
-  it('permite restaurar os padrões oficiais com confirmação do usuário', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-    render(<AdminConfiguracoesGerais />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Carregando configurações/i)).not.toBeInTheDocument();
-    });
-
-    const botaoRestaurar = screen.getByRole('button', {
-      name: /Restaurar Padrões Oficiais/i,
-    });
-    fireEvent.click(botaoRestaurar);
-
-    expect(window.confirm).toHaveBeenCalled();
-    await waitFor(() => {
-      expect(settingsService.restaurarConfiguracoesPadrao).toHaveBeenCalled();
-      expect(
-        screen.getByText(/Configurações restauradas com sucesso para os padrões oficiais!/i),
-      ).toBeInTheDocument();
-    });
-  });
 });

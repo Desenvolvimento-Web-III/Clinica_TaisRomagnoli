@@ -1,5 +1,6 @@
 import {
   solicitarAgendamentoInputSchema,
+  fichaAnamneseSchema,
   cancelarAgendamentoInputSchema,
   alterarAgendamentoInputSchema,
   atualizarStatusAgendamentoInputSchema,
@@ -10,7 +11,6 @@ import {
   verificarConflitoBloqueioOuHorarioFixo,
   verificarAntecedenciaCancelamento,
   validarEncaixeHorariosFuncionamento,
-  CONFIGURACAO_HORARIOS_PADRAO,
   verificarProfissionalHabilitadoParaServico,
   avaliarBloqueioContraindicacao,
   verificarDataHoraNoPassado,
@@ -79,6 +79,29 @@ async function verificarBloqueioConfirmacaoPorAnamnese(
   }
 }
 
+async function exigirFichaAnamneseCompleta(
+  clienteId: string,
+  anamneseRepo?: AnamneseRepository,
+): Promise<void> {
+  if (!anamneseRepo) {
+    if (process.env.NODE_ENV !== 'test') {
+      throw new AgendamentoBusinessError(
+        'Não foi possível verificar sua ficha de anamnese. Tente novamente.',
+        503,
+      );
+    }
+    return;
+  }
+
+  const ficha = await anamneseRepo.obterPorClienteId(clienteId);
+  if (!ficha || !fichaAnamneseSchema.safeParse(ficha).success) {
+    throw new AgendamentoBusinessError(
+      'Para reservar qualquer serviço, preencha primeiro sua ficha de anamnese.',
+      422,
+    );
+  }
+}
+
 /**
  * Cria uma nova solicitação de agendamento validando regras de negócio,
  * folgas, concorrência e o sinal de 30%, disparando notificação interna de confirmação.
@@ -125,6 +148,8 @@ export async function solicitarNovoAgendamento(
       404,
     );
   }
+
+  await exigirFichaAnamneseCompleta(clienteIdAlvo, anamneseRepo);
 
   const clienteNomeAlvo = perfilCliente?.nome || user.nome || parsed.clienteNome || 'Cliente';
   const clienteEmailAlvo = perfilCliente?.email || user.email;
@@ -200,15 +225,7 @@ export async function solicitarNovoAgendamento(
       );
     }
   } else {
-    const inicioDate = new Date(parsed.dataHoraInicio);
-    const diaSemana = inicioDate.getDay();
-    const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
-    if (diaConfig && !diaConfig.ativo) {
-      throw new AgendamentoBusinessError(
-        'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
-        422,
-      );
-    }
+    throw new AgendamentoBusinessError('A configuração de horários da clínica não está disponível.', 409);
   }
 
   // 2. Cálculo da data/hora de término garantindo a duração exata do serviço
@@ -409,15 +426,7 @@ export async function alterarAgendamentoExistente(
       );
     }
   } else {
-    const inicioDate = new Date(parsed.novaDataHoraInicio);
-    const diaSemana = inicioDate.getDay();
-    const diaConfig = CONFIGURACAO_HORARIOS_PADRAO.dias.find((d) => d.dia === diaSemana);
-    if (diaConfig && !diaConfig.ativo) {
-      throw new AgendamentoBusinessError(
-        'A clínica não realiza atendimentos no dia da semana selecionado (folga cadastrada).',
-        422,
-      );
-    }
+    throw new AgendamentoBusinessError('A configuração de horários da clínica não está disponível.', 409);
   }
 
   // 2. Novo cálculo de término

@@ -7,7 +7,6 @@ import {
   type RegistrarLiberacaoMedicaInput,
 } from '@clinica/shared';
 import { AppShell } from '@/components/ui/AppShell';
-import { demoAdministrativeClientProfile } from '@/features/admin-client-profile/demo-profile';
 import { getRecurrenceSummary } from '@/features/admin-client-profile/recurrence';
 import type {
   AdministrativeClientProfile,
@@ -43,6 +42,21 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 });
+
+function emptyProfile(id: string): AdministrativeClientProfile {
+  return {
+    id,
+    fullName: '',
+    email: '',
+    phone: '',
+    birthDate: '',
+    status: 'ativo',
+    registeredAt: '',
+    appointments: [],
+    payments: [],
+    anamnesis: null,
+  };
+}
 
 const appointmentLabels: Record<AppointmentStatus, string> = {
   agendado: 'Agendado',
@@ -107,6 +121,7 @@ export function AdminClientProfilePage({
   const [loadedProfileState, setLoadedProfileState] = useState<{
     clientId: string;
     profile: AdministrativeClientProfile;
+    error?: string;
   } | null>(null);
   const [editedProfileState, setEditedProfileState] = useState<{
     sourceProfile: AdministrativeClientProfile;
@@ -140,7 +155,11 @@ export function AdminClientProfilePage({
       })
       .catch(() => {
         if (!ativo) return;
-        setLoadedProfileState({ clientId, profile: demoAdministrativeClientProfile });
+        setLoadedProfileState({
+          clientId,
+          profile: emptyProfile(clientId),
+          error: 'Não foi possível carregar o perfil. Verifique a conexão e tente novamente.',
+        });
       });
 
     return () => {
@@ -153,7 +172,7 @@ export function AdminClientProfilePage({
       ? loadedProfileState.profile
       : null;
   const loadingProfile = Boolean(!profile && clientId && loadedProfileState?.clientId !== clientId);
-  const baseProfile = profile ?? loadedForClient ?? demoAdministrativeClientProfile;
+  const baseProfile = profile ?? loadedForClient ?? emptyProfile(clientId ?? '');
   const activeProfile =
     editedProfileState?.sourceProfile === baseProfile ? editedProfileState.profile : baseProfile;
   const observacoesLiberacao =
@@ -180,7 +199,10 @@ export function AdminClientProfilePage({
       })
     : null;
 
-  const isDemoNotice = !profile && (!clientId || clientId === demoAdministrativeClientProfile.id);
+  const profileLoadError =
+    loadedProfileState && loadedProfileState.clientId === clientId
+      ? loadedProfileState.error
+      : undefined;
 
   const handleAtualizarLiberacao = async (aprovada: boolean, exigeLiberacaoMedica?: boolean) => {
     setLiberacaoFeedback(null);
@@ -311,7 +333,7 @@ export function AdminClientProfilePage({
     <AppShell
       activeTab="perfil"
       eyebrow="Perfil administrativo do cliente"
-      title={activeProfile.fullName}
+      title={activeProfile.fullName || 'Perfil do cliente'}
       description="Visão consolidada do cadastro, histórico, recorrência, pagamentos e anamnese."
       headerAside={
         <div className="flex flex-wrap items-center gap-2">
@@ -338,15 +360,7 @@ export function AdminClientProfilePage({
         </div>
       ) : null}
 
-      {isDemoNotice && (
-        <aside
-          aria-label="Aviso sobre dados demonstrativos"
-          className="mb-6 rounded-xl border border-[var(--color-info-border)] bg-[var(--color-info-bg)] p-4 text-sm/5 text-[var(--color-info-text)]"
-        >
-          Esta tela usa dados fictícios para validação local. Nenhum dado real de cliente está sendo
-          consultado.
-        </aside>
-      )}
+      {profileLoadError ? <p role="alert" className="mb-6 rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-4 text-sm text-[var(--color-error-text)]">{profileLoadError}</p> : null}
 
       <section aria-label="Resumo do cliente" className="grid gap-4 sm:grid-cols-3">
         <article className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-white p-5 shadow-[var(--shadow-card)]">
@@ -377,25 +391,25 @@ export function AdminClientProfilePage({
             <dl className="space-y-4 text-sm">
               <div>
                 <dt className="font-medium text-[var(--color-text-secondary)]">Nome completo</dt>
-                <dd className="mt-1">{activeProfile.fullName}</dd>
+                <dd className="mt-1">{activeProfile.fullName || '—'}</dd>
               </div>
               <div>
                 <dt className="font-medium text-[var(--color-text-secondary)]">E-mail</dt>
-                <dd className="mt-1 break-all">{activeProfile.email}</dd>
+                <dd className="mt-1 break-all">{activeProfile.email || '—'}</dd>
               </div>
               <div>
                 <dt className="font-medium text-[var(--color-text-secondary)]">Telefone</dt>
-                <dd className="mt-1">{activeProfile.phone}</dd>
+                <dd className="mt-1">{activeProfile.phone || '—'}</dd>
               </div>
               <div>
                 <dt className="font-medium text-[var(--color-text-secondary)]">
                   Data de nascimento
                 </dt>
-                <dd className="mt-1">{formatDate(activeProfile.birthDate)}</dd>
+                <dd className="mt-1">{activeProfile.birthDate ? formatDate(activeProfile.birthDate) : '—'}</dd>
               </div>
               <div>
                 <dt className="font-medium text-[var(--color-text-secondary)]">Cliente desde</dt>
-                <dd className="mt-1">{formatDate(activeProfile.registeredAt)}</dd>
+                <dd className="mt-1">{activeProfile.registeredAt ? formatDate(activeProfile.registeredAt) : '—'}</dd>
               </div>
             </dl>
           </Section>

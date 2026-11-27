@@ -158,6 +158,57 @@ service cloud.firestore {
             || (!('telefone' in get(profilePath).data) && !('clienteTelefone' in data)));
     }
 
+    function validAnamneseCondition(data, field) {
+      return field in data
+        && data[field] is map
+        && 'resposta' in data[field]
+        && data[field]['resposta'] is bool
+        && (!data[field]['resposta']
+            || ('detalhes' in data[field]
+                && data[field]['detalhes'] is string
+                && data[field]['detalhes'].size() > 0));
+    }
+
+    function isCompleteAnamnese(data) {
+      return data.keys().hasAll([
+          'objetivoPrincipal', 'regioesFoco', 'intensidadeDor',
+          'gestanteOuLactante', 'problemasCirculatorios', 'doencasCardiacas',
+          'lesoesOuCirurgias', 'alergiasProdutos', 'problemasPele',
+          'tratamentoOncologico', 'usoMedicamentos', 'preferenciaPressao',
+          'experienciaMassagem', 'atividadeFisica', 'consentimentoConfirmado'
+        ])
+        && data.objetivoPrincipal is string
+        && data.objetivoPrincipal.size() > 0
+        && data.regioesFoco is list
+        && data.regioesFoco.size() > 0
+        && data.regioesFoco.hasOnly([
+          'pescoco_nuca', 'ombros_trapezio', 'costas_dorsal', 'costas_lombar',
+          'bracos_maos', 'quadril_gluteos', 'pernas_pes', 'cabeca_face'
+        ])
+        && data.intensidadeDor is int
+        && data.intensidadeDor >= 0
+        && data.intensidadeDor <= 10
+        && validAnamneseCondition(data, 'gestanteOuLactante')
+        && validAnamneseCondition(data, 'problemasCirculatorios')
+        && validAnamneseCondition(data, 'doencasCardiacas')
+        && validAnamneseCondition(data, 'lesoesOuCirurgias')
+        && validAnamneseCondition(data, 'alergiasProdutos')
+        && validAnamneseCondition(data, 'problemasPele')
+        && validAnamneseCondition(data, 'tratamentoOncologico')
+        && validAnamneseCondition(data, 'usoMedicamentos')
+        && data.preferenciaPressao in ['suave', 'moderada', 'firme']
+        && data.experienciaMassagem in ['primeira_vez', 'eventual', 'frequente']
+        && data.atividadeFisica in ['sedentario', 'leve', 'regular', 'intensa']
+        && data.consentimentoConfirmado == true;
+    }
+
+    function hasCompleteAnamnese(clienteId) {
+      let rootPath = /databases/$(database)/documents/anamneses/$(clienteId);
+      let nestedPath = /databases/$(database)/documents/clientes/$(clienteId)/anamneses/atual;
+      return (exists(rootPath) && isCompleteAnamnese(get(rootPath).data))
+        || (exists(nestedPath) && isCompleteAnamnese(get(nestedPath).data));
+    }
+
     function serviceMatchesBooking(data) {
       let servicePath = /databases/$(database)/documents/servicos/$(data.servicoId);
       let servicoDoc = get(servicePath).data;
@@ -178,6 +229,7 @@ service cloud.firestore {
       return isSignedIn()
         && (isOwner(data.clienteId) || isAdmin())
         && profileMatchesBooking(data)
+        && hasCompleteAnamnese(data.clienteId)
         && serviceMatchesBooking(data)
         && data.status == 'pendente'
         && data.sinalIsento == (isAdmin() && !isOwner(data.clienteId) && data.sinalIsento)
@@ -291,7 +343,7 @@ service cloud.firestore {
       // Agendamentos na subcoleção do cliente
       match /agendamentos/{agendamentoId} {
         allow read: if isOwner(uid) || isAdmin();
-        allow create: if isOwner(uid) || isAdmin();
+        allow create: if (isOwner(uid) || isAdmin()) && hasCompleteAnamnese(uid);
         allow update: if isOwner(uid) || isAdmin();
         allow delete: if isAdmin();
       }
@@ -347,11 +399,13 @@ service cloud.firestore {
       ));
       allow create: if isAdmin() || (
         isDocOwner(request.resource.data) &&
-        hasNoRestrictedAnamneseFieldsOnCreate(request.resource.data)
+        hasNoRestrictedAnamneseFieldsOnCreate(request.resource.data) &&
+        isCompleteAnamnese(request.resource.data)
       );
       allow update: if isAdmin() || (
         isDocOwner(resource.data) &&
         isDocOwner(request.resource.data) &&
+        (!isCompleteAnamnese(resource.data) || isCompleteAnamnese(request.resource.data)) &&
         doesNotModifyRestrictedAnamneseFields()
       );
       allow delete: if isAdmin();
@@ -365,11 +419,13 @@ service cloud.firestore {
       ));
       allow create: if isAdmin() || (
         isDocOwner(request.resource.data) &&
-        hasNoRestrictedAnamneseFieldsOnCreate(request.resource.data)
+        hasNoRestrictedAnamneseFieldsOnCreate(request.resource.data) &&
+        isCompleteAnamnese(request.resource.data)
       );
       allow update: if isAdmin() || (
         isDocOwner(resource.data) &&
         isDocOwner(request.resource.data) &&
+        (!isCompleteAnamnese(resource.data) || isCompleteAnamnese(request.resource.data)) &&
         doesNotModifyRestrictedAnamneseFields()
       );
       allow delete: if isAdmin();

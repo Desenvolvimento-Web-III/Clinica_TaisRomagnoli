@@ -41,15 +41,13 @@ describe('horarios-service', () => {
   });
 
   describe('obterHorarios', () => {
-    it('retorna a configuração padrão se o documento não existir', async () => {
+    it('falha sem configuração cadastrada no Firestore', async () => {
       mockDocGet.mockResolvedValueOnce({
         exists: false,
       });
 
-      const resultado = await obterHorarios(mockFirestore);
-
+      await expect(obterHorarios(mockFirestore)).rejects.toMatchObject({ statusCode: 409 });
       expect(mockCollection).toHaveBeenCalledWith(CONFIGURACOES_COLLECTION);
-      expect(resultado).toEqual(CONFIGURACAO_HORARIOS_PADRAO);
     });
 
     it('retorna os dados do Firestore quando o documento existir e for válido', async () => {
@@ -71,15 +69,13 @@ describe('horarios-service', () => {
       expect(resultado.intervaloPadraoMinutos).toBe(45);
     });
 
-    it('retorna configuração padrão caso os dados no banco sejam inválidos', async () => {
+    it('falha quando os dados cadastrados no banco são inválidos', async () => {
       mockDocGet.mockResolvedValueOnce({
         exists: true,
         data: () => ({ dias: 'dado corrompido' }),
       });
 
-      const resultado = await obterHorarios(mockFirestore);
-
-      expect(resultado).toEqual(CONFIGURACAO_HORARIOS_PADRAO);
+      await expect(obterHorarios(mockFirestore)).rejects.toMatchObject({ statusCode: 409 });
     });
   });
 
@@ -134,7 +130,8 @@ describe('horarios-service', () => {
       servicosRepo = new InMemoryServicosRepository();
 
       mockDocGet.mockResolvedValue({
-        exists: false,
+        exists: true,
+        data: () => CONFIGURACAO_HORARIOS_PADRAO,
       });
     });
 

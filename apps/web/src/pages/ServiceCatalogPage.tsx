@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/ui/AppShell';
-import { getActiveServices, serviceCatalog } from '@/features/services/catalog';
+import { getActiveServices } from '@/features/services/catalog';
 import { ServiceCard } from '@/features/services/components/ServiceCard';
 import { ServiceDetailsModal } from '@/features/services/components/ServiceDetailsModal';
 import { subscribeToServicesFromFirestore } from '@/features/services/service-firestore-repository';
@@ -25,7 +25,7 @@ export function ServiceCatalogPage({ services }: ServiceCatalogPageProps) {
     return () => unsubscribe();
   }, [services]);
 
-  const currentServices = services ?? firestoreServices ?? serviceCatalog;
+  const currentServices = services ?? firestoreServices ?? [];
   const activeServices = getActiveServices(currentServices);
 
   const filteredServices = activeServices.filter((service) => {

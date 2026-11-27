@@ -1,27 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  consultarPainelIndicadoresAdmin,
-  PAINEL_INDICADORES_PADRAO,
-} from './indicadores-admin-service';
+import { consultarPainelIndicadoresAdmin } from './indicadores-admin-service';
+import { indicatorsFixture } from '@/test/fixtures';
+
+vi.mock('@/config/env', () => ({
+  environment: { firebase: { projectId: 'demo-clinica-tests' }, useFirebaseEmulators: true },
+}));
+
+vi.mock('@/lib/firebase', () => ({ auth: null, db: null }));
 
 describe('indicadores-admin-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('retorna painel padrão quando não há token de autenticação', async () => {
+  it('retorna ausência de dados quando não há token de autenticação', async () => {
     const painel = await consultarPainelIndicadoresAdmin({ token: null });
-    expect(painel).toBeDefined();
-    expect(painel.indicadores.agendamentosDoDia.total).toBe(6);
-    expect(painel.indicadores.clientesCadastrados.total).toBe(148);
+    expect(painel).toBeNull();
   });
 
   it('retorna dados da Cloud Function quando requisição tem sucesso', async () => {
     const mockPainelBackend = {
-      ...PAINEL_INDICADORES_PADRAO,
+      ...indicatorsFixture,
       dataReferencia: '2026-11-16',
       indicadores: {
-        ...PAINEL_INDICADORES_PADRAO.indicadores,
+        ...indicatorsFixture.indicadores,
         agendamentosDoDia: {
           total: 10,
           concluidos: 8,
@@ -46,8 +48,8 @@ describe('indicadores-admin-service', () => {
       dataReferencia: '2026-11-16',
     });
 
-    expect(resultado.indicadores.agendamentosDoDia.total).toBe(10);
-    expect(resultado.indicadores.agendamentosDoDia.concluidos).toBe(8);
+    expect(resultado?.indicadores.agendamentosDoDia.total).toBe(10);
+    expect(resultado?.indicadores.agendamentosDoDia.concluidos).toBe(8);
   });
 
   it('retorna fallback seguro quando a requisição falha com status de erro', async () => {
@@ -60,6 +62,6 @@ describe('indicadores-admin-service', () => {
       token: 'fake-token',
     });
 
-    expect(resultado).toEqual(PAINEL_INDICADORES_PADRAO);
+    expect(resultado).toBeNull();
   });
 });

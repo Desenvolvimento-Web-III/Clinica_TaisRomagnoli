@@ -1,14 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { AppShell } from '@/components/ui/AppShell';
 import {
   avaliarBloqueioContraindicacao,
-  calcularDataHoraFim,
-  CONFIGURACAO_HORARIOS_PADRAO,
-  gerarHorariosDisponiveis,
   type HorariosFuncionamento,
   type ResultadoAvaliacaoContraindicacao,
 } from '@clinica/shared';
-import { serviceCatalog } from '@/features/services/catalog';
 import { subscribeToServicesFromFirestore } from '@/features/services/service-firestore-repository';
 import type { Service } from '@/features/services/types';
 import { formatServiceDuration, formatServicePrice } from '@/features/services/formatters';
@@ -17,19 +14,15 @@ import { getUserDisplayName } from '@/features/auth/user-display';
 import { BookingCalendar } from '@/features/agendamentos/components/BookingCalendar';
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import {
-  addAgendamentoStorage,
-  getTodosAgendamentosStorage,
-} from '@/features/agendamentos/data/agendamentos-storage';
-import {
   mapBackendAgendamentoToUi,
   criarAgendamentoFirestore,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
+import { fichaAnamneseSchema } from '@/features/anamnese/schemas/anamnese-schema';
 import {
   buscarHorariosFuncionamento,
   consultarHorariosDisponiveis,
 } from '@/services/horarios-service';
-import { addClientNotification } from '@/features/notifications/notifications-store';
 import {
   maskCardNumber,
   maskCardExpiry,
@@ -41,34 +34,16 @@ import {
 } from '@/features/agendamentos/utils/payment-formatters';
 import type { Agendamento } from '@/features/agendamentos/types/agendamento';
 
-const ANAMNESE_STORAGE_PREFIX = 'clinica_anamnese_data_';
-
-function loadLocalAnamneseEvaluation(
-  uid?: string | null,
-): ResultadoAvaliacaoContraindicacao | null {
-  if (!uid || typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = localStorage.getItem(`${ANAMNESE_STORAGE_PREFIX}${uid}`);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-    return avaliarBloqueioContraindicacao({
-      ...(parsed.data ?? parsed),
-      exigeLiberacaoMedica: parsed.exigeLiberacaoMedica,
-      contraindicacoes: parsed.contraindicacoes,
-      liberacaoMedicaAprovada: parsed.liberacaoMedicaAprovada,
-    });
-  } catch {
-    return null;
-  }
-}
+const configuracaoHorariosVazia: HorariosFuncionamento = {
+  intervaloPadraoMinutos: 30,
+  dias: Array.from({ length: 7 }, (_, dia) => ({
+    dia,
+    ativo: false,
+    turnos: [],
+    intervaloMinutos: 30,
+    intervalosManutencao: [],
+  })),
+};
 
 type FlowStep = 'calendario' | 'confirmacao' | 'pagamento' | 'concluido';
 type MetodoPagamento = 'pix' | 'cartao' | 'boleto';
@@ -88,20 +63,13 @@ function hojeIsoLocal(): string {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 }
 
-function normalizarSlotIso(dataHoraIso: string, horarioFormatado?: string): string {
-  const dataYmd = dataHoraIso.slice(0, 10);
-  const horaMatch = horarioFormatado?.match(/^\d{2}:\d{2}/)?.[0];
-  const hora = horaMatch || dataHoraIso.slice(11, 16) || '08:00';
-  return `${dataYmd}T${hora}:00.000Z`;
-}
-
 export function AgendamentoFlowPage() {
   const { serviceId } = useParams<{ serviceId?: string }>();
   const navigate = useNavigate();
   const auth = useOptionalAuth();
   const currentUser = auth?.currentUser ?? null;
 
-  // Serviço selecionado (sincronizado com o Firestore e fallback para o catálogo local)
+  // O serviço selecionado é obtido exclusivamente do catálogo persistido no Firestore.
   const [firestoreServices, setFirestoreServices] = useState<readonly Service[] | null>(null);
 
   useEffect(() => {
@@ -111,52 +79,18 @@ export function AgendamentoFlowPage() {
     return () => unsubscribe();
   }, []);
 
-  const selectedServiceId = serviceId || serviceCatalog[0]?.id || 'massagem-relaxante';
+  const selectedServiceId = serviceId ?? '';
 
   const servicoAtual = useMemo(() => {
-    const listaServicos = firestoreServices ?? serviceCatalog;
-    return (
-      listaServicos.find((s) => s.id === selectedServiceId) ||
-      serviceCatalog.find((s) => s.id === selectedServiceId) ||
-      listaServicos[0] ||
-      serviceCatalog[0] || {
-        id: 'massagem-relaxante',
-        name: 'Massagem Relaxante',
-        description: 'Sessão de relaxamento e alívio de tensões.',
-        durationMinutes: 60,
-        priceInCents: 17000,
-        imageSrc: '',
-        imageAlt: 'Massagem Relaxante',
-        active: true,
-      }
-    );
+    return (firestoreServices ?? []).find((service) => service.id === selectedServiceId);
   }, [firestoreServices, selectedServiceId]);
 
   // Estados do fluxo
   const [step, setStep] = useState<FlowStep>('calendario');
   const nomeCliente = currentUser ? getUserDisplayName(currentUser) : 'Entre na sua conta';
-  const [configuracaoHorarios, setConfiguracaoHorarios] = useState<HorariosFuncionamento>(
-    CONFIGURACAO_HORARIOS_PADRAO,
-  );
-  const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
-    const agora = new Date();
-    const d = new Date(agora);
-    if (d.getHours() >= 18) {
-      d.setDate(d.getDate() + 1);
-    }
-    while (
-      !CONFIGURACAO_HORARIOS_PADRAO.dias.some(
-        (dia) => dia.dia === d.getDay() && dia.ativo && dia.turnos.length > 0,
-      )
-    ) {
-      d.setDate(d.getDate() + 1);
-    }
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dia = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dia}`;
-  });
-  const [horarioSelecionado, setHorarioSelecionado] = useState<string>('10:00');
+  const [configuracaoHorarios, setConfiguracaoHorarios] = useState<HorariosFuncionamento>(configuracaoHorariosVazia);
+  const [dataSelecionada, setDataSelecionada] = useState<string>('');
+  const [horarioSelecionado, setHorarioSelecionado] = useState<string>('');
   const [horariosBackendState, setHorariosBackendState] = useState<{
     key: string;
     slots: string[];
@@ -169,13 +103,18 @@ export function AgendamentoFlowPage() {
   } | null>(null);
   const [submittingAgendamento, setSubmittingAgendamento] = useState(false);
   const [erroAgendamento, setErroAgendamento] = useState<string | null>(null);
+  const [configuracaoHorariosCarregada, setConfiguracaoHorariosCarregada] = useState(false);
+  const [erroDisponibilidade, setErroDisponibilidade] = useState<string | null>(null);
+  const [anamneseCompleta, setAnamneseCompleta] = useState<boolean | null>(null);
 
   useEffect(() => {
     let ativo = true;
-    void buscarHorariosFuncionamento('prof-tais-romagnoli').then((configuracao) => {
-      if (!ativo) return;
-      setConfiguracaoHorarios(configuracao);
-      setDataSelecionada((atual) => {
+    void buscarHorariosFuncionamento('prof-tais-romagnoli')
+      .then((configuracao) => {
+        if (!ativo) return;
+        setConfiguracaoHorarios(configuracao);
+        setConfiguracaoHorariosCarregada(true);
+        setDataSelecionada((atual) => {
         const dataAtual = new Date(`${atual}T12:00:00`);
         const diaAtualEstaAberto = configuracao.dias.some(
           (dia) => dia.dia === dataAtual.getDay() && dia.ativo && dia.turnos.length > 0,
@@ -194,8 +133,11 @@ export function AgendamentoFlowPage() {
           proximaData.setDate(proximaData.getDate() + 1);
         }
         return atual;
+        });
+      })
+      .catch(() => {
+        if (ativo) setErroDisponibilidade('A clínica ainda não configurou os horários de funcionamento.');
       });
-    });
     return () => {
       ativo = false;
     };
@@ -209,12 +151,19 @@ export function AgendamentoFlowPage() {
 
     let ativo = true;
     void obterFichaAnamneseApi(uid).then((res) => {
-      if (ativo && res.sucesso && res.dados) {
+      if (!ativo) return;
+      const completa = Boolean(
+        res.sucesso && res.dados && fichaAnamneseSchema.safeParse(res.dados).success,
+      );
+      setAnamneseCompleta(completa);
+      if (completa && res.dados) {
         setRemoteAvaliacaoState({
           uid,
           avaliacao: avaliarBloqueioContraindicacao(res.dados),
         });
       }
+    }).catch(() => {
+      if (ativo) setAnamneseCompleta(false);
     });
     return () => {
       ativo = false;
@@ -229,54 +178,41 @@ export function AgendamentoFlowPage() {
     if (remoteAvaliacaoState?.uid === uid) {
       return remoteAvaliacaoState.avaliacao;
     }
-    return loadLocalAnamneseEvaluation(uid);
+    return null;
   }, [currentUser?.uid, remoteAvaliacaoState]);
 
-  const duracaoAtual = servicoAtual?.durationMinutes || 60;
+  const duracaoAtual = servicoAtual?.durationMinutes ?? 0;
   const horariosQueryKey = `${dataSelecionada}|${selectedServiceId}|${duracaoAtual}|${novoAgendamentoCriado?.id ?? ''}`;
-
-  const horariosLocaisIniciais = dataSelecionada
-    ? gerarHorariosDisponiveis({
-        data: dataSelecionada,
-        duracaoMinutos: duracaoAtual,
-        intervaloMinutos: configuracaoHorarios.intervaloPadraoMinutos ?? 30,
-        configuracaoHorarios,
-        agendamentosExistentes: getTodosAgendamentosStorage().map((a) => {
-          const inicioIso = normalizarSlotIso(a.dataHoraIso, a.horarioFormatado);
-          return {
-            id: a.id,
-            dataHoraInicio: inicioIso,
-            dataHoraFim: calcularDataHoraFim(inicioIso, a.duracaoMinutos),
-            intervaloAposMinutos: 30,
-            status: a.status,
-          };
-        }),
-      }).map((s) => s.horaInicio)
-    : [];
 
   useEffect(() => {
     let ativo = true;
     async function carregarHorarios() {
-      if (!dataSelecionada) return;
-      const slots = await consultarHorariosDisponiveis({
-        data: dataSelecionada,
-        duracaoMinutos: duracaoAtual,
-        servicoId: selectedServiceId,
-      });
-      if (ativo) {
-        setHorariosBackendState({ key: horariosQueryKey, slots });
+      if (!dataSelecionada || !servicoAtual) return;
+      setErroDisponibilidade(null);
+      try {
+        const slots = await consultarHorariosDisponiveis({
+          data: dataSelecionada,
+          duracaoMinutos: duracaoAtual,
+          servicoId: selectedServiceId,
+        });
+        if (ativo) setHorariosBackendState({ key: horariosQueryKey, slots });
+      } catch {
+        if (ativo) {
+          setHorariosBackendState({ key: horariosQueryKey, slots: [] });
+          setErroDisponibilidade('Não foi possível consultar a disponibilidade da agenda.');
+        }
       }
     }
     void carregarHorarios();
     return () => {
       ativo = false;
     };
-  }, [dataSelecionada, selectedServiceId, duracaoAtual, horariosQueryKey]);
+  }, [dataSelecionada, selectedServiceId, duracaoAtual, horariosQueryKey, servicoAtual]);
 
   const horariosDisponiveis =
     horariosBackendState?.key === horariosQueryKey
       ? horariosBackendState.slots
-      : horariosLocaisIniciais;
+      : [];
 
   // Cartão de crédito state, máscaras e erros
   const [cartaoNumero, setCartaoNumero] = useState('');
@@ -287,7 +223,7 @@ export function AgendamentoFlowPage() {
   const [boletoCopiado, setBoletoCopiado] = useState(false);
 
   // Cálculos de valor
-  const valorTotalReais = servicoAtual.priceInCents / 100;
+  const valorTotalReais = (servicoAtual?.priceInCents ?? 0) / 100;
   const valorSinalReais = Math.round(valorTotalReais * 0.3 * 100) / 100;
   const saldoRestanteReais = Math.round((valorTotalReais - valorSinalReais) * 100) / 100;
 
@@ -300,16 +236,6 @@ export function AgendamentoFlowPage() {
   const cardBrand = useMemo(() => detectCardBrand(cartaoNumero), [cartaoNumero]);
 
   const concluirSolicitacaoLocal = (agendamentoFinal: Agendamento) => {
-    addAgendamentoStorage(agendamentoFinal, currentUser?.uid || 'visitante-local');
-    addClientNotification(currentUser?.uid, {
-      tipo: 'agendamento',
-      titulo: 'Agendamento Solicitado',
-      mensagem: avaliacaoContraindicacao?.bloqueado
-        ? `Sua solicitação de ${servicoAtual.name} para ${agendamentoFinal.dataFormatada} (${agendamentoFinal.horarioFormatado}) foi registrada e aguarda liberação médica para confirmação.`
-        : `Seu agendamento de ${servicoAtual.name} para ${agendamentoFinal.dataFormatada} (${agendamentoFinal.horarioFormatado}) foi registrado com sucesso.`,
-      link: '/agendamentos',
-    });
-
     setNovoAgendamentoCriado(agendamentoFinal);
     setStep('concluido');
   };
@@ -317,6 +243,10 @@ export function AgendamentoFlowPage() {
   // Finalizar solicitação de agendamento e gravá-la diretamente no Firestore.
   const handleFinalizar = async () => {
     setErroAgendamento(null);
+    if (!servicoAtual) {
+      setErroAgendamento('O serviço não está disponível no catálogo.');
+      return;
+    }
 
     if (metodoPagamento === 'cartao') {
       const validation = validateCreditCardForm({
@@ -343,6 +273,17 @@ export function AgendamentoFlowPage() {
 
     if (!currentUser?.uid) {
       setErroAgendamento('Entre na sua conta para salvar e confirmar o agendamento.');
+      return;
+    }
+
+    const fichaAtual = await obterFichaAnamneseApi(currentUser.uid);
+    if (
+      !fichaAtual.sucesso ||
+      !fichaAtual.dados ||
+      !fichaAnamneseSchema.safeParse(fichaAtual.dados).success
+    ) {
+      setAnamneseCompleta(false);
+      setErroAgendamento('Preencha sua ficha de anamnese antes de reservar qualquer serviço.');
       return;
     }
 
@@ -380,11 +321,37 @@ export function AgendamentoFlowPage() {
     }
   };
 
+  if (firestoreServices === null || (!configuracaoHorariosCarregada && !erroDisponibilidade)) {
+    return <AppShell activeTab="inicio" title="Carregando agendamento"><p role="status">Consultando os dados da clínica…</p></AppShell>;
+  }
+  if (erroDisponibilidade && !configuracaoHorariosCarregada) {
+    return <AppShell activeTab="inicio" title="Agenda indisponível" description={erroDisponibilidade}><Link to="/servicos">Voltar ao catálogo</Link></AppShell>;
+  }
+  if (!servicoAtual) {
+    return <AppShell activeTab="inicio" title="Serviço indisponível" description="O serviço selecionado não foi encontrado no catálogo atual."><Link to="/servicos">Voltar ao catálogo</Link></AppShell>;
+  }
+
   // ==========================================
   // TELA 1: CALENDÁRIO (SELEÇÃO DATA/HORA)
   // ==========================================
   if (step === 'calendario') {
     return (
+      <>
+      {anamneseCompleta !== true ? (
+        <div
+          role="alert"
+          className="mx-auto mb-4 flex max-w-5xl items-center justify-between gap-4 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <span>
+            <strong>Ficha de anamnese não preenchida.</strong> Preencha antes de reservar qualquer
+            serviço.
+          </span>
+          <Link className="shrink-0 font-semibold underline" to="/anamnese">
+            Preencher ficha
+          </Link>
+        </div>
+      ) : null}
+      {erroDisponibilidade ? <p role="alert" className="mx-auto max-w-5xl px-4 py-3 text-sm text-[var(--color-error-text)]">{erroDisponibilidade}</p> : null}
       <BookingCalendar
         dataSelecionada={dataSelecionada}
         horarioSelecionado={horarioSelecionado}
@@ -395,6 +362,11 @@ export function AgendamentoFlowPage() {
         onSelectData={(isoDate) => setDataSelecionada(isoDate)}
         onSelectHorario={(hora) => setHorarioSelecionado(hora)}
         onConfirmar={() => {
+          if (anamneseCompleta !== true) {
+            setErroAgendamento('Preencha sua ficha de anamnese antes de reservar qualquer serviço.');
+            return;
+          }
+          if (!horarioSelecionado) return;
           const agora = new Date();
           const y = agora.getFullYear();
           const m = String(agora.getMonth() + 1).padStart(2, '0');
@@ -413,6 +385,7 @@ export function AgendamentoFlowPage() {
         }}
         onVoltar={() => navigate('/servicos')}
       />
+      </>
     );
   }
 

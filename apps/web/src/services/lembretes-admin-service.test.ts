@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CLINIC_SETTINGS } from '@clinica/shared';
+import { clinicSettingsFixture } from '@/test/fixtures';
 
 const { getDocMock, getDocsMock, setDocMock, authState, dbState } = vi.hoisted(() => ({
   getDocMock: vi.fn(),
@@ -45,7 +45,7 @@ describe('lembretes-admin-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authState.currentUser = { uid: 'admin-1' };
-    getDocMock.mockResolvedValue({ exists: () => false });
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => clinicSettingsFixture });
     getDocsMock.mockImplementation(async (ref: { collection: string }) => {
       if (ref.collection === 'agendamentos') {
         return {
@@ -85,9 +85,9 @@ describe('lembretes-admin-service', () => {
     getDocMock.mockResolvedValue({
       exists: () => true,
       data: () => ({
-        ...DEFAULT_CLINIC_SETTINGS,
+        ...clinicSettingsFixture,
         lembretes: {
-          ...DEFAULT_CLINIC_SETTINGS.lembretes!,
+          ...clinicSettingsFixture.lembretes!,
           lembreteAtivo: false,
         },
       }),

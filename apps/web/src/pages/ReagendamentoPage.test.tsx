@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { MOCK_AGENDAMENTOS } from '@/features/agendamentos/data/mockAgendamentos';
-import { saveAgendamentosStorage } from '@/features/agendamentos/data/agendamentos-storage';
+import type { Agendamento } from '@/features/agendamentos/types/agendamento';
 import { ReagendamentoPage } from './ReagendamentoPage';
 
 const { mockAlterarAgendamento, mockCarregarAgendamentos, mockBuscarHorarios, mockConsultarGrade } =
@@ -11,6 +10,23 @@ const { mockAlterarAgendamento, mockCarregarAgendamentos, mockBuscarHorarios, mo
     mockBuscarHorarios: vi.fn(),
     mockConsultarGrade: vi.fn(),
   }));
+
+const agendamentoTeste: Agendamento = {
+  id: 'ag-101',
+  clienteId: 'user-1',
+  servicoId: 'serv-1',
+  servicoNome: 'Massagem Relaxante com Óleos',
+  servicoCategoria: 'Relaxamento',
+  duracaoMinutos: 60,
+  profissionalId: 'prof-1',
+  profissionalNome: 'Tais Romagnoli',
+  dataHoraIso: '2026-10-15T14:00:00.000Z',
+  dataFormatada: 'Qui, 15 de Outubro',
+  horarioFormatado: '14:00 - 15:00',
+  valorTotal: 150,
+  sinalPago: 45,
+  status: 'confirmado',
+};
 
 vi.mock('@/services/agendamentos-service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/agendamentos-service')>();
@@ -42,8 +58,7 @@ vi.mock('@/features/auth/auth-context', () => ({
 describe('ReagendamentoPage', () => {
   beforeEach(() => {
     localStorage.clear();
-    saveAgendamentosStorage(MOCK_AGENDAMENTOS, 'user-1');
-    mockCarregarAgendamentos.mockResolvedValue({ agendamentos: [], sincronizadoComBackend: false });
+    mockCarregarAgendamentos.mockResolvedValue({ agendamentos: [agendamentoTeste], sincronizadoComBackend: true });
     mockConsultarGrade.mockResolvedValue(['10:00', '11:30', '14:00']);
     mockBuscarHorarios.mockResolvedValue({
       dias: [
@@ -119,8 +134,8 @@ describe('ReagendamentoPage', () => {
     vi.useRealTimers();
   });
 
-  const renderPage = (id = 'ag-101') =>
-    render(
+  const renderPage = async (id = 'ag-101') => {
+    const result = render(
       <MemoryRouter initialEntries={[`/agendamentos/reagendar/${id}`]}>
         <Routes>
           <Route path="/agendamentos/reagendar/:id" element={<ReagendamentoPage />} />
@@ -128,9 +143,12 @@ describe('ReagendamentoPage', () => {
         </Routes>
       </MemoryRouter>,
     );
+    await screen.findByRole('heading', { name: 'Reagendar Atendimento' });
+    return result;
+  };
 
-  it('renderiza os dados do agendamento original e as regras de reagendamento', () => {
-    renderPage('ag-101');
+  it('renderiza os dados do agendamento original e as regras de reagendamento', async () => {
+    await renderPage('ag-101');
 
     expect(screen.getByRole('heading', { name: 'Reagendar Atendimento' })).toBeInTheDocument();
     expect(screen.getByText('Massagem Relaxante com Óleos')).toBeInTheDocument();
@@ -140,7 +158,7 @@ describe('ReagendamentoPage', () => {
   });
 
   it('permite selecionar nova data, horário retornado pela grade e preencher motivo opcional', async () => {
-    renderPage('ag-101');
+    await renderPage('ag-101');
 
     // Seleciona a opção de data de 23 de Outubro
     const dataOption = screen.getByTestId('data-option-2026-10-23');
@@ -158,7 +176,7 @@ describe('ReagendamentoPage', () => {
   });
 
   it('confirma o reagendamento no backend e exibe os detalhes retornados', async () => {
-    renderPage('ag-101');
+    await renderPage('ag-101');
 
     await screen.findByTestId('horario-option-10:00');
     const btnConfirmar = screen.getByTestId('confirmar-reagendamento-btn');
@@ -182,7 +200,7 @@ describe('ReagendamentoPage', () => {
       sucesso: false,
       erro: 'O horário selecionado não está mais disponível.',
     });
-    renderPage('ag-101');
+    await renderPage('ag-101');
     await screen.findByTestId('horario-option-10:00');
 
     fireEvent.click(screen.getByTestId('confirmar-reagendamento-btn'));
@@ -193,8 +211,8 @@ describe('ReagendamentoPage', () => {
     expect(screen.queryByTestId('reagendamento-sucesso-card')).not.toBeInTheDocument();
   });
 
-  it('permite voltar para a lista de agendamentos pelo botão superior', () => {
-    renderPage('ag-101');
+  it('permite voltar para a lista de agendamentos pelo botão superior', async () => {
+    await renderPage('ag-101');
 
     const btnVoltarTopo = screen.getByTestId('voltar-agendamentos-btn');
     fireEvent.click(btnVoltarTopo);
@@ -202,10 +220,10 @@ describe('ReagendamentoPage', () => {
     expect(screen.getByText('Lista de Agendamentos')).toBeInTheDocument();
   });
 
-  it('gera opções dinâmicas da semana seguinte excluindo as folgas da dona da clínica (domingos e terças)', () => {
+  it('gera opções dinâmicas da semana seguinte excluindo as folgas da dona da clínica (domingos e terças)', async () => {
     // Definimos a data do sistema como 2026-10-20 (terça-feira)
     vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
-    renderPage('ag-101');
+    await renderPage('ag-101');
 
     // Dias úteis seguintes gerados dinamicamente
     expect(screen.getByTestId('data-option-2026-10-21')).toBeInTheDocument(); // Quarta

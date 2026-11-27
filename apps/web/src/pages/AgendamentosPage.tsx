@@ -5,10 +5,6 @@ import { useOptionalAuth } from '@/features/auth/auth-context';
 import { AgendamentoCard } from '@/features/agendamentos/components/AgendamentoCard';
 import { AgendamentoDetalhesModal } from '@/features/agendamentos/components/AgendamentoDetalhesModal';
 import { CancelModal } from '@/features/agendamentos/components/CancelModal';
-import {
-  getAgendamentosStorage,
-  saveAgendamentosStorage,
-} from '@/features/agendamentos/data/agendamentos-storage';
 import { carregarAgendamentos, cancelarAgendamentoBackend } from '@/services/agendamentos-service';
 import type { Agendamento, StatusAgendamento } from '@/features/agendamentos/types/agendamento';
 
@@ -35,9 +31,9 @@ interface AgendamentosPageContentProps {
 
 function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
   const navigate = useNavigate();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(() =>
-    getAgendamentosStorage(userId),
-  );
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroTab>('todos');
   const [agendamentoParaCancelar, setAgendamentoParaCancelar] = useState<Agendamento | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -47,11 +43,15 @@ function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
 
   useEffect(() => {
     let ativo = true;
-    carregarAgendamentos(userId).then((res) => {
-      if (ativo && res.agendamentos.length > 0) {
+    carregarAgendamentos(userId)
+      .then((res) => {
+        if (!ativo) return;
         setAgendamentos(res.agendamentos);
-      }
-    });
+        setLoadError(res.erro ?? null);
+      })
+      .finally(() => {
+        if (ativo) setLoading(false);
+      });
     return () => {
       ativo = false;
     };
@@ -62,28 +62,19 @@ function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
     window.setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handleConfirmarCancelamento = (agendamentoId: string, motivo?: string) => {
-    setAgendamentos((current) => {
-      const updated = current.map((item) =>
-        item.id === agendamentoId ? { ...item, status: 'cancelado' as const } : item,
-      );
-      saveAgendamentosStorage(updated, userId);
-      return updated;
-    });
-    mostrarToast('Agendamento cancelado com sucesso.');
-
-    // Sincroniza com backend de forma assíncrona
-    cancelarAgendamentoBackend({ agendamentoId, motivo })
-      .then((res) => {
-        if (res.sucesso && res.dados?.sinalRetido) {
-          mostrarToast(
-            'Agendamento cancelado. Atenção: cancelamentos com menos de 3 horas de antecedência retêm o sinal conforme as regras da clínica.',
-          );
-        }
-      })
-      .catch(() => {
-        // Fallback silencioso em offline
-      });
+  const handleConfirmarCancelamento = async (agendamentoId: string, motivo?: string) => {
+    const res = await cancelarAgendamentoBackend({ agendamentoId, motivo });
+    if (!res.sucesso || !res.dados) {
+      mostrarToast(res.erro || 'Não foi possível cancelar o agendamento.');
+      return;
+    }
+    const atualizado = res.dados;
+    setAgendamentos((current) => current.map((item) => item.id === agendamentoId
+      ? { ...item, status: 'cancelado' as const, observacao: atualizado.observacoes ?? item.observacao }
+      : item));
+    mostrarToast(atualizado.sinalRetido
+      ? 'Agendamento cancelado. O sinal foi retido conforme a regra de cancelamento.'
+      : 'Agendamento cancelado com sucesso.');
   };
 
   const agendamentosFiltrados = agendamentos.filter(
@@ -179,7 +170,8 @@ function AgendamentosPageContent({ userId }: AgendamentosPageContentProps) {
           })}
         </div>
 
-        {agendamentosFiltrados.length === 0 ? (
+        {loadError ? <p role="alert" className="mb-4 rounded-xl border border-[var(--color-error-border)] bg-[var(--color-error-bg)] p-3 text-sm text-[var(--color-error-text)]">{loadError}</p> : null}
+        {loading ? <p role="status">Carregando agendamentos…</p> : agendamentosFiltrados.length === 0 ? (
           <div
             data-testid="empty-agendamentos-state"
             className="flex min-h-64 flex-col items-center justify-center rounded-[var(--radius-xl)] border border-dashed border-[var(--color-brand-primary)] bg-[var(--color-brand-soft)] p-8 text-center"

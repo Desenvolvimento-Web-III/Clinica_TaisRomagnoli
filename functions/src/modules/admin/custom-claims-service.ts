@@ -2,7 +2,6 @@ import type { Auth } from 'firebase-admin/auth';
 import type { Firestore } from 'firebase-admin/firestore';
 import {
   atribuirFuncaoAdminInputSchema,
-  DEFAULT_INITIAL_ADMIN,
   type AtribuirFuncaoAdminInput,
 } from '@clinica/shared';
 import type { UserContext } from '../agendamentos/agendamentos-service.js';
@@ -164,24 +163,19 @@ export async function atribuirFuncaoAdministrativa(
  */
 export async function definirAdministradoraInicial(
   auth: ClaimsAuthAdapter,
+  adminEmail: string,
   firestore?: ClaimsFirestoreAdapter,
-  adminEmail = DEFAULT_INITIAL_ADMIN.email,
 ): Promise<AtribuirClaimsResult> {
-  let adminUid = DEFAULT_INITIAL_ADMIN.uid;
-
-  try {
-    const userRecord = await auth.getUserByEmail(adminEmail);
-    adminUid = userRecord.uid;
-  } catch {
-    // Caso o usuário ainda não exista no Auth (ex: ambiente limpo de testes ou emulador),
-    // tenta buscar pelo UID padrão
-    try {
-      const userRecord = await auth.getUser(adminUid);
-      adminUid = userRecord.uid;
-    } catch {
-      // Usuário não encontrado no Auth; mantém o UID padrão para configuração de seed
-    }
+  if (!adminEmail.trim()) {
+    throw new CustomClaimsBusinessError('Informe o e-mail da administradora.', 400);
   }
+  let userRecord: Awaited<ReturnType<Auth['getUserByEmail']>>;
+  try {
+    userRecord = await auth.getUserByEmail(adminEmail.trim());
+  } catch {
+    throw new CustomClaimsBusinessError('A conta informada não existe no Firebase Authentication.', 404);
+  }
+  const adminUid = userRecord.uid;
 
   const customClaims = {
     role: 'admin',
@@ -195,9 +189,9 @@ export async function definirAdministradoraInicial(
     await firestore.collection('usuarios').doc(adminUid).set(
       {
         uid: adminUid,
-        nome: DEFAULT_INITIAL_ADMIN.nome,
-        email: adminEmail,
-        telefone: DEFAULT_INITIAL_ADMIN.telefone,
+        nome: userRecord.displayName || '',
+        email: userRecord.email || adminEmail.trim(),
+        telefone: userRecord.phoneNumber || '',
         role: 'admin',
         status: 'ativo',
         updatedAt: agoraIso,

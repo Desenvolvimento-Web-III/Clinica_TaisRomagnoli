@@ -13,6 +13,7 @@ import * as serviceRepo from '@/features/services/service-firestore-repository';
 import { AgendamentoFlowPage } from './AgendamentoFlowPage';
 
 const mockUseOptionalAuth = vi.fn<() => unknown>(() => null);
+const mockUseAuth = vi.fn(() => ({ currentUser: null, logout: vi.fn(), isAdmin: false }));
 
 const agendamentoSalvoMock: SharedAgendamento = {
   id: 'ag-salvo-no-firestore',
@@ -41,6 +42,7 @@ const agendamentoSalvoMock: SharedAgendamento = {
 
 vi.mock('@/features/auth/auth-context', () => ({
   useOptionalAuth: () => mockUseOptionalAuth(),
+  useAuth: () => mockUseAuth(),
 }));
 
 describe('AgendamentoFlowPage', () => {
@@ -49,15 +51,52 @@ describe('AgendamentoFlowPage', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
     localStorage.clear();
-    mockUseOptionalAuth.mockReturnValue(null);
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
+    });
+    mockUseAuth.mockReturnValue({ currentUser: null, logout: vi.fn(), isAdmin: false });
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        clienteId: 'cli-1',
+        submittedAt: '2026-10-10T10:00:00.000Z',
+        updatedAt: '2026-10-10T10:00:00.000Z',
+      },
+    });
+    vi.spyOn(serviceRepo, 'subscribeToServicesFromFirestore').mockImplementation((cb) => {
+      cb([
+        { id: 'massagem-relaxante', name: 'Massagem Relaxante', description: 'Sessão de teste', durationMinutes: 60, priceInCents: 17000, imageSrc: '', imageAlt: 'Massagem Relaxante', active: true },
+        { id: 'reflexologia-podal', name: 'Reflexologia Podal', description: 'Sessão de teste', durationMinutes: 30, priceInCents: 10000, imageSrc: '', imageAlt: 'Reflexologia Podal', active: true },
+      ]);
+      return () => {};
+    });
+    vi.spyOn(horariosService, 'buscarHorariosFuncionamento').mockResolvedValue({
+      ...CONFIGURACAO_HORARIOS_PADRAO,
+      dias: CONFIGURACAO_HORARIOS_PADRAO.dias.map((dia) => ({
+        ...dia,
+        ativo: true,
+        turnos: [{ inicio: '09:00', fim: '12:00' }, { inicio: '14:00', fim: '18:00' }],
+      })),
+    });
+    vi.spyOn(horariosService, 'consultarHorariosDisponiveis').mockImplementation(async ({ duracaoMinutos = 30 }) => {
+      const horarios: string[] = [];
+      for (const [inicio, fim] of [[9 * 60, 12 * 60], [14 * 60, 18 * 60]]) {
+        for (let minutos = inicio; minutos + duracaoMinutos <= fim; minutos += 30) {
+          horarios.push(`${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`);
+        }
+      }
+      return horarios;
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  const renderFlow = (initialRoute = '/agendar/massagem-relaxante') => {
-    return render(
+  const renderFlow = async (initialRoute = '/agendar/massagem-relaxante') => {
+    const result = render(
       <MemoryRouter initialEntries={[initialRoute]}>
         <Routes>
           <Route path="/agendar/:serviceId" element={<AgendamentoFlowPage />} />
@@ -68,10 +107,15 @@ describe('AgendamentoFlowPage', () => {
         </Routes>
       </MemoryRouter>,
     );
+    await screen.findByText('Calendário');
+    fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
+    const slots = await screen.findAllByTestId(/^slot-hora-/);
+    fireEvent.click(slots[0]!);
+    return result;
   };
 
-  it('renderiza o Calendário na etapa inicial com legendas e navegação de mês', () => {
-    renderFlow('/agendar/massagem-relaxante');
+  it('renderiza o Calendário na etapa inicial com legendas e navegação de mês', async () => {
+    await renderFlow('/agendar/massagem-relaxante');
 
     expect(screen.getByText('Calendário')).toBeInTheDocument();
     expect(screen.getByTestId('legenda-disponivel')).toBeInTheDocument();
@@ -95,17 +139,17 @@ describe('AgendamentoFlowPage', () => {
       configuracaoComTercaAberta,
     );
 
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     expect(await screen.findByTestId('dia-disponivel-2026-10-20')).toBeInTheDocument();
     expect(screen.getByTestId('dia-disponivel-2026-10-21')).toBeInTheDocument();
   });
 
-  it('permite selecionar data e horário no Calendário e avançar para confirmação', () => {
+  it('permite selecionar data e horário no Calendário e avançar para confirmação', async () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
     });
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     // Seleciona um dia disponível (ex: dia 23)
     const dia23 = screen.getByTestId('dia-disponivel-2026-10-23');
@@ -132,8 +176,8 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('permite voltar do formulário de confirmação para o Calendário', () => {
-    renderFlow('/agendar/massagem-relaxante');
+  it('permite voltar do formulário de confirmação para o Calendário', async () => {
+    await renderFlow('/agendar/massagem-relaxante');
 
     // Avança para confirmação
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
@@ -152,7 +196,7 @@ describe('AgendamentoFlowPage', () => {
       .spyOn(agendamentosService, 'criarAgendamentoFirestore')
       .mockResolvedValue({ sucesso: true, dados: agendamentoSalvoMock });
 
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     // Calendário -> Confirmação
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
@@ -181,20 +225,17 @@ describe('AgendamentoFlowPage', () => {
   });
 
   it('não conclui o agendamento de visitante sem salvar no backend', async () => {
-    renderFlow('/agendar/massagem-relaxante');
+    mockUseOptionalAuth.mockReturnValue(null);
+    await renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
-    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
-    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
-
-    expect(await screen.findByTestId('erro-finalizar-agendamento')).toHaveTextContent(
-      'Entre na sua conta para salvar e confirmar o agendamento.',
-    );
+    expect(screen.queryByTestId('avancar-pagamento-btn')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/ficha de anamnese não preenchida/i);
     expect(screen.queryByText('Solicitação registrada!')).not.toBeInTheDocument();
   });
 
-  it('permite alternar métodos de pagamento no passo de Pagamento', () => {
-    renderFlow('/agendar/massagem-relaxante');
+  it('permite alternar métodos de pagamento no passo de Pagamento', async () => {
+    await renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
     fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
@@ -217,7 +258,7 @@ describe('AgendamentoFlowPage', () => {
       sucesso: true,
       dados: agendamentoSalvoMock,
     });
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
     fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
@@ -284,7 +325,7 @@ describe('AgendamentoFlowPage', () => {
       dados: agendamentoSalvoMock,
     });
 
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
 
@@ -312,14 +353,20 @@ describe('AgendamentoFlowPage', () => {
     });
     vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
       sucesso: true,
-      dados: undefined,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        clienteId: 'cli-1',
+        submittedAt: '2026-10-10T10:00:00.000Z',
+        updatedAt: '2026-10-10T10:00:00.000Z',
+      },
     });
     vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
       sucesso: false,
       erro: 'O Firebase recusou a gravação.',
     });
 
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
     fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
@@ -330,15 +377,15 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.queryByText('Solicitação registrada!')).not.toBeInTheDocument();
   });
 
-  it('desabilita navegação para meses anteriores ao mês atual', () => {
-    renderFlow('/agendar/massagem-relaxante');
+  it('desabilita navegação para meses anteriores ao mês atual', async () => {
+    await renderFlow('/agendar/massagem-relaxante');
 
     const btnMesAnterior = screen.getByTestId('mes-anterior-btn');
     expect(btnMesAnterior).toBeDisabled();
   });
 
-  it('marca dias que já passaram como desabilitados no calendário', () => {
-    renderFlow('/agendar/massagem-relaxante');
+  it('marca dias que já passaram como desabilitados no calendário', async () => {
+    await renderFlow('/agendar/massagem-relaxante');
 
     // 2026-10-08 é anterior à data de referência 2026-10-20
     const diaPassado = screen.getByTestId('dia-passado-2026-10-08');
@@ -346,10 +393,10 @@ describe('AgendamentoFlowPage', () => {
     expect(diaPassado).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('permite agendar para horários futuros no próprio dia atual e oculta horários que já passaram', () => {
+  it('permite agendar para horários futuros no próprio dia atual e oculta horários que já passaram', async () => {
     // Quarta-feira às 16:40
     vi.setSystemTime(new Date('2026-10-21T16:40:00.000'));
-    renderFlow('/agendar/massagem-relaxante');
+    await renderFlow('/agendar/massagem-relaxante');
 
     // Seleciona o dia de hoje (2026-10-21)
     const diaHoje = screen.getByTestId('dia-disponivel-2026-10-21');
@@ -362,7 +409,7 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.queryByTestId('slot-hora-16:30')).not.toBeInTheDocument();
 
     // Horário futuro (17:00) deve estar disponível e ser selecionável
-    const slot17 = screen.getByTestId('slot-hora-17:00');
+    const slot17 = await screen.findByTestId('slot-hora-17:00');
     expect(slot17).toBeInTheDocument();
     fireEvent.click(slot17);
 
@@ -375,15 +422,15 @@ describe('AgendamentoFlowPage', () => {
     expect(screen.getByText(/17:00 às 18:00/i)).toBeInTheDocument();
   });
 
-  it('ajusta os últimos horários disponíveis de cada turno conforme a duração do serviço (30 min vs 60 min)', () => {
-    const { unmount } = renderFlow('/agendar/massagem-relaxante'); // 60 min
+  it('ajusta os últimos horários disponíveis de cada turno conforme a duração do serviço (30 min vs 60 min)', async () => {
+    const { unmount } = await renderFlow('/agendar/massagem-relaxante'); // 60 min
     expect(screen.getByTestId('slot-hora-11:00')).toBeInTheDocument();
     expect(screen.queryByTestId('slot-hora-11:30')).not.toBeInTheDocument();
     expect(screen.getByTestId('slot-hora-17:00')).toBeInTheDocument();
     expect(screen.queryByTestId('slot-hora-17:30')).not.toBeInTheDocument();
     unmount();
 
-    renderFlow('/agendar/reflexologia-podal'); // 30 min
+    await renderFlow('/agendar/reflexologia-podal'); // 30 min
     expect(screen.getByTestId('slot-hora-11:30')).toBeInTheDocument();
     expect(screen.getByTestId('slot-hora-17:30')).toBeInTheDocument();
   });
@@ -405,7 +452,7 @@ describe('AgendamentoFlowPage', () => {
       return () => {};
     });
 
-    renderFlow('/agendar/serv-firestore-90');
+    await renderFlow('/agendar/serv-firestore-90');
 
     await waitFor(() => {
       expect(screen.getByTestId('slot-hora-10:30')).toBeInTheDocument();
@@ -428,7 +475,7 @@ describe('AgendamentoFlowPage', () => {
       },
     });
 
-    const { unmount } = renderFlow('/agendar/massagem-relaxante'); // 60 min
+    const { unmount } = await renderFlow('/agendar/massagem-relaxante'); // 60 min
 
     fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
     fireEvent.click(screen.getByTestId('slot-hora-09:00'));
@@ -439,7 +486,10 @@ describe('AgendamentoFlowPage', () => {
     expect(await screen.findByText('Solicitação registrada!')).toBeInTheDocument();
     unmount();
 
-    renderFlow('/agendar/massagem-relaxante');
+    vi.spyOn(horariosService, 'consultarHorariosDisponiveis').mockResolvedValue([
+      '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
+    ]);
+    await renderFlow('/agendar/massagem-relaxante');
     fireEvent.click(screen.getByTestId('dia-disponivel-2026-10-23'));
 
     expect(screen.queryByTestId('slot-hora-08:00')).not.toBeInTheDocument();

@@ -142,7 +142,7 @@ describe('AuthenticatedUserNav', () => {
     );
     expect(screen.getByRole('menuitem', { name: /perfil de clientes/i })).toHaveAttribute(
       'href',
-      '/admin/clientes/demo-client-1',
+      '/admin/clientes',
     );
   });
 

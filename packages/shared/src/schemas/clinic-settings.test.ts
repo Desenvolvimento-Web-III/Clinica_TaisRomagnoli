@@ -6,11 +6,19 @@ import {
   clinicRemindersSchema,
   clinicDeadlinesSchema,
 } from './clinic-settings.js';
-import { DEFAULT_CLINIC_SETTINGS } from '../constants/default-seeds.js';
+
+const validClinicSettings = {
+  percentualSinal: 30,
+  intervaloMinutos: 30,
+  diasFolga: [0, 2],
+  antecedenciaMinimaCancelamentoHoras: 3,
+  criterioClienteRecorrenteAtendimentosMes: 2,
+  updatedAt: '2026-11-25T00:00:00.000Z',
+};
 
 describe('Clinic Settings Schemas (@clinica/shared)', () => {
-  it('valida com sucesso DEFAULT_CLINIC_SETTINGS', () => {
-    expect(validateClinicSettings(DEFAULT_CLINIC_SETTINGS)).toBe(true);
+  it('valida configurações gerais persistidas', () => {
+    expect(validateClinicSettings(validClinicSettings)).toBe(true);
   });
 
   describe('clinicContactsSchema', () => {

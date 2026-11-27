@@ -13,6 +13,12 @@ vi.mock('firebase/firestore', () => ({
   getDoc: mockGetDoc,
 }));
 vi.mock('@/lib/firebase', () => ({ db: {}, auth: mockAuth }));
+vi.mock('@/config/env', () => ({
+  environment: {
+    firebase: { projectId: 'demo-clinica-tests' },
+    useFirebaseEmulators: true,
+  },
+}));
 
 import {
   salvarFichaAnamneseApi,

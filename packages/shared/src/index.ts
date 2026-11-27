@@ -5,10 +5,7 @@ export * from './types/clinic-settings.js';
 export * from './types/professional.js';
 export * from './types/user-profile.js';
 export * from './types/client-notification.js';
-export * from './constants/default-seeds.js';
 export * from './schemas/clinic-settings.js';
-export * from './seed-firestore.js';
-export * from './run-seed.js';
 
 export * from './types/agendamento.js';
 export * from './schemas/agendamento.js';
