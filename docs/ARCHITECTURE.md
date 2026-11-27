@@ -27,6 +27,13 @@ Rules: a criação valida o formato do registro e o perfil do cliente, e somente
 alterar ou excluir registros. O frontend não usa as Cloud Functions correspondentes, que continuam
 no backend mas não estão implantadas no projeto Firebase atual.
 
+O reaproveitamento do sinal de cancelamento no prazo não usa Cloud Functions: o SDK web cria o novo
+agendamento e marca o crédito de origem como consumido na mesma transação do Firestore. As Security
+Rules só aceitam a operação quando o crédito pertence ao mesmo cliente, veio de um agendamento
+cancelado no prazo com sinal confirmado e ainda disponível, e o novo agendamento referencia a origem.
+Isso impede reaproveitamento duplicado. Cancelamentos dentro do prazo sem sinal confirmado não geram
+crédito; o novo agendamento continua pendente até a confirmação administrativa já existente.
+
 ## Autorização futura
 
 A proteção deverá existir em quatro níveis complementares: interface, rotas, Functions e Firebase

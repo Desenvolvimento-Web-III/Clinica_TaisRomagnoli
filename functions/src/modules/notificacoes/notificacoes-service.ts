@@ -111,6 +111,7 @@ export async function criarNotificacaoCancelamento(
   repo: NotificacoesRepository,
   motivo?: string,
   classificacao?: ClassificacaoCancelamento,
+  sinalDisponivelReagendamento?: boolean,
 ): Promise<NotificacaoInterna> {
   const classificacaoFinal: ClassificacaoCancelamento =
     classificacao || agendamento.classificacaoCancelamento || (sinalRetido ? 'tardio' : 'no_prazo');
@@ -122,6 +123,8 @@ export async function criarNotificacaoCancelamento(
     sinalRetido,
     motivo,
     classificacao: classificacaoFinal,
+    sinalDisponivelReagendamento,
+    sinalPagoConfirmado: agendamento.sinalPagoConfirmado,
   });
 
   const agora = new Date().toISOString();
@@ -140,7 +143,7 @@ export async function criarNotificacaoCancelamento(
     metadados: {
       sinalRetido,
       classificacaoCancelamento: classificacaoFinal,
-      sinalDisponivelReagendamento: !sinalRetido,
+      sinalDisponivelReagendamento: sinalDisponivelReagendamento ?? !sinalRetido,
       motivo: motivo || undefined,
       valorSinalEmCentavos: agendamento.valorSinalEmCentavos,
     },

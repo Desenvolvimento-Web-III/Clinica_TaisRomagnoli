@@ -45,7 +45,11 @@ export interface Agendamento {
   classificacaoCancelamento?: ClassificacaoCancelamento;
   tipoCancelamento?: ClassificacaoCancelamento;
   sinalDisponivelReagendamento?: boolean;
+  sinalPagoConfirmado?: boolean;
   antecedenciaCancelamentoHoras?: number;
+  creditoAgendamentoOrigemId?: string;
+  sinalTransferidoParaAgendamentoId?: string;
+  sinalTransferidoEm?: string;
   createdAt: string;
   updatedAt: string;
 }

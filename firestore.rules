@@ -205,8 +205,52 @@ service cloud.firestore {
           'servicoNome', 'duracaoMinutos', 'valorTotalEmCentavos', 'valorSinalEmCentavos',
           'saldoRestanteEmCentavos', 'dataHoraInicio', 'dataHoraFim', 'intervaloAposMinutos',
           'profissionalId', 'profissionalNome', 'status', 'metodoPagamento', 'origem',
-          'sinalIsento', 'observacoes', 'createdAt', 'updatedAt'
-        ]);
+          'sinalIsento', 'observacoes', 'createdAt', 'updatedAt', 'creditoAgendamentoOrigemId'
+        ])
+        && (!('creditoAgendamentoOrigemId' in data)
+          || validCreditTransferCreate(data));
+    }
+
+    function validCreditTransferCreate(data) {
+      let sourcePath = /databases/$(database)/documents/agendamentos/$(data.creditoAgendamentoOrigemId);
+      let sourceBefore = get(sourcePath).data;
+      let sourceAfter = getAfter(sourcePath).data;
+      return data.creditoAgendamentoOrigemId is string
+        && exists(sourcePath)
+        && sourceBefore.clienteId == data.clienteId
+        && sourceBefore.status == 'cancelado'
+        && sourceBefore.classificacaoCancelamento == 'no_prazo'
+        && sourceBefore.sinalRetido == false
+        && sourceBefore.sinalPagoConfirmado == true
+        && sourceBefore.sinalDisponivelReagendamento == true
+        && sourceBefore.valorSinalEmCentavos is int
+        && sourceBefore.valorSinalEmCentavos > 0
+        && data.valorSinalEmCentavos == sourceBefore.valorSinalEmCentavos
+        && sourceAfter.sinalDisponivelReagendamento == false
+        && sourceAfter.sinalTransferidoParaAgendamentoId == data.id
+        && sourceAfter.sinalTransferidoEm == data.createdAt;
+    }
+
+    function validCreditTransferUpdate(agendamentoId) {
+      let targetId = request.resource.data.sinalTransferidoParaAgendamentoId;
+      let targetPath = /databases/$(database)/documents/agendamentos/$(targetId);
+      let targetAfter = getAfter(targetPath).data;
+      return (isOwner(resource.data.clienteId) || isAdmin())
+        && resource.data.status == 'cancelado'
+        && resource.data.classificacaoCancelamento == 'no_prazo'
+        && resource.data.sinalRetido == false
+        && resource.data.sinalPagoConfirmado == true
+        && resource.data.sinalDisponivelReagendamento == true
+        && request.resource.data.sinalDisponivelReagendamento == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'sinalDisponivelReagendamento', 'sinalTransferidoParaAgendamentoId',
+          'sinalTransferidoEm', 'updatedAt'
+        ])
+        && request.resource.data.sinalTransferidoEm is string
+        && existsAfter(targetPath)
+        && targetAfter.creditoAgendamentoOrigemId == agendamentoId
+        && targetAfter.clienteId == resource.data.clienteId
+        && targetAfter.valorSinalEmCentavos == resource.data.valorSinalEmCentavos;
     }
 
     // Coleção de clientes cadastrados
@@ -369,7 +413,8 @@ service cloud.firestore {
       allow read: if isAdmin() || isDocOwner(resource.data);
       allow create: if validBookingCreate(request.resource.data)
         && request.resource.data.id == agendamentoId;
-      allow update, delete: if false;
+      allow update: if validCreditTransferUpdate(agendamentoId);
+      allow delete: if false;
     }
 
     // Bloqueios de agenda da clínica (únicos e recorrentes)

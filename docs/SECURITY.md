@@ -23,6 +23,10 @@
   dados pessoais copiados do perfil e a existência/atividade do serviço. Como o catálogo ainda possui
   formatos legados de preço/duração, esses valores são snapshots enviados pelo cliente e precisam ser
   conferidos pela administradora. As regras não confirmam horário livre, ficha médica nem pagamento.
+- A única atualização direta permitida em `/agendamentos` consome um crédito de sinal em uma transação
+  que também cria o novo pedido: o registro de origem precisa pertencer ao mesmo cliente, estar
+  cancelado no prazo, ter sinal confirmado e crédito disponível. A regra vincula origem e destino e
+  recusa uma segunda utilização. Demais atualizações e exclusões continuam bloqueadas.
 - A fila de lembretes assistidos grava somente o status, mensagem personalizada e data do agendamento
   em `/fila_lembretes/{agendamentoId}`. A leitura e a escrita são exclusivas da administradora nas
   Security Rules; clientes e usuários anônimos não podem acessar a fila. O contato permanece manual,

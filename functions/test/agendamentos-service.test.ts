@@ -423,6 +423,8 @@ describe('Agendamentos Service (Functions Backend)', () => {
         repo,
       );
 
+      await repo.atualizar({ ...agendamento, status: 'confirmado' });
+
       // Cancelamento às 09:00 (5 horas antes do horário das 14:00)
       const dataReferencia = new Date('2026-10-22T09:00:00.000Z');
 
@@ -456,6 +458,8 @@ describe('Agendamentos Service (Functions Backend)', () => {
         repo,
       );
 
+      await repo.atualizar({ ...agendamento, status: 'confirmado' });
+
       // Cancelamento às 12:30 (1h30 antes do horário das 14:00)
       const dataReferencia = new Date('2026-10-22T12:30:00.000Z');
 
@@ -471,6 +475,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
       expect(cancelado.tipoCancelamento).toBe('tardio');
       expect(cancelado.sinalRetido).toBe(true); // Retém sinal conforme regra de produto
       expect(cancelado.sinalDisponivelReagendamento).toBe(false);
+      expect(cancelado.sinalPagoConfirmado).toBe(true);
       expect(cancelado.antecedenciaCancelamentoHoras).toBe(1);
     });
 
@@ -488,6 +493,8 @@ describe('Agendamentos Service (Functions Backend)', () => {
         repo,
       );
 
+      await repo.atualizar({ ...agendamento, status: 'confirmado' });
+
       // Cancelamento às 11:00 (exatamente 3 horas antes)
       const dataReferencia = new Date('2026-10-22T11:00:00.000Z');
 
@@ -502,6 +509,37 @@ describe('Agendamentos Service (Functions Backend)', () => {
       expect(cancelado.classificacaoCancelamento).toBe('no_prazo');
       expect(cancelado.sinalRetido).toBe(false);
       expect(cancelado.sinalDisponivelReagendamento).toBe(true);
+    });
+
+    it('não gera crédito para agendamento pendente sem sinal confirmado, mesmo com antecedência', async () => {
+      const agendamento = await solicitarNovoAgendamento(
+        {
+          servicoId: 'massagem-relaxante',
+          servicoNome: 'Massagem Relaxante',
+          duracaoMinutos: 60,
+          valorTotalEmCentavos: 17000,
+          dataHoraInicio: '2026-10-22T14:00:00.000Z',
+          metodoPagamento: 'pix' as const,
+        },
+        clienteUser,
+        repo,
+      );
+
+      const cancelado = await cancelarAgendamentoExistente(
+        { agendamentoId: agendamento.id },
+        clienteUser,
+        repo,
+        notifRepo,
+        new Date('2026-10-22T09:00:00.000Z'),
+      );
+
+      expect(cancelado.classificacaoCancelamento).toBe('no_prazo');
+      expect(cancelado.sinalRetido).toBe(false);
+      expect(cancelado.sinalPagoConfirmado).toBe(false);
+      expect(cancelado.sinalDisponivelReagendamento).toBe(false);
+      expect(cancelado.sinalRetido).toBe(false);
+      const notifs = await notifRepo.listarPorDestinatario(clienteUser.uid);
+      expect(notifs[0]?.mensagem).toContain('nenhum crédito foi gerado');
     });
 
     it('impede cancelamento de agendamento já concluído ou já cancelado', async () => {
@@ -614,6 +652,8 @@ describe('Agendamentos Service (Functions Backend)', () => {
         repo,
       );
 
+      await repo.atualizar({ ...agendamento, status: 'confirmado' });
+
       // Cancelamento com 4h de antecedência
       const dataRef = new Date('2026-10-22T10:00:00.000Z');
       await cancelarAgendamentoExistente(
@@ -649,6 +689,8 @@ describe('Agendamentos Service (Functions Backend)', () => {
         clienteUser,
         repo,
       );
+
+      await repo.atualizar({ ...agendamento, status: 'confirmado' });
 
       // Cancelamento com apenas 1 hora de antecedência (tardio)
       const dataRef = new Date('2026-10-22T13:00:00.000Z');

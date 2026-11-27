@@ -78,6 +78,8 @@ export const solicitarAgendamentoInputSchema = z.object({
     .optional(),
   // Campo exclusivo para criação presencial por administradora
   isencaoSinalAdmin: z.boolean().optional().default(false),
+  // ID do agendamento cancelado no prazo cujo sinal será reaproveitado nesta solicitação.
+  creditoAgendamentoId: z.string().min(1).optional(),
 });
 
 export type SolicitarAgendamentoInput = z.input<typeof solicitarAgendamentoInputSchema>;
@@ -133,6 +135,14 @@ export const agendamentoSchema = z.object({
   faltaRegistradaEm: z.string().optional(),
   motivoCancelamento: z.string().optional(),
   sinalRetido: z.boolean().optional(),
+  classificacaoCancelamento: z.enum(['no_prazo', 'tardio']).optional(),
+  tipoCancelamento: z.enum(['no_prazo', 'tardio']).optional(),
+  sinalDisponivelReagendamento: z.boolean().optional(),
+  sinalPagoConfirmado: z.boolean().optional(),
+  antecedenciaCancelamentoHoras: z.number().optional(),
+  creditoAgendamentoOrigemId: z.string().optional(),
+  sinalTransferidoParaAgendamentoId: z.string().optional(),
+  sinalTransferidoEm: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

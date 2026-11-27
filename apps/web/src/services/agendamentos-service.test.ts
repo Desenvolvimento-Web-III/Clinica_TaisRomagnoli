@@ -7,35 +7,48 @@ import {
   cancelarAgendamentoBackend,
   alterarAgendamentoBackend,
   listarAgendamentosBackend,
+  criarAgendamentoFirestore,
   criarAgendamento,
   carregarAgendamentos,
 } from './agendamentos-service';
 import type { Agendamento as SharedAgendamento } from '@clinica/shared';
 import { environment } from '@/config/env';
 
-const { mockGetDocs, mockCollection, mockQuery, mockWhere, mockOrderBy, mockAuth } = vi.hoisted(
-  () => ({
-    mockGetDocs: vi.fn(),
-    mockCollection: vi.fn(),
-    mockQuery: vi.fn(),
-    mockWhere: vi.fn(),
-    mockOrderBy: vi.fn(),
-    mockAuth: {
-      currentUser: { uid: 'user-456', getIdToken: async () => 'fake-jwt-token' } as {
-        uid: string;
-        getIdToken: () => Promise<string>;
-      } | null,
-    },
-  }),
-);
+const {
+  mockGetDocs,
+  mockCollection,
+  mockQuery,
+  mockWhere,
+  mockOrderBy,
+  mockAuth,
+  mockDoc,
+  mockGetDoc,
+  mockRunTransaction,
+} = vi.hoisted(() => ({
+  mockGetDocs: vi.fn(),
+  mockCollection: vi.fn(),
+  mockQuery: vi.fn(),
+  mockWhere: vi.fn(),
+  mockOrderBy: vi.fn(),
+  mockDoc: vi.fn(),
+  mockGetDoc: vi.fn(),
+  mockRunTransaction: vi.fn(),
+  mockAuth: {
+    currentUser: { uid: 'user-456', getIdToken: async () => 'fake-jwt-token' } as {
+      uid: string;
+      getIdToken: () => Promise<string>;
+    } | null,
+  },
+}));
 
 vi.mock('firebase/firestore', () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
-  doc: vi.fn(),
-  getDoc: vi.fn(),
+  doc: (...args: unknown[]) => mockDoc(...args),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   orderBy: (...args: unknown[]) => mockOrderBy(...args),
   query: (...args: unknown[]) => mockQuery(...args),
+  runTransaction: (...args: unknown[]) => mockRunTransaction(...args),
   setDoc: vi.fn(),
   where: (...args: unknown[]) => mockWhere(...args),
 }));
@@ -47,6 +60,9 @@ describe('agendamentos-service', () => {
     vi.restoreAllMocks();
     localStorage.clear();
     global.fetch = vi.fn();
+    mockDoc.mockReset();
+    mockGetDoc.mockReset();
+    mockRunTransaction.mockReset();
     mockAuth.currentUser = { uid: 'user-456', getIdToken: async () => 'fake-jwt-token' };
   });
 
@@ -85,6 +101,79 @@ describe('agendamentos-service', () => {
     expect(ui.status).toBe('confirmado');
     expect(ui.duracaoMinutos).toBe(60);
     expect(ui.observacao).toBe('Preferência por óleo neutro');
+  });
+
+  it('consome o crédito de sinal e cria o novo agendamento na mesma transação', async () => {
+    mockDoc.mockImplementation((_db: unknown, collection: string, id: string) => ({
+      path: `${collection}/${id}`,
+    }));
+    const credito: SharedAgendamento = {
+      ...agendamentoMock,
+      id: 'ag-cancelado',
+      valorSinalEmCentavos: 3600,
+      status: 'cancelado',
+      sinalRetido: false,
+      sinalPagoConfirmado: true,
+      classificacaoCancelamento: 'no_prazo',
+      sinalDisponivelReagendamento: true,
+    };
+    mockGetDoc.mockImplementation(async (reference: { path: string }) => {
+      if (reference.path === 'clientes/user-456') {
+        return { exists: () => true, data: () => ({ nome: 'Mariana Silva' }) };
+      }
+      if (reference.path === 'servicos/reiki') {
+        return {
+          id: 'reiki',
+          exists: () => true,
+          data: () => ({
+            name: 'Reiki',
+            active: true,
+            durationMinutes: 60,
+            priceInCents: 12000,
+            sinalInCents: 3600,
+          }),
+        };
+      }
+      return { exists: () => true, data: () => credito };
+    });
+
+    const transaction = {
+      get: vi.fn().mockResolvedValue({ exists: () => true, data: () => credito }),
+      update: vi.fn(),
+      set: vi.fn(),
+    };
+    mockRunTransaction.mockImplementation(
+      async (_db: unknown, callback: (tx: typeof transaction) => Promise<void>) =>
+        callback(transaction),
+    );
+
+    const resultado = await criarAgendamentoFirestore({
+      servicoId: 'reiki',
+      servicoNome: 'Reiki',
+      duracaoMinutos: 60,
+      valorTotalEmCentavos: 12000,
+      dataHoraInicio: '2026-12-01T13:00:00.000Z',
+      metodoPagamento: 'pix',
+      creditoAgendamentoId: 'ag-cancelado',
+    });
+
+    expect(resultado.erro).toBeUndefined();
+    expect(resultado.dados?.valorSinalEmCentavos).toBe(3600);
+    expect(resultado.dados?.creditoAgendamentoOrigemId).toBe('ag-cancelado');
+    expect(transaction.update).toHaveBeenCalledWith(
+      { path: 'agendamentos/ag-cancelado' },
+      expect.objectContaining({
+        sinalDisponivelReagendamento: false,
+        sinalTransferidoParaAgendamentoId: expect.any(String),
+      }),
+    );
+    expect(transaction.set).toHaveBeenCalledWith(
+      expect.objectContaining({ path: expect.stringMatching(/^agendamentos\/ag-/) }),
+      expect.objectContaining({
+        creditoAgendamentoOrigemId: 'ag-cancelado',
+        valorSinalEmCentavos: 3600,
+      }),
+    );
   });
 
   it('getFunctionsBaseUrl respeita a configuração Firebase e só usa emuladores quando configurados', () => {

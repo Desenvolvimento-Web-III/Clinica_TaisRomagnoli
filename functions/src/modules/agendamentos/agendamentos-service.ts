@@ -577,16 +577,26 @@ export async function cancelarAgendamentoExistente(
     3,
     dataReferencia,
   );
+  const sinalDisponivelReagendamento =
+    antecedencia.sinalDisponivelReagendamento &&
+    agendamento.status === 'confirmado' &&
+    !agendamento.sinalIsento &&
+    agendamento.valorSinalEmCentavos > 0;
+  const sinalPagoConfirmado =
+    agendamento.status === 'confirmado' &&
+    !agendamento.sinalIsento &&
+    agendamento.valorSinalEmCentavos > 0;
 
   const atualizado: Agendamento = {
     ...agendamento,
     status: 'cancelado',
     canceladoEm: dataReferencia.toISOString(),
     motivoCancelamento: parsed.motivo || 'Cancelado pelo cliente',
-    sinalRetido: antecedencia.sinalRetido,
+    sinalRetido: antecedencia.sinalRetido && sinalPagoConfirmado,
+    sinalPagoConfirmado,
     classificacaoCancelamento: antecedencia.classificacao,
     tipoCancelamento: antecedencia.classificacao,
-    sinalDisponivelReagendamento: antecedencia.sinalDisponivelReagendamento,
+    sinalDisponivelReagendamento,
     antecedenciaCancelamentoHoras: antecedencia.horasRestantes,
     updatedAt: dataReferencia.toISOString(),
   };
@@ -600,6 +610,7 @@ export async function cancelarAgendamentoExistente(
       notificacoesRepo,
       parsed.motivo,
       antecedencia.classificacao,
+      sinalDisponivelReagendamento,
     );
   }
 
@@ -700,10 +711,19 @@ export async function atualizarStatusAgendamento(
       );
       atualizado.canceladoEm = dataReferenciaIso;
       atualizado.motivoCancelamento = parsed.motivo || 'Cancelamento registrado pela administração';
-      atualizado.sinalRetido = antecedencia.sinalRetido;
+      const sinalPagoConfirmado =
+        agendamento.status === 'confirmado' &&
+        !agendamento.sinalIsento &&
+        agendamento.valorSinalEmCentavos > 0;
+      atualizado.sinalRetido = antecedencia.sinalRetido && sinalPagoConfirmado;
       atualizado.classificacaoCancelamento = antecedencia.classificacao;
       atualizado.tipoCancelamento = antecedencia.classificacao;
-      atualizado.sinalDisponivelReagendamento = antecedencia.sinalDisponivelReagendamento;
+      atualizado.sinalDisponivelReagendamento =
+        antecedencia.sinalDisponivelReagendamento &&
+        agendamento.status === 'confirmado' &&
+        !agendamento.sinalIsento &&
+        agendamento.valorSinalEmCentavos > 0;
+      atualizado.sinalPagoConfirmado = sinalPagoConfirmado;
       atualizado.antecedenciaCancelamentoHoras = antecedencia.horasRestantes;
       break;
     }
@@ -735,6 +755,7 @@ export async function atualizarStatusAgendamento(
         notificacoesRepo,
         parsed.motivo,
         salvo.classificacaoCancelamento,
+        salvo.sinalDisponivelReagendamento,
       );
     } else if (parsed.novoStatus === 'falta') {
       await criarNotificacaoCancelamento(
@@ -846,6 +867,8 @@ export async function expirarReservasTemporariasService(
         motivoCancelamento:
           'Tempo limite da reserva temporária expirado durante o processamento do pagamento',
         sinalRetido: false,
+        sinalPagoConfirmado: false,
+        sinalDisponivelReagendamento: false,
         updatedAt: agoraIso,
       };
 
@@ -860,6 +883,7 @@ export async function expirarReservasTemporariasService(
             notifRepo,
             atualizado.motivoCancelamento,
             'no_prazo',
+            false,
           );
         } catch {
           // Ignora falha de notificação

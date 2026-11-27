@@ -126,4 +126,110 @@ describe('Security Rules: criação de agendamento direto no Firestore', () => {
       adminDb.doc('agendamentos/ag-novo').set({ ...booking, origem: 'presencial_admin' }),
     );
   });
+
+  it('transfere uma única vez o sinal de cancelamento no prazo para um novo agendamento', async () => {
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('agendamentos/ag-cancelado').set({
+        id: 'ag-cancelado',
+        clienteId: 'cliente-1',
+        status: 'cancelado',
+        classificacaoCancelamento: 'no_prazo',
+        sinalRetido: false,
+        sinalPagoConfirmado: true,
+        sinalDisponivelReagendamento: true,
+        valorSinalEmCentavos: 3600,
+      });
+    });
+
+    const db = testEnvironment.authenticatedContext('cliente-1').firestore();
+    const source = db.doc('agendamentos/ag-cancelado');
+    const target = db.doc('agendamentos/ag-reagendado');
+    const transferredBooking = {
+      ...booking,
+      id: 'ag-reagendado',
+      valorSinalEmCentavos: 3600,
+      saldoRestanteEmCentavos: 8400,
+      creditoAgendamentoOrigemId: 'ag-cancelado',
+    };
+
+    await assertSucceeds(
+      db.runTransaction(async (transaction) => {
+        await transaction.get(source);
+        transaction.update(source, {
+          sinalDisponivelReagendamento: false,
+          sinalTransferidoParaAgendamentoId: 'ag-reagendado',
+          sinalTransferidoEm: transferredBooking.createdAt,
+          updatedAt: transferredBooking.createdAt,
+        });
+        transaction.set(target, transferredBooking);
+      }),
+    );
+
+    const sourceData = (await source.get()).data();
+    if (!sourceData) throw new Error('Crédito de origem não encontrado após a transferência.');
+    if (sourceData.sinalDisponivelReagendamento !== false) {
+      throw new Error('O crédito de origem continuou disponível após a transferência.');
+    }
+    if (sourceData.sinalTransferidoParaAgendamentoId !== 'ag-reagendado') {
+      throw new Error('O crédito não foi vinculado ao novo agendamento.');
+    }
+
+    await assertFails(
+      db.runTransaction(async (transaction) => {
+        await transaction.get(source);
+        transaction.update(source, {
+          sinalDisponivelReagendamento: false,
+          sinalTransferidoParaAgendamentoId: 'ag-reagendado-2',
+          sinalTransferidoEm: transferredBooking.createdAt,
+          updatedAt: transferredBooking.createdAt,
+        });
+        transaction.set(db.doc('agendamentos/ag-reagendado-2'), {
+          ...transferredBooking,
+          id: 'ag-reagendado-2',
+        });
+      }),
+    );
+  });
+
+  it('recusa reutilizar sinal de cancelamento tardio ou de outro cliente', async () => {
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('agendamentos/ag-tardio').set({
+        id: 'ag-tardio',
+        clienteId: 'cliente-1',
+        status: 'cancelado',
+        classificacaoCancelamento: 'tardio',
+        sinalRetido: true,
+        sinalPagoConfirmado: true,
+        sinalDisponivelReagendamento: false,
+        valorSinalEmCentavos: 3600,
+      });
+    });
+
+    const db = testEnvironment.authenticatedContext('cliente-1').firestore();
+    const source = db.doc('agendamentos/ag-tardio');
+    await assertFails(
+      db.runTransaction(async (transaction) => {
+        await transaction.get(source);
+        transaction.update(source, {
+          sinalDisponivelReagendamento: false,
+          sinalTransferidoParaAgendamentoId: 'ag-reagendado',
+          sinalTransferidoEm: booking.createdAt,
+          updatedAt: booking.createdAt,
+        });
+        transaction.set(db.doc('agendamentos/ag-reagendado'), {
+          ...booking,
+          creditoAgendamentoOrigemId: 'ag-tardio',
+        });
+      }),
+    );
+
+    const otherClientDb = testEnvironment.authenticatedContext('cliente-2').firestore();
+    await assertFails(
+      otherClientDb.doc('agendamentos/ag-reagendado').set({
+        ...booking,
+        clienteId: 'cliente-2',
+        creditoAgendamentoOrigemId: 'ag-tardio',
+      }),
+    );
+  });
 });

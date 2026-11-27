@@ -64,6 +64,23 @@ describe('Agendamento Schemas e Regras de Negócio (@clinica/shared)', () => {
       expect(invalido.success).toBe(false);
     });
 
+    it('aceita opcionalmente o agendamento de origem do crédito de sinal', () => {
+      const resultado = solicitarAgendamentoInputSchema.safeParse({
+        servicoId: 'massagem-relaxante',
+        servicoNome: 'Massagem Relaxante',
+        duracaoMinutos: 60,
+        valorTotalEmCentavos: 17000,
+        dataHoraInicio: '2026-10-22T10:00:00.000Z',
+        metodoPagamento: 'pix',
+        creditoAgendamentoId: 'ag-cancelado-no-prazo',
+      });
+
+      expect(resultado.success).toBe(true);
+      if (resultado.success) {
+        expect(resultado.data.creditoAgendamentoId).toBe('ag-cancelado-no-prazo');
+      }
+    });
+
     it('rejeita payload com duração inválida ou valor negativo', () => {
       const inputInvalido = {
         servicoId: '',

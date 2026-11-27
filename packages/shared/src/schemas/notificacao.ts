@@ -125,13 +125,21 @@ export function gerarConteudoAvisoCancelamento(params: {
   sinalRetido: boolean;
   motivo?: string;
   classificacao?: ClassificacaoCancelamento;
+  sinalDisponivelReagendamento?: boolean;
+  sinalPagoConfirmado?: boolean;
 }): { titulo: string; mensagem: string; tipo: ClientNotificationType } {
   const dataFormatada = formatarDataHoraNotificacao(params.dataHoraInicio);
   const isTardio = params.classificacao === 'tardio' || params.sinalRetido;
 
-  const explicacaoSinal = isTardio
-    ? 'Como a solicitação ocorreu com menos de 3 horas de antecedência mínima, o cancelamento foi classificado como tardio e o sinal de 30% foi retido conforme a política da clínica. Como faltam menos de três horas para a sessão, o valor do sinal não poderá ser reutilizado.'
-    : 'Como a antecedência mínima de 3 horas foi respeitada, o cancelamento foi classificado no prazo e o valor do seu sinal de 30% permanece disponível como crédito para reagendamento futuro. Você pode usar o valor do sinal em um novo agendamento.';
+  const temCredito = params.sinalDisponivelReagendamento ?? !isTardio;
+  const explicacaoSinal =
+    isTardio && params.sinalPagoConfirmado !== false
+      ? 'Como a solicitação ocorreu com menos de 3 horas de antecedência mínima, o cancelamento foi classificado como tardio e o sinal de 30% foi retido conforme a política da clínica. Como faltam menos de três horas para a sessão, o valor do sinal não poderá ser reutilizado.'
+      : isTardio
+        ? 'O cancelamento foi realizado com menos de 3 horas de antecedência. Como não havia sinal pago e confirmado neste agendamento, nenhum crédito foi gerado.'
+        : temCredito
+          ? 'Como a antecedência mínima de 3 horas foi respeitada, o cancelamento foi classificado no prazo e o valor do seu sinal de 30% permanece disponível como crédito para reagendamento futuro. Você pode usar o valor do sinal em um novo agendamento.'
+          : 'O cancelamento foi realizado dentro do prazo. Como não havia sinal pago e confirmado neste agendamento, nenhum crédito foi gerado.';
 
   const motivoTexto = params.motivo ? ` Motivo informado: "${params.motivo}".` : '';
 

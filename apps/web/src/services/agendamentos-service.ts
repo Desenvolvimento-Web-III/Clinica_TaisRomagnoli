@@ -12,6 +12,7 @@ import {
   getDocs,
   orderBy,
   query,
+  runTransaction,
   setDoc,
   where,
 } from 'firebase/firestore';
@@ -382,9 +383,50 @@ export async function criarAgendamentoFirestore(
     const agora = new Date().toISOString();
     const id = `ag-${crypto.randomUUID()}`;
     const sinalIsento = usuario.uid !== clienteId && input.isencaoSinalAdmin === true;
-    const valorSinalEmCentavos = sinalIsento
+    const creditoAgendamentoId = input.creditoAgendamentoId;
+    let valorSinalEmCentavos = sinalIsento
       ? 0
       : (servico.sinalInCents ?? Math.round(servico.priceInCents * 0.3));
+
+    let agendamentoCreditoRef: ReturnType<typeof doc> | undefined;
+    let creditoSinalEmCentavos: number | undefined;
+    if (creditoAgendamentoId) {
+      if (sinalIsento) {
+        return {
+          sucesso: false,
+          erro: 'Um agendamento isento não pode consumir crédito de sinal.',
+        };
+      }
+      agendamentoCreditoRef = doc(db, 'agendamentos', creditoAgendamentoId);
+      const creditoSnapshot = await getDoc(agendamentoCreditoRef);
+      if (!creditoSnapshot.exists()) {
+        return { sucesso: false, erro: 'O crédito de sinal selecionado não foi encontrado.' };
+      }
+      const credito = creditoSnapshot.data() as SharedAgendamento;
+      if (
+        credito.clienteId !== clienteId ||
+        credito.status !== 'cancelado' ||
+        credito.classificacaoCancelamento !== 'no_prazo' ||
+        credito.sinalRetido !== false ||
+        credito.sinalPagoConfirmado !== true ||
+        credito.sinalDisponivelReagendamento !== true ||
+        !Number.isInteger(credito.valorSinalEmCentavos) ||
+        credito.valorSinalEmCentavos <= 0
+      ) {
+        return {
+          sucesso: false,
+          erro: 'Este agendamento não possui um sinal disponível para reaproveitamento.',
+        };
+      }
+      if (credito.valorSinalEmCentavos > servico.priceInCents) {
+        return {
+          sucesso: false,
+          erro: 'O valor do serviço escolhido é menor que o sinal disponível para reaproveitamento.',
+        };
+      }
+      creditoSinalEmCentavos = credito.valorSinalEmCentavos;
+      valorSinalEmCentavos = creditoSinalEmCentavos;
+    }
     const agendamento: SharedAgendamento = {
       id,
       clienteId,
@@ -406,12 +448,42 @@ export async function criarAgendamentoFirestore(
       metodoPagamento: input.metodoPagamento,
       origem: usuario.uid === clienteId ? 'app_cliente' : 'presencial_admin',
       sinalIsento,
+      ...(creditoAgendamentoId ? { creditoAgendamentoOrigemId: creditoAgendamentoId } : {}),
       ...(input.observacoes ? { observacoes: input.observacoes } : {}),
       createdAt: agora,
       updatedAt: agora,
     };
     etapa = 'gravar o agendamento';
-    await setDoc(doc(db, 'agendamentos', id), agendamento);
+    const agendamentoRef = doc(db, 'agendamentos', id);
+    if (agendamentoCreditoRef && creditoSinalEmCentavos !== undefined) {
+      await runTransaction(db, async (transaction) => {
+        const creditoSnapshot = await transaction.get(agendamentoCreditoRef!);
+        if (!creditoSnapshot.exists()) {
+          throw new Error('O crédito de sinal selecionado não foi encontrado.');
+        }
+        const credito = creditoSnapshot.data() as SharedAgendamento;
+        if (
+          credito.clienteId !== clienteId ||
+          credito.status !== 'cancelado' ||
+          credito.classificacaoCancelamento !== 'no_prazo' ||
+          credito.sinalRetido !== false ||
+          credito.sinalPagoConfirmado !== true ||
+          credito.sinalDisponivelReagendamento !== true ||
+          credito.valorSinalEmCentavos !== creditoSinalEmCentavos
+        ) {
+          throw new Error('Este crédito de sinal já foi utilizado ou não está mais disponível.');
+        }
+        transaction.update(agendamentoCreditoRef!, {
+          sinalDisponivelReagendamento: false,
+          sinalTransferidoParaAgendamentoId: id,
+          sinalTransferidoEm: agora,
+          updatedAt: agora,
+        });
+        transaction.set(agendamentoRef, agendamento);
+      });
+    } else {
+      await setDoc(agendamentoRef, agendamento);
+    }
     return { sucesso: true, dados: agendamento };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao gravar no Firestore.';
