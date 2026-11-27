@@ -176,11 +176,17 @@ export function LoginPage() {
     }
 
     setLoading(true);
+    let loginAutenticado = false;
     try {
       const cleanEmail = formData.email.trim();
       const credential = await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
+      loginAutenticado = Boolean(credential?.user);
       await finishLogin(credential, cleanEmail);
     } catch (error: unknown) {
+      if (loginAutenticado) {
+        navigate('/perfil', { replace: true });
+        return;
+      }
       const errorCode = getFirebaseErrorCode(error);
       if (
         errorCode === 'auth/invalid-credential' ||
