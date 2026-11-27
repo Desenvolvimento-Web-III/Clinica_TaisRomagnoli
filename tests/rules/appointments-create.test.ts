@@ -6,6 +6,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
+import { INITIAL_ANAMNESE_DATA } from '@clinica/shared';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 describe('Security Rules: criação de agendamento direto no Firestore', () => {
@@ -59,6 +60,10 @@ describe('Security Rules: criação de agendamento direto no Firestore', () => {
         active: true,
         durationMinutes: 60,
         priceInCents: 12000,
+      });
+      await firestore.doc('anamneses/cliente-1').set({
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
       });
     });
   });

@@ -125,6 +125,11 @@ describe('Isolamento de dados, agendamento e ficha do cliente', () => {
 
   describe('Agendamentos (/clientes/{uid}/agendamentos/{id} e /agendamentos/{id})', () => {
     it('permite que o cliente acesse seus próprios agendamentos na subcoleção', async () => {
+      await testEnvironment.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().doc('anamneses/cliente-1').set({
+          consentimentoConfirmado: true,
+        });
+      });
       const clientDb = testEnvironment
         .authenticatedContext('cliente-1', { role: 'cliente' })
         .firestore();

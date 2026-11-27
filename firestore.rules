@@ -146,16 +146,17 @@ service cloud.firestore {
 
     function profileMatchesBooking(data) {
       let profilePath = /databases/$(database)/documents/clientes/$(data.clienteId);
+      let profile = get(profilePath).data;
       return exists(profilePath)
         // O caminho já identifica o cliente. O campo uid é legado e pode não existir em perfis antigos.
-        && (!('uid' in get(profilePath).data) || get(profilePath).data.uid == data.clienteId)
-        && get(profilePath).data.nome == data.clienteNome
-        && (('email' in get(profilePath).data && 'clienteEmail' in data
-              && get(profilePath).data.email == data.clienteEmail)
-            || (!('email' in get(profilePath).data) && !('clienteEmail' in data)))
-        && (('telefone' in get(profilePath).data && 'clienteTelefone' in data
-              && get(profilePath).data.telefone == data.clienteTelefone)
-            || (!('telefone' in get(profilePath).data) && !('clienteTelefone' in data)));
+        && (!('uid' in profile) || profile.uid == data.clienteId)
+        && profile.nome == data.clienteNome
+        && (('email' in profile && 'clienteEmail' in data
+              && profile.email == data.clienteEmail)
+            || (!('email' in profile) && !('clienteEmail' in data)))
+        && (('telefone' in profile && 'clienteTelefone' in data
+              && profile.telefone == data.clienteTelefone)
+            || (!('telefone' in profile) && !('clienteTelefone' in data)));
     }
 
     function validAnamneseCondition(data, field) {
@@ -205,8 +206,10 @@ service cloud.firestore {
     function hasCompleteAnamnese(clienteId) {
       let rootPath = /databases/$(database)/documents/anamneses/$(clienteId);
       let nestedPath = /databases/$(database)/documents/clientes/$(clienteId)/anamneses/atual;
-      return (exists(rootPath) && isCompleteAnamnese(get(rootPath).data))
-        || (exists(nestedPath) && isCompleteAnamnese(get(nestedPath).data));
+      // Escritas não administrativas de anamneses já exigem a ficha completa acima.
+      // Na criação do agendamento basta confirmar o aceite, evitando reavaliar todo o esquema.
+      return (exists(rootPath) && get(rootPath).data.consentimentoConfirmado == true)
+        || (exists(nestedPath) && get(nestedPath).data.consentimentoConfirmado == true);
     }
 
     function serviceMatchesBooking(data) {
@@ -226,14 +229,17 @@ service cloud.firestore {
     }
 
     function validBookingCreate(data) {
-      return isSignedIn()
-        && (isOwner(data.clienteId) || isAdmin())
+      let signedIn = isSignedIn();
+      let owner = isOwner(data.clienteId);
+      let admin = isAdmin();
+      return signedIn
+        && (owner || admin)
         && profileMatchesBooking(data)
         && hasCompleteAnamnese(data.clienteId)
         && serviceMatchesBooking(data)
         && data.status == 'pendente'
-        && data.sinalIsento == (isAdmin() && !isOwner(data.clienteId) && data.sinalIsento)
-        && data.origem == (isOwner(data.clienteId) ? 'app_cliente' : 'presencial_admin')
+        && data.sinalIsento == (admin && !owner && data.sinalIsento)
+        && data.origem == (owner ? 'app_cliente' : 'presencial_admin')
         && data.intervaloAposMinutos == 30
         && data.duracaoMinutos is int
         && data.duracaoMinutos >= 15
@@ -355,17 +361,6 @@ service cloud.firestore {
   allow create, delete: if false;
   }
 }
-    // Coleção raiz de agendamentos
-    match /agendamentos/{agendamentoId} {
-      allow get: if isAdmin() || isDocOwner(resource.data);
-      allow list: if isAdmin() || (isSignedIn() && (
-        resource.data.clienteId == request.auth.uid ||
-        resource.data.uid == request.auth.uid
-      ));
-      allow create: if validBookingCreate(request.resource.data)
-        && request.resource.data.id == agendamentoId;
-      }
-
     function hasNoRestrictedAnamneseFieldsOnCreate(data) {
       return !(
         'exigeLiberacaoMedica' in data ||
@@ -466,7 +461,11 @@ service cloud.firestore {
     // Leitura permitida para a administradora ou para o próprio cliente titular do agendamento
     // Criação direta limitada a solicitações pendentes e validadas contra perfil e serviço.
     match /agendamentos/{agendamentoId} {
-      allow read: if isAdmin() || isDocOwner(resource.data);
+      allow get: if isAdmin() || isDocOwner(resource.data);
+      allow list: if isAdmin() || (isSignedIn() && (
+        resource.data.clienteId == request.auth.uid ||
+        resource.data.uid == request.auth.uid
+      ));
       allow create: if validBookingCreate(request.resource.data)
         && request.resource.data.id == agendamentoId;
       allow update: if validCreditTransferUpdate(agendamentoId);

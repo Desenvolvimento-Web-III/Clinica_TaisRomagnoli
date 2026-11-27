@@ -36,7 +36,10 @@ const CONFIGURACAO_HORARIOS_TESTE = {
     dia.dia === 4
       ? {
           ...dia,
-          turnos: [{ inicio: '08:00', fim: '13:00' }, { inicio: '14:00', fim: '18:00' }],
+          turnos: [
+            { inicio: '08:00', fim: '13:00' },
+            { inicio: '14:00', fim: '18:00' },
+          ],
           intervalosManutencao: [],
         }
       : dia,
@@ -264,9 +267,9 @@ describe('Agendamentos Service (Functions Backend)', () => {
         metodoPagamento: 'pix' as const,
       };
 
-      await expect(solicitarAgendamentoComConfigTeste(inputDomingo, clienteUser, repo)).rejects.toThrow(
-        /folga cadastrada/i,
-      );
+      await expect(
+        solicitarAgendamentoComConfigTeste(inputDomingo, clienteUser, repo),
+      ).rejects.toThrow(/folga cadastrada/i);
     });
 
     it('rejeita agendamento quando há conflito de horário incluindo o intervalo de 30min', async () => {
@@ -549,7 +552,7 @@ describe('Agendamentos Service (Functions Backend)', () => {
     });
 
     it('não gera crédito para agendamento pendente sem sinal confirmado, mesmo com antecedência', async () => {
-      const agendamento = await solicitarNovoAgendamento(
+      const agendamento = await solicitarAgendamentoComConfigTeste(
         {
           servicoId: 'massagem-relaxante',
           servicoNome: 'Massagem Relaxante',
