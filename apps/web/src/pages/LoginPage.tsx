@@ -1,9 +1,16 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { getIdTokenResult, signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  getIdTokenResult,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  type UserCredential,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { z } from 'zod';
 import { AuthLayout } from '@/components/ui/AuthLayout';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { getFirebaseErrorCode } from '@/lib/firebase-error';
 import { isAdministratorEmail } from '@/routes/admin-access';
 import {
@@ -68,6 +75,58 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showSenha, setShowSenha] = useState(false);
 
+  const finishLogin = async (credential: UserCredential, fallbackEmail?: string) => {
+    const user = credential?.user;
+    const email = user?.email?.trim() || fallbackEmail?.trim() || '';
+
+    if (user && typeof user.getIdToken === 'function') {
+      try {
+        const token = await user.getIdToken();
+        await iniciarSessaoUnicaNoBackend(token);
+      } catch (sessError) {
+        console.warn('Aviso: falha não bloqueante ao registrar sessão única no login:', sessError);
+      }
+    }
+
+    let isAdmin = isAdministratorEmail(email);
+    if (user) {
+      try {
+        const tokenResult = await getIdTokenResult(user);
+        isAdmin =
+          tokenResult.claims.role === 'admin' || tokenResult.claims.admin === true || isAdmin;
+      } catch {
+        // Mantém a verificação existente baseada no e-mail quando não for possível ler as claims.
+      }
+    }
+
+    // O perfil é necessário para que as regras permitam criar agendamentos. Contas admin
+    // não são adicionadas à coleção de clientes.
+    if (user && !isAdmin && db) {
+      const clientRef = doc(db, 'clientes', user.uid);
+      const clientSnapshot = await getDoc(clientRef);
+      if (!clientSnapshot.exists()) {
+        await setDoc(clientRef, {
+          uid: user.uid,
+          nome: user.displayName?.trim() || 'Cliente Google',
+          ...(email ? { email } : {}),
+          role: 'cliente',
+          status: 'ativo',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
+    const target = isAdmin
+      ? fromPath && fromPath.startsWith('/admin')
+        ? fromPath
+        : '/admin'
+      : fromPath && fromPath !== '/login'
+        ? fromPath
+        : '/agendamentos';
+    navigate(target, { replace: true });
+  };
+
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setFormData((current) => ({ ...current, [name]: value }));
@@ -101,42 +160,7 @@ export function LoginPage() {
     try {
       const cleanEmail = formData.email.trim();
       const credential = await signInWithEmailAndPassword(auth, cleanEmail, formData.senha);
-
-      // Inicia sessão única no backend, invalidando acessos de outros dispositivos
-      if (credential?.user && typeof credential.user.getIdToken === 'function') {
-        try {
-          const token = await credential.user.getIdToken();
-          await iniciarSessaoUnicaNoBackend(token);
-        } catch (sessError) {
-          console.warn(
-            'Aviso: falha não bloqueante ao registrar sessão única no login:',
-            sessError,
-          );
-        }
-      }
-
-      let isAdmin = isAdministratorEmail(cleanEmail);
-      if (!isAdmin && credential?.user) {
-        try {
-          const tokenResult = await getIdTokenResult(credential.user);
-          isAdmin =
-            tokenResult.claims.role === 'admin' ||
-            tokenResult.claims.admin === true ||
-            isAdministratorEmail(credential.user.email);
-        } catch {
-          // Mantém verificação baseada no email
-        }
-      }
-
-      const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
-
-      if (isAdmin) {
-        const target = fromPath && fromPath.startsWith('/admin') ? fromPath : '/admin';
-        navigate(target, { replace: true });
-      } else {
-        const target = fromPath && fromPath !== '/login' ? fromPath : '/agendamentos';
-        navigate(target, { replace: true });
-      }
+      await finishLogin(credential, cleanEmail);
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
       if (
@@ -158,6 +182,46 @@ export function LoginPage() {
         );
       } else {
         setGeneralError('Ocorreu um erro ao tentar entrar. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGeneralError(null);
+    setErrors({});
+    if (!auth) {
+      setGeneralError('Firebase não configurado neste ambiente.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const credential = await signInWithPopup(auth, provider);
+      await finishLogin(credential);
+    } catch (error: unknown) {
+      const errorCode = getFirebaseErrorCode(error);
+      if (
+        errorCode === 'auth/popup-closed-by-user' ||
+        errorCode === 'auth/cancelled-popup-request'
+      ) {
+        return;
+      }
+      if (errorCode === 'auth/unauthorized-domain') {
+        setGeneralError('Este domínio ainda não está autorizado no Firebase Authentication.');
+      } else if (errorCode === 'auth/operation-not-allowed') {
+        setGeneralError('O login com Google ainda não está ativado no Firebase Authentication.');
+      } else if (errorCode === 'auth/account-exists-with-different-credential') {
+        setGeneralError('Este e-mail já possui uma conta. Entre usando o método cadastrado.');
+      } else if (errorCode === 'auth/popup-blocked') {
+        setGeneralError(
+          'O navegador bloqueou a janela do Google. Permita pop-ups e tente novamente.',
+        );
+      } else {
+        setGeneralError('Não foi possível entrar com Google. Tente novamente.');
       }
     } finally {
       setLoading(false);
@@ -308,6 +372,42 @@ export function LoginPage() {
           className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--color-brand-strong)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-brand-deep)] disabled:cursor-wait disabled:opacity-70"
         >
           {loading ? 'Entrando…' : 'Entrar'}
+        </button>
+
+        <div
+          className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]"
+          aria-hidden="true"
+        >
+          <span className="h-px flex-1 bg-[var(--color-border-default)]" />
+          <span>ou</span>
+          <span className="h-px flex-1 bg-[var(--color-border-default)]" />
+        </div>
+
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void handleGoogleSignIn()}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-3 rounded-xl border border-[var(--color-border-default)] bg-white px-5 py-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-canvas-neutral)] disabled:cursor-wait disabled:opacity-70"
+        >
+          <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 48 48">
+            <path
+              fill="#EA4335"
+              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 3.2 13.22l7.98 6.19C13.08 13.72 18.11 9.5 24 9.5Z"
+            />
+            <path
+              fill="#4285F4"
+              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.73 7.18l7.64 5.92c4.46-4.12 7.13-10.18 7.13-17.57Z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M11.18 28.59a14.4 14.4 0 0 1 0-9.18L3.2 13.22a24 24 0 0 0 0 21.56l7.98-6.19Z"
+            />
+            <path
+              fill="#34A853"
+              d="M24 48c6.48 0 11.93-2.13 15.9-5.88l-7.64-5.92c-2.13 1.43-4.85 2.3-8.26 2.3-5.89 0-10.92-4.22-12.82-9.91L3.2 34.78C6.51 42.62 14.62 48 24 48Z"
+            />
+          </svg>
+          {loading ? 'Conectando…' : 'Continuar com Google'}
         </button>
 
         <p className="text-center text-sm text-[var(--color-text-secondary)]">
