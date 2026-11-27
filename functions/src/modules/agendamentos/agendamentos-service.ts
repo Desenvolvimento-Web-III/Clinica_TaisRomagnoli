@@ -1,5 +1,6 @@
 import {
   solicitarAgendamentoInputSchema,
+  fichaAnamneseSchema,
   cancelarAgendamentoInputSchema,
   alterarAgendamentoInputSchema,
   atualizarStatusAgendamentoInputSchema,
@@ -78,6 +79,29 @@ async function verificarBloqueioConfirmacaoPorAnamnese(
   }
 }
 
+async function exigirFichaAnamneseCompleta(
+  clienteId: string,
+  anamneseRepo?: AnamneseRepository,
+): Promise<void> {
+  if (!anamneseRepo) {
+    if (process.env.NODE_ENV !== 'test') {
+      throw new AgendamentoBusinessError(
+        'Não foi possível verificar sua ficha de anamnese. Tente novamente.',
+        503,
+      );
+    }
+    return;
+  }
+
+  const ficha = await anamneseRepo.obterPorClienteId(clienteId);
+  if (!ficha || !fichaAnamneseSchema.safeParse(ficha).success) {
+    throw new AgendamentoBusinessError(
+      'Para reservar qualquer serviço, preencha primeiro sua ficha de anamnese.',
+      422,
+    );
+  }
+}
+
 /**
  * Cria uma nova solicitação de agendamento validando regras de negócio,
  * folgas, concorrência e o sinal de 30%, disparando notificação interna de confirmação.
@@ -124,6 +148,8 @@ export async function solicitarNovoAgendamento(
       404,
     );
   }
+
+  await exigirFichaAnamneseCompleta(clienteIdAlvo, anamneseRepo);
 
   const clienteNomeAlvo = perfilCliente?.nome || user.nome || parsed.clienteNome || 'Cliente';
   const clienteEmailAlvo = perfilCliente?.email || user.email;

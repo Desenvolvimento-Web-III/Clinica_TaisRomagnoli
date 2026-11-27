@@ -194,7 +194,7 @@ describe('RegisterPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('leva aos agendamentos após cadastro bem-sucedido', async () => {
+  it('leva ao perfil após cadastro bem-sucedido', async () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: { uid: 'mock-uid-maria' },
     } as UserCredential);
@@ -205,7 +205,7 @@ describe('RegisterPage', () => {
       <MemoryRouter initialEntries={['/cadastro']}>
         <Routes>
           <Route path="/cadastro" element={<RegisterPage />} />
-          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+          <Route path="/perfil" element={<p>Meu perfil</p>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -225,7 +225,7 @@ describe('RegisterPage', () => {
 
     fireEvent.click(button);
 
-    expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
+    expect(await screen.findByText('Meu perfil')).toBeInTheDocument();
 
     // Valida que o doc foi criado na coleção e UID certos, e o setDoc usou a referência e modelagem corretas
     expect(doc).toHaveBeenCalledWith({}, 'clientes', 'mock-uid-maria');

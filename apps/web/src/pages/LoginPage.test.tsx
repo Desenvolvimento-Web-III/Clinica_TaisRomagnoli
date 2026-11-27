@@ -75,14 +75,14 @@ describe('LoginPage', () => {
     expect(await screen.findByText('E-mail ou senha incorretos.')).toBeInTheDocument();
   });
 
-  it('leva aos agendamentos após login bem-sucedido', async () => {
+  it('leva ao perfil após login quando faltam os dados do primeiro acesso', async () => {
     vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
 
     render(
       <MemoryRouter initialEntries={['/login']}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/agendamentos" element={<p>Meus agendamentos</p>} />
+          <Route path="/perfil" element={<p>Meu perfil</p>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -95,7 +95,7 @@ describe('LoginPage', () => {
     fireEvent.change(senhaInput, { target: { value: 'senha123' } });
     fireEvent.click(button);
 
-    expect(await screen.findByText('Meus agendamentos')).toBeInTheDocument();
+    expect(await screen.findByText('Meu perfil')).toBeInTheDocument();
     expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'cliente@exemplo.com', 'senha123');
   });
 

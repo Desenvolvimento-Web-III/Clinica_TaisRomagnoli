@@ -11,6 +11,8 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { z } from 'zod';
 import { AuthLayout } from '@/components/ui/AuthLayout';
 import { auth, db } from '@/lib/firebase';
+import { obterFichaAnamneseApi } from '@/services/anamnese-service';
+import { fichaAnamneseSchema } from '@/features/anamnese/schemas/anamnese-schema';
 import { getFirebaseErrorCode } from '@/lib/firebase-error';
 import { isAdministratorEmail } from '@/routes/admin-access';
 import {
@@ -101,18 +103,33 @@ export function LoginPage() {
 
     // O perfil é necessário para que as regras permitam criar agendamentos. Contas admin
     // não são adicionadas à coleção de clientes.
+    let requiresProfile = false;
     if (user && !isAdmin && db) {
-      const clientRef = doc(db, 'clientes', user.uid);
-      const clientSnapshot = await getDoc(clientRef);
-      if (!clientSnapshot.exists()) {
-        await setDoc(clientRef, {
-          uid: user.uid,
-          nome: user.displayName?.trim() || 'Cliente Google',
-          ...(email ? { email } : {}),
-          role: 'cliente',
-          status: 'ativo',
-          createdAt: new Date().toISOString(),
-        });
+      try {
+        const clientRef = doc(db, 'clientes', user.uid);
+        const clientSnapshot = await getDoc(clientRef);
+        if (!clientSnapshot.exists()) {
+          requiresProfile = true;
+          await setDoc(clientRef, {
+            uid: user.uid,
+            nome: user.displayName?.trim() || 'Cliente Google',
+            ...(email ? { email } : {}),
+            role: 'cliente',
+            status: 'ativo',
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          const clientData = clientSnapshot.data();
+          requiresProfile = !String(clientData.telefone ?? '').replace(/\D/g, '').match(/^\d{10,11}$/);
+        }
+
+        const ficha = await obterFichaAnamneseApi(user.uid);
+        requiresProfile ||= !(
+          ficha.sucesso && ficha.dados && fichaAnamneseSchema.safeParse(ficha.dados).success
+        );
+      } catch {
+        // Não invalida o login por uma falha temporária ao consultar o perfil.
+        requiresProfile = true;
       }
     }
 
@@ -121,9 +138,11 @@ export function LoginPage() {
       ? fromPath && fromPath.startsWith('/admin')
         ? fromPath
         : '/admin'
-      : fromPath && fromPath !== '/login'
+      : requiresProfile
+        ? '/perfil'
+        : fromPath && fromPath !== '/login'
         ? fromPath
-        : '/agendamentos';
+        : '/servicos';
     navigate(target, { replace: true });
   };
 

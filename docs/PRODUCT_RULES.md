@@ -17,6 +17,8 @@ Este documento registra decisões; não representa funcionalidades implementadas
 - O intervalo padrão será de 30 minutos.
 - Terças e domingos são configurações atuais, nunca valores fixos no código.
 - Somente o cliente dono da ficha e a administradora acessarão a ficha de avaliação.
+- Clientes recém-cadastrados ou sem telefone/anamnese completos serão direcionados ao perfil; clientes com cadastro completo entrarão pela área de serviços.
+- A ficha de anamnese completa é obrigatória para reservar qualquer serviço. O aviso de pendência permanece nas notificações até o salvamento confirmado pelo servidor.
 
 ## Indicadores administrativos previstos
 
