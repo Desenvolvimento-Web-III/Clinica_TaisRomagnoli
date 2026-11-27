@@ -18,6 +18,7 @@ import {
   criarAgendamentoFirestore,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
+import { fichaAnamneseSchema } from '@/features/anamnese/schemas/anamnese-schema';
 import {
   buscarHorariosFuncionamento,
   consultarHorariosDisponiveis,
@@ -104,6 +105,7 @@ export function AgendamentoFlowPage() {
   const [erroAgendamento, setErroAgendamento] = useState<string | null>(null);
   const [configuracaoHorariosCarregada, setConfiguracaoHorariosCarregada] = useState(false);
   const [erroDisponibilidade, setErroDisponibilidade] = useState<string | null>(null);
+  const [anamneseCompleta, setAnamneseCompleta] = useState<boolean | null>(null);
 
   useEffect(() => {
     let ativo = true;
@@ -149,12 +151,19 @@ export function AgendamentoFlowPage() {
 
     let ativo = true;
     void obterFichaAnamneseApi(uid).then((res) => {
-      if (ativo && res.sucesso && res.dados) {
+      if (!ativo) return;
+      const completa = Boolean(
+        res.sucesso && res.dados && fichaAnamneseSchema.safeParse(res.dados).success,
+      );
+      setAnamneseCompleta(completa);
+      if (completa && res.dados) {
         setRemoteAvaliacaoState({
           uid,
           avaliacao: avaliarBloqueioContraindicacao(res.dados),
         });
       }
+    }).catch(() => {
+      if (ativo) setAnamneseCompleta(false);
     });
     return () => {
       ativo = false;
@@ -267,6 +276,17 @@ export function AgendamentoFlowPage() {
       return;
     }
 
+    const fichaAtual = await obterFichaAnamneseApi(currentUser.uid);
+    if (
+      !fichaAtual.sucesso ||
+      !fichaAtual.dados ||
+      !fichaAnamneseSchema.safeParse(fichaAtual.dados).success
+    ) {
+      setAnamneseCompleta(false);
+      setErroAgendamento('Preencha sua ficha de anamnese antes de reservar qualquer serviço.');
+      return;
+    }
+
     const fimHora = calcularFimHorario(horarioSelecionado, servicoAtual.durationMinutes);
     const dataHoraInicioIso = `${dataSelecionada}T${horarioSelecionado}:00.000Z`;
 
@@ -317,6 +337,20 @@ export function AgendamentoFlowPage() {
   if (step === 'calendario') {
     return (
       <>
+      {anamneseCompleta !== true ? (
+        <div
+          role="alert"
+          className="mx-auto mb-4 flex max-w-5xl items-center justify-between gap-4 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <span>
+            <strong>Ficha de anamnese não preenchida.</strong> Preencha antes de reservar qualquer
+            serviço.
+          </span>
+          <Link className="shrink-0 font-semibold underline" to="/anamnese">
+            Preencher ficha
+          </Link>
+        </div>
+      ) : null}
       {erroDisponibilidade ? <p role="alert" className="mx-auto max-w-5xl px-4 py-3 text-sm text-[var(--color-error-text)]">{erroDisponibilidade}</p> : null}
       <BookingCalendar
         dataSelecionada={dataSelecionada}
@@ -328,6 +362,10 @@ export function AgendamentoFlowPage() {
         onSelectData={(isoDate) => setDataSelecionada(isoDate)}
         onSelectHorario={(hora) => setHorarioSelecionado(hora)}
         onConfirmar={() => {
+          if (anamneseCompleta !== true) {
+            setErroAgendamento('Preencha sua ficha de anamnese antes de reservar qualquer serviço.');
+            return;
+          }
           if (!horarioSelecionado) return;
           const agora = new Date();
           const y = agora.getFullYear();

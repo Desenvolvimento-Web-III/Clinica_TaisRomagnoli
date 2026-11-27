@@ -37,6 +37,10 @@ vi.mock('@/services/cliente-perfil-service', () => ({
   consultarRecorrenciaCliente: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/features/notifications/notifications-store', () => ({
+  useClientNotifications: () => ({ unreadCount: 0 }),
+}));
+
 describe('ClientProfilePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();

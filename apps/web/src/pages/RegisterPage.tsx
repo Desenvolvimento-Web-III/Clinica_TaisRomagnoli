@@ -106,7 +106,7 @@ export function RegisterPage() {
         createdAt: new Date().toISOString(),
       });
       initializeProfileNotifications(userCredential.user.uid, formData.nome.trim());
-      navigate('/agendamentos', { replace: true });
+      navigate('/perfil', { replace: true });
     } catch (error: unknown) {
       const errorCode = getFirebaseErrorCode(error);
       if (errorCode === 'auth/email-already-in-use') {

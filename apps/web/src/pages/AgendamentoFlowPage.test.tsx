@@ -51,8 +51,20 @@ describe('AgendamentoFlowPage', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-20T10:00:00.000Z'));
     localStorage.clear();
-    mockUseOptionalAuth.mockReturnValue(null);
+    mockUseOptionalAuth.mockReturnValue({
+      currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
+    });
     mockUseAuth.mockReturnValue({ currentUser: null, logout: vi.fn(), isAdmin: false });
+    vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
+      sucesso: true,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        clienteId: 'cli-1',
+        submittedAt: '2026-10-10T10:00:00.000Z',
+        updatedAt: '2026-10-10T10:00:00.000Z',
+      },
+    });
     vi.spyOn(serviceRepo, 'subscribeToServicesFromFirestore').mockImplementation((cb) => {
       cb([
         { id: 'massagem-relaxante', name: 'Massagem Relaxante', description: 'Sessão de teste', durationMinutes: 60, priceInCents: 17000, imageSrc: '', imageAlt: 'Massagem Relaxante', active: true },
@@ -213,15 +225,12 @@ describe('AgendamentoFlowPage', () => {
   });
 
   it('não conclui o agendamento de visitante sem salvar no backend', async () => {
+    mockUseOptionalAuth.mockReturnValue(null);
     await renderFlow('/agendar/massagem-relaxante');
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
-    fireEvent.click(screen.getByTestId('avancar-pagamento-btn'));
-    fireEvent.click(screen.getByTestId('finalizar-agendamento-btn'));
-
-    expect(await screen.findByTestId('erro-finalizar-agendamento')).toHaveTextContent(
-      'Entre na sua conta para salvar e confirmar o agendamento.',
-    );
+    expect(screen.queryByTestId('avancar-pagamento-btn')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/ficha de anamnese não preenchida/i);
     expect(screen.queryByText('Solicitação registrada!')).not.toBeInTheDocument();
   });
 
@@ -344,7 +353,13 @@ describe('AgendamentoFlowPage', () => {
     });
     vi.spyOn(anamneseService, 'obterFichaAnamneseApi').mockResolvedValue({
       sucesso: true,
-      dados: undefined,
+      dados: {
+        ...INITIAL_ANAMNESE_DATA,
+        consentimentoConfirmado: true,
+        clienteId: 'cli-1',
+        submittedAt: '2026-10-10T10:00:00.000Z',
+        updatedAt: '2026-10-10T10:00:00.000Z',
+      },
     });
     vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
       sucesso: false,

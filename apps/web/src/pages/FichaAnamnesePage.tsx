@@ -244,6 +244,7 @@ export function FichaAnamnesePage() {
       // Marca seções como concluídas
       setCompletedSections(new Set(['queixa', 'saude', 'habitos', 'consentimento']));
       setIsSuccess(true);
+      window.dispatchEvent(new Event('anamnese:atualizada'));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
       setErrors({ form: 'Não foi possível salvar os dados. Tente novamente.' });
