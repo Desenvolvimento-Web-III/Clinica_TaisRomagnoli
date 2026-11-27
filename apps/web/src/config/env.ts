@@ -10,6 +10,7 @@ const rawEnvironmentSchema = z
     VITE_FIREBASE_STORAGE_BUCKET: optionalValue,
     VITE_FIREBASE_MESSAGING_SENDER_ID: optionalValue,
     VITE_FIREBASE_APP_ID: optionalValue,
+    VITE_AVAILABILITY_API_BASE_URL: optionalValue,
     VITE_USE_FIREBASE_EMULATORS: z.enum(['true', 'false']).default('false'),
   })
   .superRefine((environment, context) => {
@@ -51,4 +52,6 @@ export const environment = {
         }
       : null,
   useFirebaseEmulators: rawEnvironment.VITE_USE_FIREBASE_EMULATORS === 'true',
+  availabilityApiBaseUrl:
+    rawEnvironment.VITE_AVAILABILITY_API_BASE_URL?.replace(/\/+$/, '') ?? null,
 } as const;
