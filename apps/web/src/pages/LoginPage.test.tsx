@@ -76,8 +76,9 @@ describe('LoginPage', () => {
   });
 
   it('leva ao perfil após login quando faltam os dados do primeiro acesso', async () => {
+    vi.mocked(getIdTokenResult).mockResolvedValueOnce({ claims: {} } as never);
     vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
-      user: { uid: 'cliente-novo', getIdToken: vi.fn().mockResolvedValue('token') },
+      user: { uid: 'cliente-novo' },
     } as unknown as UserCredential);
 
     render(

@@ -230,7 +230,7 @@ describe('AgendamentoFlowPage', () => {
 
     fireEvent.click(screen.getByTestId('confirmar-agendamento-btn'));
     expect(screen.queryByTestId('avancar-pagamento-btn')).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(/preencha sua ficha de anamnese/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/ficha de anamnese não preenchida/i);
     expect(screen.queryByText('Solicitação registrada!')).not.toBeInTheDocument();
   });
 
