@@ -76,7 +76,9 @@ describe('LoginPage', () => {
   });
 
   it('leva ao perfil após login quando faltam os dados do primeiro acesso', async () => {
-    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({} as UserCredential);
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
+      user: { uid: 'cliente-novo', getIdToken: vi.fn().mockResolvedValue('token') },
+    } as unknown as UserCredential);
 
     render(
       <MemoryRouter initialEntries={['/login']}>

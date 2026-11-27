@@ -27,6 +27,14 @@ vi.mock('@/services/notificacoes-service', () => ({
   }),
 }));
 
+vi.mock('@/services/anamnese-service', () => ({
+  obterFichaAnamneseApi: vi.fn(async () => ({ sucesso: true, dados: {} })),
+}));
+
+vi.mock('@/features/anamnese/schemas/anamnese-schema', () => ({
+  fichaAnamneseSchema: { safeParse: () => ({ success: true }) },
+}));
+
 describe('NotificationsPage', () => {
   beforeEach(() => {
     localStorage.clear();

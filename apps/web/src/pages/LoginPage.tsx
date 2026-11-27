@@ -103,7 +103,7 @@ export function LoginPage() {
 
     // O perfil é necessário para que as regras permitam criar agendamentos. Contas admin
     // não são adicionadas à coleção de clientes.
-    let requiresProfile = false;
+    let requiresProfile = Boolean(user && !isAdmin);
     if (user && !isAdmin && db) {
       try {
         const clientRef = doc(db, 'clientes', user.uid);
