@@ -55,11 +55,12 @@ A função técnica fica no emulador em
 A API substitui a Cloud Function para consultar slots e lê no servidor os agendamentos, bloqueios,
 horários fixos e configuração da clínica. Para publicar no Coolify:
 
-1. Crie uma service account dedicada e conceda somente o papel de leitura do Firestore
-   (`roles/datastore.viewer`). Esse papel permite leitura dos documentos do projeto; a API retorna
-   somente horários livres. Configure o JSON da chave como variável secreta de runtime
+1. Crie uma service account dedicada e configure o JSON da chave como variável secreta de runtime
    `FIREBASE_SERVICE_ACCOUNT_JSON` no Coolify. Não salve a chave no repositório, em
-   `apps/web/.env.local` nem em variáveis `VITE_*`.
+   `apps/web/.env.local` nem em variáveis `VITE_*`. Para a API de disponibilidade somente leitura,
+   use `roles/datastore.viewer`. A rota autenticada de salvamento de anamnese também grava no
+   Firestore e requer `roles/datastore.user`; esse papel amplia a credencial para escrita no banco
+   inteiro. Use uma conta dedicada e conceda essa permissão somente se essa rota for habilitada.
 2. Configure `CORS_ALLOWED_ORIGINS` como lista separada por vírgula das origens autorizadas, por exemplo
    `https://clinica.kndevs.tech,http://localhost:5173`.
 3. Configure o build do serviço no Coolify para instalar dependências e compilar os pacotes:
@@ -76,9 +77,10 @@ horários fixos e configuração da clínica. Para publicar no Coolify:
 5. Configure `VITE_AVAILABILITY_API_BASE_URL` no build do frontend com a URL base da API, sem barra ao
    final. Exemplo: `https://api.example.com`.
 
-Rotas: `GET /health` verifica a aplicação e
-`GET /obterHorariosDisponiveis?data=AAAA-MM-DD&servicoId=...` consulta a disponibilidade. Para dados
-reais, não use a credencial de uma conta pessoal nem uma chave com permissão de escrita.
+Rotas: `GET /health` verifica a aplicação;
+`GET /obterHorariosDisponiveis?data=AAAA-MM-DD&servicoId=...` consulta a disponibilidade; e
+`POST /salvarFichaAnamnese` salva uma ficha após validar o token Firebase e os dados recebidos.
+Não use a credencial de uma conta pessoal nem exponha a chave em variáveis `VITE_*`.
 
 Para execução local com Firestore Emulator, defina `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` e
 `GCLOUD_PROJECT=demo-clinica-local`; nesse modo a API não exige uma chave de service account.
