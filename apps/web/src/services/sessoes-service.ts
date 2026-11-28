@@ -1,5 +1,5 @@
 import type { ResultadoRevogacaoSessao } from '@clinica/shared';
-import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
+import { getAuthToken, getApiBaseUrl } from './agendamentos-service';
 
 export const ACTIVE_SESSION_STORAGE_KEY = 'clinica:active_session_id';
 export const SESSION_TERMINATED_REASON_KEY = 'clinica:session_terminated_reason';
@@ -89,7 +89,7 @@ export async function iniciarSessaoUnicaNoBackend(
       return null;
     }
 
-    const url = `${getFunctionsBaseUrl()}/iniciarSessaoUnica`;
+    const url = `${getApiBaseUrl()}/iniciarSessaoUnica`;
     const payload: Record<string, string> = {
       motivo: motivo || 'Início de nova sessão sob política de sessão única',
     };

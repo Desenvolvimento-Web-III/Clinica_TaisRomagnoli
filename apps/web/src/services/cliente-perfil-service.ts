@@ -1,6 +1,6 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
+import { getAuthToken, getApiBaseUrl } from './agendamentos-service';
 
 export interface ClientRecorrenciaData {
   recorrente: boolean;
@@ -12,7 +12,7 @@ export interface ClientRecorrenciaData {
 }
 
 /**
- * Consulta a recorrência mensal do cliente autenticado via Cloud Function,
+ * Consulta a recorrência mensal do cliente autenticado via API,
  * com fallback direto para os campos do documento /clientes/{uid} no Firestore.
  */
 export async function consultarRecorrenciaCliente(
@@ -25,11 +25,11 @@ export async function consultarRecorrenciaCliente(
 
   const cleanUid = userUid.trim();
 
-  // 1. Tenta obter o cálculo atualizado da Cloud Function
+  // 1. Tenta obter o cálculo atualizado pela API
   try {
     const authToken = token ?? (await getAuthToken());
     if (authToken) {
-      const url = `${getFunctionsBaseUrl()}/calcularRecorrenciaCliente?uid=${encodeURIComponent(cleanUid)}`;
+      const url = `${getApiBaseUrl()}/calcularRecorrenciaCliente?uid=${encodeURIComponent(cleanUid)}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -57,7 +57,7 @@ export async function consultarRecorrenciaCliente(
       }
     }
   } catch {
-    // Falhas de rede na Cloud Function seguem para fallback no Firestore
+    // Falhas de rede na API seguem para fallback no Firestore
   }
 
   // 2. Fallback direto no Firestore

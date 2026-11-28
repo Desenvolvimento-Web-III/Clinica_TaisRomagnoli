@@ -3,7 +3,11 @@ import { consultarPainelIndicadoresAdmin } from './indicadores-admin-service';
 import { indicatorsFixture } from '@/test/fixtures';
 
 vi.mock('@/config/env', () => ({
-  environment: { firebase: { projectId: 'demo-clinica-tests' }, useFirebaseEmulators: true },
+  environment: {
+    firebase: { projectId: 'demo-clinica-tests' },
+    availabilityApiBaseUrl: 'https://api.clinica.test',
+    useFirebaseEmulators: true,
+  },
 }));
 
 vi.mock('@/lib/firebase', () => ({ auth: null, db: null }));
@@ -18,7 +22,7 @@ describe('indicadores-admin-service', () => {
     expect(painel).toBeNull();
   });
 
-  it('retorna dados da Cloud Function quando requisição tem sucesso', async () => {
+  it('retorna dados da API quando requisição tem sucesso', async () => {
     const mockPainelBackend = {
       ...indicatorsFixture,
       dataReferencia: '2026-11-16',

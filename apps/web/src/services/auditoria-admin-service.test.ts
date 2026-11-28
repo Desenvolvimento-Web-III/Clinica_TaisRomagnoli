@@ -3,7 +3,7 @@ import { obterLogsAuditoriaAdmin, LOGS_AUDITORIA_PADRAO } from './auditoria-admi
 
 vi.mock('./agendamentos-service', () => ({
   getAuthToken: vi.fn().mockResolvedValue('fake-token'),
-  getFunctionsBaseUrl: vi.fn().mockReturnValue('http://localhost:5001/functions'),
+  getApiBaseUrl: vi.fn().mockReturnValue('https://api.clinica.test'),
 }));
 
 describe('auditoria-admin-service', () => {
@@ -11,7 +11,7 @@ describe('auditoria-admin-service', () => {
     vi.clearAllMocks();
   });
 
-  it('retorna logs da Cloud Function quando a chamada HTTP for bem-sucedida', async () => {
+  it('retorna logs da API quando a chamada HTTP for bem-sucedida', async () => {
     const mockDados = [
       {
         id: 'audit-1',

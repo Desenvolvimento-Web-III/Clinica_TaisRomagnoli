@@ -15,9 +15,9 @@ import {
 
 vi.mock('./agendamentos-service', () => ({
   getAuthToken: vi.fn().mockResolvedValue('token-auth-mock'),
-  getFunctionsBaseUrl: vi
+  getApiBaseUrl: vi
     .fn()
-    .mockReturnValue('http://127.0.0.1:5001/demo-clinica-local/us-central1'),
+    .mockReturnValue('https://api.clinica.test'),
 }));
 
 describe('sessoes-service', () => {
@@ -55,7 +55,7 @@ describe('sessoes-service', () => {
   });
 
   describe('iniciarSessaoUnicaNoBackend', () => {
-    it('chama o endpoint na Cloud Function e armazena o sessionId retornado', async () => {
+    it('chama o endpoint da API e armazena o sessionId retornado', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -74,7 +74,7 @@ describe('sessoes-service', () => {
       const resultado = await iniciarSessaoUnicaNoBackend('meu-token-jwt');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://127.0.0.1:5001/demo-clinica-local/us-central1/iniciarSessaoUnica',
+        'https://api.clinica.test/iniciarSessaoUnica',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({

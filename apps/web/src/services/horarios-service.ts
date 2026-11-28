@@ -1,13 +1,12 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { environment } from '@/config/env';
 import {
   horariosFuncionamentoSchema,
   salvarHorariosInputSchema,
   type HorariosFuncionamento,
   type SalvarHorariosInput,
 } from '@clinica/shared';
-import { getFunctionsBaseUrl } from './agendamentos-service';
+import { getApiBaseUrl } from './agendamentos-service';
 
 export const CONFIGURACOES_COLLECTION = 'configuracoes';
 export const HORARIOS_DOCUMENT = 'horarios_funcionamento';
@@ -103,7 +102,7 @@ export async function consultarHorariosDisponiveis(params: {
     ...(params.servicoId ? { servicoId: params.servicoId } : {}),
     ...(params.duracaoMinutos ? { duracaoMinutos: String(params.duracaoMinutos) } : {}),
   });
-  const baseUrl = environment.availabilityApiBaseUrl ?? getFunctionsBaseUrl();
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/obterHorariosDisponiveis?${query}`);
   const body = await response.json();
   if (!response.ok || !body?.sucesso || !Array.isArray(body.dados?.horarios)) {

@@ -1,6 +1,6 @@
 import type { PainelIndicadores } from '@clinica/shared';
 import { painelIndicadoresSchema } from '@clinica/shared';
-import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
+import { getAuthToken, getApiBaseUrl } from './agendamentos-service';
 
 export interface ConsultarIndicadoresOptions {
   dataReferencia?: string;
@@ -9,7 +9,7 @@ export interface ConsultarIndicadoresOptions {
 }
 
 /**
- * Consulta os 8 indicadores consolidados da clínica no backend (Cloud Function),
+ * Consulta os 8 indicadores consolidados da clínica na API do backend,
  * com validação de token administrativo. Sem dados reais, retorna null.
  */
 export async function consultarPainelIndicadoresAdmin(
@@ -26,7 +26,7 @@ export async function consultarPainelIndicadoresAdmin(
     if (options.mesReferencia) queryParams.set('mesReferencia', options.mesReferencia);
 
     const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
-    const url = `${getFunctionsBaseUrl()}/obterPainelIndicadoresAdmin${queryStr}`;
+    const url = `${getApiBaseUrl()}/obterPainelIndicadoresAdmin${queryStr}`;
 
     const response = await fetch(url, {
       method: 'GET',

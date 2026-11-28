@@ -3,23 +3,20 @@
 ## Visão geral
 
 O frontend é uma SPA React mobile-first, distribuível como PWA pelo Vite. Firebase fornece
-Authentication, Firestore e Storage. A API HTTP de disponibilidade roda como serviço Node separado no
-Coolify para que o cálculo não dependa da implantação de Cloud Functions. A execução local usa o
-projeto fictício `demo-clinica-local` e o Emulator Suite.
+Authentication, Firestore e Storage. A API HTTP do backend roda como serviço Node separado no
+Coolify para que os fluxos usados pelo frontend não dependam da implantação de Cloud Functions. A
+execução local usa o projeto fictício `demo-clinica-local` e o Emulator Suite.
 
 O código do frontend será organizado por `features` conforme o produto crescer. Elementos realmente
-genéricos ficam em `components/ui`, enquanto acesso ao Firebase fica em `lib/firebase`. O backend em
-Functions permanece disponível para operações privilegiadas. Contratos puros comuns ao frontend e
-backend ficam em `@clinica/shared`; componentes React, Firebase e infraestrutura não.
+genéricos ficam em `components/ui`, enquanto acesso ao Firebase fica em `lib/firebase`. O código em
+Functions permanece para gatilhos e operações ainda não migradas; chamadas HTTP do frontend usam a
+API do Coolify. Contratos puros comuns ao frontend e backend ficam em `@clinica/shared`; componentes
+React, Firebase e infraestrutura não.
 
-Solicitações iniciais de agendamento podem ser gravadas pelo SDK web diretamente em
-`/agendamentos`, com validação nas Security Rules contra o perfil do cliente e o serviço ativo. Esse
-fluxo só cria registros `pendente`; a confirmação, a prevenção de conflitos entre horários e as
-validações clínicas dependem de backend confiável e não são garantidas pelas regras do Firestore.
-Preço e duração são snapshots da leitura normalizada do catálogo no cliente; por isso, uma solicitação
-pendente deve ser revisada pela administradora antes de qualquer confirmação.
-O endpoint de disponibilidade no Coolify consulta no servidor os agendamentos, bloqueios e horários
-fixos; ao navegador retorna somente os slots livres, sem dados pessoais de outros clientes.
+Criação, alteração, cancelamento e confirmação de agendamentos passam pela API do Coolify. O backend
+valida perfil, serviço, ficha de anamnese, disponibilidade e regras de negócio antes de gravar no
+Firestore. A consulta de disponibilidade retorna ao navegador somente os horários livres, sem dados
+pessoais de outros clientes.
 
 As telas administrativas de bloqueios de agenda e horários fixos leem e gravam diretamente em
 `/bloqueios_agenda` e `/horarios_fixos` pelo SDK web. Essas coleções são autorizadas nas Security

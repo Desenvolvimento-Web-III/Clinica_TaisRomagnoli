@@ -599,7 +599,7 @@ describe('AdminDashboardPage', () => {
         liberacaoMedicaAprovada: false,
       },
     });
-    const spySolicitar = vi.spyOn(agendamentosService, 'criarAgendamentoFirestore');
+    const spySolicitar = vi.spyOn(agendamentosService, 'criarAgendamentoApi');
 
     renderDashboard();
 
@@ -628,7 +628,7 @@ describe('AdminDashboardPage', () => {
   });
 
   it('impede criação de agendamento presencial com data ou horário no passado', async () => {
-    const spySolicitar = vi.spyOn(agendamentosService, 'criarAgendamentoFirestore');
+    const spySolicitar = vi.spyOn(agendamentosService, 'criarAgendamentoApi');
 
     renderDashboard();
 

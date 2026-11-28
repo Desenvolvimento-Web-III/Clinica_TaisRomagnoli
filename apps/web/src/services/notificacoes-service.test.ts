@@ -48,7 +48,7 @@ vi.mock('firebase/firestore', () => ({
 const mockGetAuthToken = vi.fn();
 vi.mock('./agendamentos-service', () => ({
   getAuthToken: () => mockGetAuthToken(),
-  getFunctionsBaseUrl: () => 'http://127.0.0.1:5001/clinica-tais-romagnoli/us-central1',
+  getApiBaseUrl: () => 'https://api.clinica.test',
 }));
 
 vi.mock('@/lib/firebase', () => ({

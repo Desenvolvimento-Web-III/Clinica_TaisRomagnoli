@@ -1,19 +1,19 @@
 import type { FiltroAuditoria, RegistroAuditoria } from '@clinica/shared';
 import { registroAuditoriaSchema } from '@clinica/shared';
-import { getAuthToken, getFunctionsBaseUrl } from './agendamentos-service';
+import { getAuthToken, getApiBaseUrl } from './agendamentos-service';
 
 /** Resultado vazio usado quando ainda não existem eventos reais de auditoria. */
 export const LOGS_AUDITORIA_PADRAO: RegistroAuditoria[] = [];
 
 /**
- * Consulta a trilha de auditoria administrativa a partir da Cloud Function.
+ * Consulta a trilha de auditoria administrativa a partir da API do backend.
  */
 export async function obterLogsAuditoriaAdmin(
   filtros: FiltroAuditoria = {},
 ): Promise<RegistroAuditoria[]> {
   try {
     const token = await getAuthToken();
-    const baseUrl = getFunctionsBaseUrl();
+    const baseUrl = getApiBaseUrl();
 
     const queryParams = new URLSearchParams();
     if (filtros.usuarioId) queryParams.set('usuarioId', filtros.usuarioId);
@@ -47,7 +47,7 @@ export async function obterLogsAuditoriaAdmin(
       }
     }
   } catch (error) {
-    console.warn('Não foi possível obter logs de auditoria da Cloud Function:', error);
+      console.warn('Não foi possível obter logs de auditoria da API:', error);
   }
 
   return [];

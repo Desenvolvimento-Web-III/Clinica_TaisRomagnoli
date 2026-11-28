@@ -193,7 +193,7 @@ describe('AgendamentoFlowPage', () => {
       currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
     });
     const spySolicitar = vi
-      .spyOn(agendamentosService, 'criarAgendamentoFirestore')
+      .spyOn(agendamentosService, 'criarAgendamentoApi')
       .mockResolvedValue({ sucesso: true, dados: agendamentoSalvoMock });
 
     await renderFlow('/agendar/massagem-relaxante');
@@ -254,7 +254,7 @@ describe('AgendamentoFlowPage', () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
     });
-    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+    vi.spyOn(agendamentosService, 'criarAgendamentoApi').mockResolvedValue({
       sucesso: true,
       dados: agendamentoSalvoMock,
     });
@@ -320,7 +320,7 @@ describe('AgendamentoFlowPage', () => {
         liberacaoMedicaAprovada: false,
       },
     });
-    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+    vi.spyOn(agendamentosService, 'criarAgendamentoApi').mockResolvedValue({
       sucesso: true,
       dados: agendamentoSalvoMock,
     });
@@ -361,7 +361,7 @@ describe('AgendamentoFlowPage', () => {
         updatedAt: '2026-10-10T10:00:00.000Z',
       },
     });
-    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+    vi.spyOn(agendamentosService, 'criarAgendamentoApi').mockResolvedValue({
       sucesso: false,
       erro: 'O Firebase recusou a gravação.',
     });
@@ -466,7 +466,7 @@ describe('AgendamentoFlowPage', () => {
     mockUseOptionalAuth.mockReturnValue({
       currentUser: { uid: 'cli-1', displayName: 'Mariana Souza' },
     });
-    vi.spyOn(agendamentosService, 'criarAgendamentoFirestore').mockResolvedValue({
+    vi.spyOn(agendamentosService, 'criarAgendamentoApi').mockResolvedValue({
       sucesso: true,
       dados: {
         ...agendamentoSalvoMock,

@@ -33,7 +33,7 @@ import {
   buscarAgendamentosAdmin,
   buscarAgendamentosAdminDoDia,
   alterarAgendamentoBackend,
-  criarAgendamentoFirestore,
+  criarAgendamentoApi,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { buscarClientesAdmin } from '@/services/clientes-admin-service';
@@ -509,7 +509,7 @@ export function AdminDashboardPage() {
         return;
       }
 
-      const resposta = await criarAgendamentoFirestore(
+      const resposta = await criarAgendamentoApi(
         {
           clienteId: clienteSelecionado.id,
           servicoId: servicoSelecionado.id,

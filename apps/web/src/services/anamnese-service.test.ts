@@ -16,6 +16,7 @@ vi.mock('@/lib/firebase', () => ({ db: {}, auth: mockAuth }));
 vi.mock('@/config/env', () => ({
   environment: {
     firebase: { projectId: 'demo-clinica-tests' },
+    availabilityApiBaseUrl: 'https://api.clinica.test',
     useFirebaseEmulators: true,
   },
 }));

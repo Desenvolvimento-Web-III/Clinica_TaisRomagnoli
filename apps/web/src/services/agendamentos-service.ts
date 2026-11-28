@@ -12,30 +12,21 @@ import {
   getDocs,
   orderBy,
   query,
-  setDoc,
   where,
 } from 'firebase/firestore';
 import { environment } from '@/config/env';
 import { auth, db } from '@/lib/firebase';
 import type { Agendamento as UiAgendamento } from '@/features/agendamentos/types/agendamento';
 import {
-  mapFirestoreDocToService,
   resolveLocalServiceImage,
-  type FirestoreServiceData,
 } from '@/features/services/service-firestore-repository';
 
-/**
- * Obtém a URL base das Cloud Functions para o ambiente atual.
- */
-export function getFunctionsBaseUrl(): string {
-  const projectId = environment.firebase?.projectId;
-  if (!projectId) {
-    throw new Error('Firebase não está configurado.');
+/** Retorna a URL base da API do backend configurada no build do frontend. */
+export function getApiBaseUrl(): string {
+  if (!environment.availabilityApiBaseUrl) {
+    throw new Error('A URL da API do Coolify não está configurada.');
   }
-  if (environment.useFirebaseEmulators) {
-    return `http://127.0.0.1:5001/${projectId}/us-central1`;
-  }
-  return `https://us-central1-${projectId}.cloudfunctions.net`;
+  return environment.availabilityApiBaseUrl;
 }
 
 /**
@@ -91,7 +82,7 @@ export async function getAuthToken(): Promise<string | null> {
 }
 
 /**
- * Solicita um novo agendamento na Cloud Function do backend.
+ * Solicita um novo agendamento na API do backend.
  */
 export async function solicitarAgendamentoBackend(
   input: SolicitarAgendamentoInput,
@@ -109,7 +100,7 @@ export async function solicitarAgendamentoBackend(
   }
 
   try {
-    const url = `${getFunctionsBaseUrl()}/solicitarAgendamento`;
+    const url = `${getApiBaseUrl()}/solicitarAgendamento`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -137,7 +128,7 @@ export async function solicitarAgendamentoBackend(
 }
 
 /**
- * Atualiza o status de um agendamento existente via Cloud Function (restrito à administradora).
+ * Atualiza o status de um agendamento existente via API (restrito à administradora).
  */
 export async function atualizarStatusAgendamentoBackend(
   input: AtualizarStatusAgendamentoInput,
@@ -155,7 +146,7 @@ export async function atualizarStatusAgendamentoBackend(
   }
 
   try {
-    const url = `${getFunctionsBaseUrl()}/atualizarStatusAgendamento`;
+    const url = `${getApiBaseUrl()}/atualizarStatusAgendamento`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -183,7 +174,7 @@ export async function atualizarStatusAgendamentoBackend(
 }
 
 /**
- * Altera ou reagenda um agendamento existente na Cloud Function do backend.
+ * Altera ou reagenda um agendamento existente na API do backend.
  */
 export async function alterarAgendamentoBackend(
   input: AlterarAgendamentoInput,
@@ -195,7 +186,7 @@ export async function alterarAgendamentoBackend(
   }
 
   try {
-    const url = `${getFunctionsBaseUrl()}/alterarAgendamento`;
+    const url = `${getApiBaseUrl()}/alterarAgendamento`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -222,7 +213,7 @@ export async function alterarAgendamentoBackend(
 }
 
 /**
- * Cancela um agendamento existente na Cloud Function do backend com validação da regra de 3 horas.
+ * Cancela um agendamento existente na API do backend com validação da regra de 3 horas.
  */
 export async function cancelarAgendamentoBackend(
   input: CancelarAgendamentoInput,
@@ -234,7 +225,7 @@ export async function cancelarAgendamentoBackend(
   }
 
   try {
-    const url = `${getFunctionsBaseUrl()}/cancelarAgendamento`;
+    const url = `${getApiBaseUrl()}/cancelarAgendamento`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -333,104 +324,13 @@ export async function buscarAgendamentosAdminDoDia(
   return snapshot.docs.map((docSnap) => docSnap.data() as SharedAgendamento);
 }
 
-/** Salva uma solicitação diretamente no Firestore, usando perfil e serviço como fontes oficiais. */
-export async function criarAgendamentoFirestore(
+/** Cria um agendamento pela API, que valida perfil, serviço, anamnese e disponibilidade. */
+export async function criarAgendamentoApi(
   input: SolicitarAgendamentoInput,
   clienteIdSolicitado?: string,
 ): Promise<{ sucesso: boolean; dados?: SharedAgendamento; erro?: string }> {
-  if (!db || !auth?.currentUser) {
-    return { sucesso: false, erro: 'Entre na sua conta para salvar o agendamento.' };
-  }
-
-  const usuario = auth.currentUser;
-  const clienteId = clienteIdSolicitado ?? usuario.uid;
-  const perfilRef = doc(db, 'clientes', clienteId);
-  const servicoRef = doc(db, 'servicos', input.servicoId);
-  let etapa = 'consultar o perfil do cliente';
-
-  try {
-    const perfilSnapshot = await getDoc(perfilRef);
-    if (!perfilSnapshot.exists()) {
-      return { sucesso: false, erro: 'O perfil deste cliente não foi encontrado no Firebase.' };
-    }
-    if (typeof perfilSnapshot.data().nome !== 'string' || !perfilSnapshot.data().nome.trim()) {
-      return { sucesso: false, erro: 'O perfil deste cliente não possui um nome válido.' };
-    }
-
-    etapa = 'consultar o serviço selecionado';
-    const servicoSnapshot = await getDoc(servicoRef);
-    if (!servicoSnapshot.exists()) {
-      return { sucesso: false, erro: 'O serviço selecionado não foi encontrado no Firebase.' };
-    }
-
-    const perfil = perfilSnapshot.data();
-    const servico = mapFirestoreDocToService(
-      servicoSnapshot.id,
-      servicoSnapshot.data() as FirestoreServiceData,
-    );
-    if (!servico.active) {
-      return { sucesso: false, erro: 'Este serviço está inativo e não pode ser agendado.' };
-    }
-
-    const inicio = new Date(input.dataHoraInicio);
-    if (Number.isNaN(inicio.getTime()) || inicio.getTime() <= Date.now()) {
-      return { sucesso: false, erro: 'Escolha uma data e horário futuros válidos.' };
-    }
-    const fim = new Date(inicio.getTime() + servico.durationMinutes * 60_000);
-    const agora = new Date().toISOString();
-    const id = `ag-${crypto.randomUUID()}`;
-    const sinalIsento = usuario.uid !== clienteId && input.isencaoSinalAdmin === true;
-    const valorSinalEmCentavos = sinalIsento
-      ? 0
-      : (servico.sinalInCents ?? Math.round(servico.priceInCents * 0.3));
-    const agendamento: SharedAgendamento = {
-      id,
-      clienteId,
-      clienteNome: String(perfil.nome ?? ''),
-      ...(typeof perfil.email === 'string' ? { clienteEmail: perfil.email } : {}),
-      ...(typeof perfil.telefone === 'string' ? { clienteTelefone: perfil.telefone } : {}),
-      servicoId: servico.id,
-      servicoNome: servico.name,
-      duracaoMinutos: servico.durationMinutes,
-      valorTotalEmCentavos: servico.priceInCents,
-      valorSinalEmCentavos,
-      saldoRestanteEmCentavos: servico.priceInCents - valorSinalEmCentavos,
-      dataHoraInicio: inicio.toISOString(),
-      dataHoraFim: fim.toISOString(),
-      intervaloAposMinutos: 30,
-      profissionalId: input.profissionalId ?? 'prof-tais-romagnoli',
-      profissionalNome: input.profissionalNome ?? 'Tais Romagnoli',
-      status: 'pendente',
-      metodoPagamento: input.metodoPagamento,
-      origem: usuario.uid === clienteId ? 'app_cliente' : 'presencial_admin',
-      sinalIsento,
-      ...(input.observacoes ? { observacoes: input.observacoes } : {}),
-      createdAt: agora,
-      updatedAt: agora,
-    };
-    etapa = 'gravar o agendamento';
-    await setDoc(doc(db, 'agendamentos', id), agendamento);
-    return { sucesso: true, dados: agendamento };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao gravar no Firestore.';
-    const firebaseCode =
-      typeof error === 'object' && error !== null && 'code' in error
-        ? String(error.code)
-        : undefined;
-    if (
-      firebaseCode === 'permission-denied' ||
-      /missing or insufficient permissions/i.test(message)
-    ) {
-      return {
-        sucesso: false,
-        erro: `O Firebase recusou a operação ao ${etapa} (permission-denied). Confira a autorização da coleção correspondente nas Security Rules.`,
-      };
-    }
-    return {
-      sucesso: false,
-      erro: message,
-    };
-  }
+  const payload = clienteIdSolicitado ? { ...input, clienteId: clienteIdSolicitado } : input;
+  return await solicitarAgendamentoBackend(payload, await getAuthToken());
 }
 
 /**

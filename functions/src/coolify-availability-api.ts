@@ -17,6 +17,7 @@ import { FirestoreNotificacoesRepository } from './modules/notificacoes/notifica
 import { FirestoreProfissionaisRepository } from './modules/profissionais/profissionais-repository.js';
 import { FirestoreServicosRepository } from './modules/servicos/servicos-repository.js';
 import { salvarFichaAnamneseInputSchema } from '@clinica/shared';
+import { handleCoolifyApplicationRoute } from './coolify-application-routes.js';
 import {
   consultarGradeHorariosDisponiveis,
   HorariosBusinessError,
@@ -190,6 +191,10 @@ const server = createServer(async (request, response) => {
   if (url.pathname === '/salvarFichaAnamnese' && request.method !== 'POST') {
     response.setHeader('Allow', 'POST, OPTIONS');
     sendJson(response, 405, { error: 'Método não permitido. Use POST.' });
+    return;
+  }
+
+  if (await handleCoolifyApplicationRoute(request, response, url, firestore)) {
     return;
   }
 

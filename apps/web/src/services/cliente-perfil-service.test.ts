@@ -12,7 +12,7 @@ vi.mock('firebase/firestore', () => ({
 const mockGetAuthToken = vi.fn();
 vi.mock('./agendamentos-service', () => ({
   getAuthToken: () => mockGetAuthToken(),
-  getFunctionsBaseUrl: () => 'http://127.0.0.1:5001/clinica-tais-romagnoli/us-central1',
+  getApiBaseUrl: () => 'https://api.clinica.test',
 }));
 
 vi.mock('@/lib/firebase', () => ({
@@ -31,7 +31,7 @@ describe('cliente-perfil-service', () => {
     expect(res).toBeNull();
   });
 
-  it('retorna dados de recorrência obtidos da Cloud Function quando bem-sucedido', async () => {
+  it('retorna dados de recorrência obtidos da API quando bem-sucedido', async () => {
     mockGetAuthToken.mockResolvedValue('token-123');
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -61,7 +61,7 @@ describe('cliente-perfil-service', () => {
     });
   });
 
-  it('usa fallback no Firestore quando a Cloud Function falha', async () => {
+  it('usa fallback no Firestore quando a API falha', async () => {
     mockGetAuthToken.mockResolvedValue('token-123');
 
     global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));

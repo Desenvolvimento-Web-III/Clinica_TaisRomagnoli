@@ -50,17 +50,20 @@ npm run dev:full
 A função técnica fica no emulador em
 `http://127.0.0.1:5001/demo-clinica-local/us-central1/healthCheck`.
 
-## API de disponibilidade no Coolify
+## API do backend no Coolify
 
-A API substitui a Cloud Function para consultar slots e lê no servidor os agendamentos, bloqueios,
-horários fixos e configuração da clínica. Para publicar no Coolify:
+A API do Coolify atende os fluxos HTTP usados pelo frontend: disponibilidade, agendamentos,
+anamnese, recorrência, indicadores, auditoria e sessão única. Para publicar no Coolify:
 
 1. Crie uma service account dedicada e configure o JSON da chave como variável secreta de runtime
    `FIREBASE_SERVICE_ACCOUNT_JSON` no Coolify. Não salve a chave no repositório, em
-   `apps/web/.env.local` nem em variáveis `VITE_*`. Para a API de disponibilidade somente leitura,
-   use `roles/datastore.viewer`. A rota autenticada de salvamento de anamnese também grava no
-   Firestore e requer `roles/datastore.user`; esse papel amplia a credencial para escrita no banco
-   inteiro. Use uma conta dedicada e conceda essa permissão somente se essa rota for habilitada.
+   `apps/web/.env.local` nem em variáveis `VITE_*`. As rotas somente de consulta podem usar
+   `roles/datastore.viewer`. Agendamentos, gravação/aprovação da anamnese, cálculo de recorrência,
+   notificações e auditoria gravam no Firestore e requerem `roles/datastore.user`; esse papel amplia a
+   credencial para escrita no banco inteiro. A rota de sessão única também revoga tokens no Firebase
+   Authentication e precisa das permissões administrativas correspondentes. Use uma service account
+   dedicada e avalie o escopo antes de conceder essas permissões. Nenhuma permissão IAM é alterada
+   automaticamente pelo código.
 2. Configure `CORS_ALLOWED_ORIGINS` como lista separada por vírgula das origens autorizadas, por exemplo
    `https://clinica.kndevs.tech,http://localhost:5173`.
 3. Configure o build do serviço no Coolify para instalar dependências e compilar os pacotes:
@@ -77,13 +80,17 @@ horários fixos e configuração da clínica. Para publicar no Coolify:
 5. Configure `VITE_AVAILABILITY_API_BASE_URL` no build do frontend com a URL base da API, sem barra ao
    final. Exemplo: `https://api.example.com`.
 
-Rotas: `GET /health` verifica a aplicação;
-`GET /obterHorariosDisponiveis?data=AAAA-MM-DD&servicoId=...` consulta a disponibilidade; e
-`POST /salvarFichaAnamnese` salva uma ficha após validar o token Firebase e os dados recebidos.
+Rotas: `GET /health`; `GET /obterHorariosDisponiveis`; `POST /salvarFichaAnamnese`;
+`POST /solicitarAgendamento`; `POST /alterarAgendamento`; `POST /cancelarAgendamento`;
+`POST /atualizarStatusAgendamento`; `POST /atualizarLiberacaoMedica`;
+`POST /iniciarSessaoUnica`; `GET /calcularRecorrenciaCliente`;
+`GET /obterPainelIndicadoresAdmin`; `GET /listarAuditoriaAdmin`.
+As rotas autenticadas validam o token Firebase; operações administrativas validam o perfil no servidor.
 Não use a credencial de uma conta pessoal nem exponha a chave em variáveis `VITE_*`.
 
-Para execução local com Firestore Emulator, defina `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` e
-`GCLOUD_PROJECT=demo-clinica-local`; nesse modo a API não exige uma chave de service account.
+Para execução local, defina `VITE_AVAILABILITY_API_BASE_URL=http://localhost:8080`. Com Firestore
+Emulator, defina `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` e `GCLOUD_PROJECT=demo-clinica-local`;
+nesse modo a API não exige uma chave de service account.
 
 ## Verificações
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   mapBackendAgendamentoToUi,
-  getFunctionsBaseUrl,
+  getApiBaseUrl,
   solicitarAgendamentoBackend,
   atualizarStatusAgendamentoBackend,
   cancelarAgendamentoBackend,
@@ -44,6 +44,7 @@ vi.mock('@/lib/firebase', () => ({ auth: mockAuth, db: { app: {} } }));
 vi.mock('@/config/env', () => ({
   environment: {
     firebase: { projectId: 'demo-clinica-tests' },
+    availabilityApiBaseUrl: 'https://api.clinica.test',
     useFirebaseEmulators: true,
   },
 }));
@@ -93,16 +94,8 @@ describe('agendamentos-service', () => {
     expect(ui.observacao).toBe('Preferência por óleo neutro');
   });
 
-  it('getFunctionsBaseUrl respeita a configuração Firebase e só usa emuladores quando configurados', () => {
-    const projectId = environment.firebase?.projectId || 'demo-clinica-local';
-    if (!environment.firebase?.projectId) {
-      expect(() => getFunctionsBaseUrl()).toThrow('Firebase não está configurado.');
-      return;
-    }
-    const expectedUrl = environment.useFirebaseEmulators
-      ? `http://127.0.0.1:5001/${projectId}/us-central1`
-      : `https://us-central1-${projectId}.cloudfunctions.net`;
-    expect(getFunctionsBaseUrl()).toBe(expectedUrl);
+  it('getApiBaseUrl retorna a URL configurada da API do backend', () => {
+    expect(getApiBaseUrl()).toBe(environment.availabilityApiBaseUrl);
   });
 
   it('solicitarAgendamentoBackend executa requisição POST com sucesso', async () => {

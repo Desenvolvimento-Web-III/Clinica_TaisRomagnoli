@@ -15,7 +15,7 @@ import { BookingCalendar } from '@/features/agendamentos/components/BookingCalen
 import { PixQrCode } from '@/features/agendamentos/components/PixQrCode';
 import {
   mapBackendAgendamentoToUi,
-  criarAgendamentoFirestore,
+  criarAgendamentoApi,
 } from '@/services/agendamentos-service';
 import { obterFichaAnamneseApi } from '@/services/anamnese-service';
 import { fichaAnamneseSchema } from '@/features/anamnese/schemas/anamnese-schema';
@@ -299,7 +299,7 @@ export function AgendamentoFlowPage() {
 
     setSubmittingAgendamento(true);
     try {
-      const resposta = await criarAgendamentoFirestore({
+      const resposta = await criarAgendamentoApi({
         servicoId: servicoAtual.id,
         servicoNome: servicoAtual.name,
         duracaoMinutos: servicoAtual.durationMinutes,
