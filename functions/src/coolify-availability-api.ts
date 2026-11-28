@@ -16,6 +16,7 @@ import { FirestoreHorariosFixosRepository } from './modules/agenda/horarios-fixo
 import { FirestoreNotificacoesRepository } from './modules/notificacoes/notificacoes-repository.js';
 import { FirestoreProfissionaisRepository } from './modules/profissionais/profissionais-repository.js';
 import { FirestoreServicosRepository } from './modules/servicos/servicos-repository.js';
+import { salvarFichaAnamneseInputSchema } from '@clinica/shared';
 import {
   consultarGradeHorariosDisponiveis,
   HorariosBusinessError,
@@ -125,28 +126,14 @@ const server = createServer(async (request, response) => {
   if (url.pathname === '/salvarFichaAnamnese' && request.method === 'POST') {
     try {
       const user = await extrairUsuarioAutenticado(request.headers.authorization, getAuth());
-      const payload = await readJsonBody(request);
-      const clienteId = typeof payload['clienteId'] === 'string' ? payload['clienteId'] : undefined;
-      const dados = payload['dados'];
-      if (!dados || typeof dados !== 'object' || Array.isArray(dados)) {
-        sendJson(response, 400, { error: 'Dados da ficha de anamnese são obrigatórios.' });
+      const payload = salvarFichaAnamneseInputSchema.safeParse(await readJsonBody(request));
+      if (!payload.success) {
+        sendJson(response, 400, { error: 'Dados da ficha de anamnese inválidos.' });
         return;
       }
 
       const ficha = await salvarFichaAnamneseService({
-        input: {
-          clienteId,
-          dados,
-          ...(typeof payload['exigeLiberacaoMedica'] === 'boolean'
-            ? { exigeLiberacaoMedica: payload['exigeLiberacaoMedica'] }
-            : {}),
-          ...(typeof payload['liberacaoMedicaAprovada'] === 'boolean'
-            ? { liberacaoMedicaAprovada: payload['liberacaoMedicaAprovada'] }
-            : {}),
-          ...(typeof payload['liberacaoMedicaObservacoes'] === 'string'
-            ? { liberacaoMedicaObservacoes: payload['liberacaoMedicaObservacoes'] }
-            : {}),
-        },
+        input: payload.data,
         usuarioAutenticado: user,
         repo: new FirestoreAnamneseRepository(firestore),
         notifRepo: new FirestoreNotificacoesRepository(firestore),
@@ -157,7 +144,7 @@ const server = createServer(async (request, response) => {
           {
             usuarioId: user.uid,
             usuarioEmail: user.email ?? null,
-            usuarioRole: user.role ?? 'cliente',
+            usuarioRole: user.isAdmin ? 'admin' : 'cliente',
             acao: 'anamnese.ficha_salva',
             recurso: 'anamneses',
             recursoId: ficha.clienteId,
