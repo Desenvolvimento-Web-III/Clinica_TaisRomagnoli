@@ -178,18 +178,21 @@ export async function salvarFichaAnamneseService({
       : existente?.liberacaoMedicaObservacoes;
   }
 
+  const clienteEmail = usuarioAutenticado.isAdmin
+    ? existente?.clienteEmail
+    : usuarioAutenticado.email || existente?.clienteEmail;
+  const clienteTelefone = usuarioAutenticado.isAdmin
+    ? existente?.clienteTelefone
+    : usuarioAutenticado.telefone || existente?.clienteTelefone;
+
   const fichaRecord: FichaAnamneseRecord = {
     ...dadosValidados,
     clienteId: targetClienteId,
     clienteNome: usuarioAutenticado.isAdmin
       ? existente?.clienteNome || usuarioAutenticado.nome
       : usuarioAutenticado.nome || existente?.clienteNome,
-    clienteEmail: usuarioAutenticado.isAdmin
-      ? existente?.clienteEmail
-      : usuarioAutenticado.email || existente?.clienteEmail,
-    clienteTelefone: usuarioAutenticado.isAdmin
-      ? existente?.clienteTelefone
-      : usuarioAutenticado.telefone || existente?.clienteTelefone,
+    ...(clienteEmail !== undefined ? { clienteEmail } : {}),
+    ...(clienteTelefone !== undefined ? { clienteTelefone } : {}),
     submittedAt: existente?.submittedAt || now,
     updatedAt: now,
     pontosAtencao,
