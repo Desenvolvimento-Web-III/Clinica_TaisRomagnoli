@@ -246,8 +246,13 @@ export function FichaAnamnesePage() {
       setIsSuccess(true);
       window.dispatchEvent(new Event('anamnese:atualizada'));
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch {
-      setErrors({ form: 'Não foi possível salvar os dados. Tente novamente.' });
+    } catch (error) {
+      setErrors({
+        form:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível salvar os dados. Tente novamente.',
+      });
     } finally {
       setSubmitting(false);
     }

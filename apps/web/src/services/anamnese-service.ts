@@ -4,6 +4,7 @@ import type {
   RegistrarLiberacaoMedicaInput,
 } from '@clinica/shared';
 import { doc, getDoc } from 'firebase/firestore';
+import { environment } from '@/config/env';
 import { auth, db } from '@/lib/firebase';
 import { getFunctionsBaseUrl, getAuthToken } from './agendamentos-service';
 
@@ -23,7 +24,17 @@ export async function salvarFichaAnamneseApi(
   }
 
   try {
-    const url = `${getFunctionsBaseUrl()}/salvarFichaAnamnese`;
+    const apiBaseUrl =
+      environment.availabilityApiBaseUrl ??
+      (environment.useFirebaseEmulators ? getFunctionsBaseUrl() : null);
+    if (!apiBaseUrl) {
+      return {
+        sucesso: false,
+        erro: 'A API segura para salvar a ficha de anamnese não está configurada.',
+      };
+    }
+
+    const url = `${apiBaseUrl}/salvarFichaAnamnese`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
